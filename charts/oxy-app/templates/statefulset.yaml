@@ -1,0 +1,219 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Values.app.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.app.name }}
+    chart: {{ include "oxy-app.chart" . }}
+    release: {{ .Release.Name }}
+    version: v1
+spec:
+  serviceName: {{ .Values.app.name }}-headless
+  replicas: {{ .Values.app.replicaCount }}
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      partition: 0
+  selector:
+    matchLabels:
+      app: {{ .Values.app.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.app.name }}
+        version: v1
+    spec:
+      {{- if .Values.serviceAccount.create }}
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      {{- end }}
+      securityContext:
+        fsGroup: {{ .Values.securityContext.fsGroup }}
+      initContainers:
+      # One-time secure clone using kubernetes/git-sync. This creates a
+      # linked copy at /workspace/current that the long-running git-sync
+      # sidecar will keep up-to-date.
+      - name: git-clone
+        image: {{ .Values.gitSync.image }}
+        args:
+        - --repo={{ .Values.git.repository }}
+        - --branch={{ .Values.git.branch }}
+        - --root=/workspace/git
+        - --link=/workspace/current
+        - --one-time=true
+        - --depth=1
+        - --ssh-key-file=/etc/git-secret/ssh
+        - --ssh-known-hosts-file=/etc/git-secret/known_hosts
+        - --max-failures=5
+        - --verbose=1
+        volumeMounts:
+        - name: workspace
+          mountPath: /workspace
+        - name: git-ssh
+          mountPath: /etc/git-secret
+          readOnly: true
+
+      # Environment setup container: concatenate env secret files into a single
+      # .env, and copy any file secrets into the workspace.
+      - name: env-setup
+        image: alpine:latest
+        command:
+        - sh
+        - -c
+        - |
+          set -euo pipefail
+          echo "Setting up environment..."
+
+          mkdir -p /workspace/customer-demo
+
+          # Build .env by concatenating all files under /secrets/env/*
+          if [ -d /secrets/env ]; then
+            echo "Building .env from mounted env secrets..."
+            rm -f /workspace/customer-demo/.env || true
+            for d in /secrets/env/*; do
+              [ -d "$d" ] || continue
+              for f in "$d"/*; do
+                [ -f "$f" ] || continue
+                echo "# from $(basename "$d")/$(basename "$f")" >> /workspace/customer-demo/.env
+                cat "$f" >> /workspace/customer-demo/.env
+                echo >> /workspace/customer-demo/.env
+              done
+            done
+            [ -f /workspace/customer-demo/.env ] && echo ".env created at /workspace/customer-demo/.env" || echo "No env secret files found"
+          else
+            echo "No /secrets/env directory mounted"
+          fi
+
+          # Copy file secrets from /secrets/files/<name>/* into workspace
+          if [ -d /secrets/files ]; then
+            echo "Copying file secrets..."
+            for d in /secrets/files/*; do
+              [ -d "$d" ] || continue
+              for f in "$d"/*; do
+                [ -f "$f" ] || continue
+                key=$(basename "$f")
+                cp "$f" /workspace/customer-demo/"$key" || echo "failed to copy $f"
+                echo "copied $f to /workspace/customer-demo/$key"
+              done
+            done
+          else
+            echo "No /secrets/files directory mounted"
+          fi
+
+          echo "Environment setup completed"
+        volumeMounts:
+        - name: workspace
+          mountPath: /workspace
+        {{- /* mount each env secret under /secrets/env/<secretName> */}}
+        {{- range $idx, $s := .Values.externalSecrets.envSecretNames }}
+        - name: env-secret-{{ $idx }}
+          mountPath: /secrets/env/{{ $s }}
+          readOnly: true
+        {{- end }}
+        {{- /* mount each file secret under /secrets/files/<secretName> */}}
+        {{- range $idx, $f := .Values.externalSecrets.fileSecrets }}
+        - name: file-secret-{{ $idx }}
+          mountPath: /secrets/files/{{ $f.name }}
+          readOnly: true
+        {{- end }}
+
+      containers:
+      - name: {{ .Values.app.name }}
+        image: {{ .Values.app.image }}
+        command:
+        - sh
+        - -c
+        - "exec oxy serve --auth-mode built-in"
+        workingDir: /workspace/customer-demo
+        ports:
+        - containerPort: {{ .Values.app.port }}
+          protocol: TCP
+          name: traffic-port
+        env:
+        - name: OXY_STATE_DIR
+          value: "{{ .Values.env.OXY_STATE_DIR }}"
+        - name: AWS_REGION
+          value: "{{ .Values.env.AWS_REGION }}"
+        - name: CLUSTER_NAME
+          value: "{{ .Values.env.CLUSTER_NAME }}"
+
+        # Database URL selection. Default uses sqlite file in the workspace.
+        {{- if eq .Values.database.type "postgres" }}
+        - name: OXY_DATABASE_URL
+          value: "postgresql://{{ .Values.database.postgres.postgresqlUsername }}:{{ .Values.database.postgres.postgresqlPassword }}@{{ include "oxy-app.fullname" . }}-postgresql.{{ .Release.Namespace }}.svc.cluster.local:5432/{{ .Values.database.postgres.postgresqlDatabase }}"
+        {{- else if and .Values.database.external.enabled (ne .Values.database.external.connectionString "") }}
+        - name: OXY_DATABASE_URL
+          value: "${{ .Values.database.external.connectionString }}"
+        {{- else if .Values.database.external.enabled }}
+        - name: OXY_DATABASE_URL
+          value: "postgresql://{{ .Values.database.external.user }}:{{ .Values.database.external.password }}@{{ .Values.database.external.host }}:{{ .Values.database.external.port }}/{{ .Values.database.external.database }}"
+        {{- else }}
+        - name: OXY_DATABASE_URL
+          value: "sqlite:////workspace/oxy_data/oxy.db"
+        {{- end }}
+
+        envFrom:
+        - configMapRef:
+            name: {{ .Values.app.name }}-config
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        volumeMounts:
+        - name: workspace
+          mountPath: /workspace
+        {{- range $idx, $s := .Values.externalSecrets.envSecretNames }}
+        - name: env-secret-{{ $idx }}
+          mountPath: /secrets/env/{{ $s }}
+          readOnly: true
+        {{- end }}
+        {{- range $idx, $f := .Values.externalSecrets.fileSecrets }}
+        - name: file-secret-{{ $idx }}
+          mountPath: /secrets/files/{{ $f.name }}
+          readOnly: true
+        {{- end }}
+        livenessProbe:
+          {{- toYaml .Values.livenessProbe | nindent 10 }}
+        readinessProbe:
+          {{- toYaml .Values.readinessProbe | nindent 10 }}
+
+      volumes:
+      - name: git-ssh
+        secret:
+          secretName: {{ .Values.git.sshSecretName }}
+          optional: false
+
+      {{- range $idx, $s := .Values.externalSecrets.envSecretNames }}
+      - name: env-secret-{{ $idx }}
+        secret:
+          secretName: {{ $s | quote }}
+          optional: true
+      {{- end }}
+
+      {{- range $idx, $f := .Values.externalSecrets.fileSecrets }}
+      - name: file-secret-{{ $idx }}
+        secret:
+          secretName: {{ $f.name | quote }}
+          optional: true
+      {{- end }}
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+  volumeClaimTemplates:
+  - metadata:
+      name: workspace
+    spec:
+      accessModes: [ "{{ .Values.persistence.accessMode }}" ]
+      {{- if .Values.persistence.storageClassName }}
+      storageClassName: {{ .Values.persistence.storageClassName }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.persistence.size }}
+

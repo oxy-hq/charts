@@ -1,0 +1,176 @@
+# Default values for oxy-app
+# This is a YAML-formatted file.
+
+# Application configuration
+app:
+  name: oxy-app
+  image: ""
+  port: 3000
+  replicaCount: 1
+
+# Resource configuration
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+
+# Environment variables
+env:
+  AWS_REGION: ""
+  OXY_STATE_DIR: /workspace/oxy_data
+  CLUSTER_NAME: ""
+  ENVIRONMENT: dev
+
+# Service Account for IRSA
+serviceAccount:
+  create: true
+  name: oxy-app-sa
+  annotations: {}
+  # Example: eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/oxy-app-role
+
+# Persistent storage
+persistence:
+  enabled: true
+  storageClassName: gp3
+  size: 20Gi
+  accessMode: ReadWriteOnce
+
+# Node selection and tolerations
+nodeSelector:
+  workload-type: oxy-app
+  app: oxy-app
+
+tolerations:
+  - effect: NoSchedule
+    key: oxy-app
+    operator: Equal
+    value: "true"
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3000
+
+# Headless service for StatefulSet
+headlessService:
+  enabled: true
+
+# Probes configuration
+livenessProbe:
+  httpGet:
+    path: /
+    port: 3000
+  initialDelaySeconds: 60
+  periodSeconds: 30
+  timeoutSeconds: 10
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /
+    port: 3000
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# Security context
+securityContext:
+  fsGroup: 1000
+
+# External secrets configuration
+externalSecrets:
+  # When true, the chart will create ExternalSecret CRs as configured below.
+  # Default is false: the chart will NOT create ESO CRs and expects secrets to be
+  # created externally (recommended for production).
+  create: false
+
+  # Generic lists for mounting secrets into the pod. Leave empty by default.
+  # 1) Env secrets: list of existing Kubernetes Secret names whose keys will be
+  #    concatenated into the application .env file. Each Secret will be mounted
+  #    under /secrets/env/<secret-name> and all files will be concatenated.
+  envSecretNames: []
+
+  # Optional per-secret mapping allowing the user to provide a map of
+  # key -> remoteKey for a given secret name. Used only when creating ExternalSecrets.
+  # envSecretMappings:
+  #   my-env-secret:
+  #     DATABASE_URL: /path/to/database/url
+  envSecretMappings: {}
+
+  # 2) File secrets: list of objects that represent a secret and a specific key
+  #    inside that secret which should be copied into the pod as a file.
+  #    Example:
+  #    fileSecrets:
+  #      - name: my-datawarehouse-secret
+  #        key: bigquery-key.json
+  #        dest: bigquery-key.json  # optional, defaults to key
+  fileSecrets: []
+
+  # External Secrets Operator configuration (used only if create: true)
+  storeRef:
+    name: ""
+    kind: ""
+
+# SSH key for git operations (base64 encoded)
+# In production, this should be managed through external secrets
+sshKey:
+  # Keep keys out of chart values in production. Use `git.sshSecretName`
+  # and create the secret in-cluster or via external secrets operator.
+  privateKey: ""
+  publicKey: ""
+
+# Git sync sidecar configuration
+gitSync:
+  image: k8s.gcr.io/git-sync/git-sync:v4.4.3
+  period: 15s
+
+# Git secret name that contains 'ssh' and 'known_hosts' files
+git:
+  repository: ""
+  branch: main
+  userName: ""
+  userEmail: ""
+  sshSecretName: oxy-git-ssh
+ 
+# Database selection - default: sqlite (embedded). Set `database.type` to
+# "postgres" to enable the postgres subchart (controlled by `database.postgres.enabled`)
+# or `database.type: external` to provide an external connection string.
+database:
+  type: sqlite # options: sqlite, postgres, external
+  # Subchart Postgres settings (only used if database.type == "postgres")
+  postgres:
+    enabled: false
+    postgresqlPassword: postgres
+    postgresqlDatabase: oxydb
+    postgresqlUsername: oxy
+
+  # External DB settings (only used if database.type == "external")
+  external:
+    enabled: false
+  # If enabled, the external DB may rely on secrets managed by the user.
+  # Use `externalSecrets.envSecretNames` and `externalSecrets.fileSecrets` to
+  # declare and mount any required secrets into the pod.
+    # External Secrets Operator configuration - no defaults for backends or paths
+    storeRef:
+      name: ""
+      kind: SecretStore # or ClusterSecretStore
+
+    # Mapping for the environment file secret (expected to produce a file .env)
+    envSecret:
+      backend: ""
+      # Path/prefix in the secret store (SSM parameter path or secret path)
+      path: ""
+      # Optional key to fetch - if empty, user may configure multiple keys in the ExternalSecret
+      key: ""
+
+    # Mapping for a data warehouse key (BigQuery, Snowflake, etc.)
+    dataWarehouseSecret:
+      backend: ""
+      path: ""
+      key: ""
+

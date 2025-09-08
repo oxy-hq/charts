@@ -1,0 +1,139 @@
+name: Helm CI/CD
+
+on:
+  push:
+    paths:
+      - "charts/**"
+  pull_request:
+    paths:
+      - "charts/**"
+
+jobs:
+  lint:
+    name: Lint & Template
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v1
+        with:
+          version: v3.12.0
+
+      - name: Install yq
+        run: |
+          curl -sL https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -o /usr/local/bin/yq
+          chmod +x /usr/local/bin/yq
+          /usr/local/bin/yq --version
+
+      - name: Helm version
+        run: helm version
+
+      - name: Update chart dependencies
+        run: |
+          helm dependency update ./charts/oxy-app || true
+
+      - name: Lint chart
+        run: helm lint ./charts/oxy-app
+
+      - name: Render templates
+        run: helm template oxy-app ./charts/oxy-app --values ./charts/oxy-app/values.yaml
+
+      - name: Package chart (artifact)
+        run: |
+          mkdir -p ./packaged
+          helm package ./charts/oxy-app -d ./packaged
+
+      - name: Upload packaged chart
+        uses: actions/upload-artifact@v4
+        with:
+          name: oxy-app-chart
+          path: ./packaged
+
+  publish:
+    name: Package & Publish Helm Chart to gh-pages
+    runs-on: ubuntu-latest
+    needs: lint
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v1
+        with:
+          version: v3.12.0
+
+      - name: Install yq
+        run: |
+          curl -sL https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -o /usr/local/bin/yq
+          chmod +x /usr/local/bin/yq
+          /usr/local/bin/yq --version
+
+      - name: Ensure chart dependencies
+        run: helm dependency update ./charts/oxy-app || true
+
+      - name: Create GitHub App Token
+        uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ vars.ARGO_APP_ID }}
+          private-key: ${{ secrets.ARGO_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Determine chart version
+        id: get_version
+        run: |
+          version=$(yq -r '.version' charts/oxy-app/Chart.yaml)
+          echo "current=$version" >> $GITHUB_OUTPUT
+
+      - name: Bump patch version (auto)
+        id: bump
+        run: |
+          version=$(yq -r '.version' charts/oxy-app/Chart.yaml)
+          IFS='.' read -r major minor patch <<< "${version}"
+          patch=$((patch+1))
+          new_version="${major}.${minor}.${patch}"
+          echo "Bumping Chart.yaml: $version -> $new_version"
+          yq eval ".version = \"${new_version}\"" -i charts/oxy-app/Chart.yaml
+          git add charts/oxy-app/Chart.yaml
+          git commit -m "chore(release): bump chart version to ${new_version} [skip ci]" || echo "no changes to commit"
+          git tag -a "v${new_version}" -m "Release v${new_version}" || echo "tag exists"
+          if [ -n "${{ steps.app-token.outputs.token }}" ]; then
+            git remote set-url origin "https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/${{ github.repository }}.git"
+          fi
+          git push origin HEAD:main --follow-tags || echo "push failed (token may not have push permission)"
+          echo "new_version=${new_version}" >> $GITHUB_OUTPUT
+
+      - name: Package chart
+        run: |
+          mkdir -p ./packaged
+          helm package ./charts/oxy-app -d ./packaged
+
+      - name: Generate index.yaml and merge with gh-pages
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          mkdir -p ./gh-pages
+          git fetch origin gh-pages || true
+          git worktree add ./gh-pages origin/gh-pages || true
+          if [ -f ./gh-pages/index.yaml ]; then
+            helm repo index ./packaged --merge ./gh-pages/index.yaml --url "https://${GITHUB_REPOSITORY%/*}.github.io/${GITHUB_REPOSITORY#*/}"
+          else
+            helm repo index ./packaged --url "https://${GITHUB_REPOSITORY%/*}.github.io/${GITHUB_REPOSITORY#*/}"
+          fi
+
+      - name: Publish packaged charts + index to gh-pages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cp ./packaged/*.tgz ./gh-pages/ 2>/dev/null || true
+          cp ./packaged/index.yaml ./gh-pages/index.yaml
+          cd ./gh-pages
+          git add .
+          git commit -m "Publish chart ${{ steps.bump.outputs.new_version }} to gh-pages [skip ci]" || echo "no changes"
+          if [ -n "${{ steps.app-token.outputs.token }}" ]; then
+            git remote set-url origin "https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/${{ github.repository }}.git"
+          fi
+          git push origin gh-pages || echo "push failed (token may not have push permission)"

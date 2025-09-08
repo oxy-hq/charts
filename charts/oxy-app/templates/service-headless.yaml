@@ -1,0 +1,21 @@
+{{- if .Values.headlessService.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.app.name }}-headless
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.app.name }}
+    chart: {{ include "oxy-app.chart" . }}
+    release: {{ .Release.Name }}
+spec:
+  selector:
+    app: {{ .Values.app.name }}
+  ports:
+  - port: {{ .Values.app.port }}
+    targetPort: {{ .Values.app.port }}
+    protocol: TCP
+    name: traffic-port
+  clusterIP: None
+  type: ClusterIP
+{{- end }}
