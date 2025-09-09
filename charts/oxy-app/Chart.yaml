@@ -3,7 +3,7 @@ name: oxy-app
 description: A Helm chart for Oxy application deployment on EKS
 type: application
 version: 0.1.0
-appVersion: "20250624"
+appVersion: "0.2.26"
 keywords:
   - oxy
   - statefulset

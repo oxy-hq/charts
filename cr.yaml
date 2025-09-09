@@ -3,3 +3,7 @@ repo: charts
 charts_dir: charts
 git-base-url: https://api.github.com/
 charts_repo_url: https://oxy-hq.github.io/charts
+
+repositories:
+  - name: bitnami
+    url: https://charts.bitnami.com/bitnami
