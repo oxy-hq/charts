@@ -38,4 +38,7 @@ jobs:
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
         with:
-          config: ../cr.yaml
+          # Use an absolute path to the repo-root `cr.yaml` so the action
+          # always finds it, even if the step runs with a working directory
+          # inside `charts/`. github.workspace resolves to the repo root.
+          config: ${{ github.workspace }}/cr.yaml
