@@ -1,0 +1,10 @@
+suite: service
+templates:
+  - service.yaml
+
+tests:
+  - it: renders Service kind
+    asserts:
+      - equal:
+          path: kind
+          value: Service

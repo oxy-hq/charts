@@ -1,0 +1,108 @@
+name: Helm lint & test
+
+on:
+  push:
+    paths:
+      - 'charts/**'
+      - '.github/workflows/**'
+  pull_request:
+    paths:
+      - 'charts/**'
+      - '.github/workflows/**'
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v1
+        with:
+          version: '3.12.0'
+
+      - name: Show Helm version
+        run: helm version
+
+      - name: Make scripts executable
+        run: echo "Skipping repository scripts; using inline helm commands"
+
+      - name: Install helm-unittest plugin
+        run: |
+          helm plugin install https://github.com/quintush/helm-unittest || true
+
+      - name: Find charts
+        id: find_charts
+        run: |
+          # find top-level chart directories under charts/
+          find charts -maxdepth 2 -type f -name Chart.yaml -print | sed 's:/Chart.yaml::' > chart_dirs.txt
+          cat chart_dirs.txt
+
+      - name: Run ct lint (chart-testing)
+        uses: helm/chart-testing-action@v3
+        with:
+          command: lint
+          config: |
+            chart-dirs:
+              - charts
+            exclude:
+              - charts/**/tests/**
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run helm-unittest for charts with tests
+        run: |
+          while read -r chartdir; do
+            if [ -d "$chartdir/tests" ]; then
+              echo "Running helm-unittest for $chartdir"
+              helm unittest "$chartdir" || exit 1
+            else
+              echo "No tests for $chartdir"
+            fi
+          done < chart_dirs.txt
+
+      - name: Install yq (for YAML assertions)
+        run: |
+          YQ_VERSION=v4.34.1
+          wget -qO /tmp/yq https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64
+          sudo install -m 0755 /tmp/yq /usr/local/bin/yq
+
+      - name: Render oxy-app and assert ExternalSecret manifests
+        run: |
+          CHART=charts/charts/oxy-app
+          OUT=rendered-oxy.yaml
+          echo "Rendering $CHART with ExternalSecret values"
+          helm template "$CHART" \
+            --set externalSecrets.create=true \
+            --set externalSecrets.storeRef.name=my-store \
+            --set externalSecrets.storeRef.kind=SecretStore \
+            --set externalSecrets.envSecretNames[0]=my-env-secret \
+            --set externalSecrets.envSecretMappings.my-env-secret.DATABASE_URL=/prod/database/url \
+            --set externalSecrets.fileSecrets[0].name=my-file-secret \
+            --set externalSecrets.fileSecrets[0].key=bigquery-key.json \
+            --set externalSecrets.fileSecrets[0].path=my/file/path > $OUT
+
+          echo "ExternalSecret resources found (names):"
+          yq e '.[] | select(.kind == "ExternalSecret") | .metadata.name' $OUT || true
+
+          COUNT=$(yq e '.[] | select(.kind == "ExternalSecret") | .metadata.name' $OUT | wc -l)
+          echo "ExternalSecret count: $COUNT"
+          if [ "$COUNT" -lt 1 ]; then
+            echo "ERROR: No ExternalSecret manifests rendered for $CHART"
+            cat $OUT
+            exit 1
+          fi
+
+      - name: Check test environment for Kubernetes/CRD availability
+        run: |
+          if command -v kubectl >/dev/null 2>&1; then
+            echo "kubectl present"
+            if kubectl api-resources | grep -i externalsecret >/dev/null 2>&1; then
+              echo "ExternalSecret CRD present in cluster"
+            else
+              echo "ExternalSecret CRD NOT present in cluster"
+            fi
+          else
+            echo "kubectl not installed in runner (no cluster access)"
+          fi

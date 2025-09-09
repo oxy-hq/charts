@@ -1,0 +1,10 @@
+suite: statefulset
+templates:
+  - statefulset.yaml
+
+tests:
+  - it: renders StatefulSet kind
+    asserts:
+      - equal:
+          path: kind
+          value: StatefulSet

@@ -1,0 +1,10 @@
+suite: headless
+templates:
+  - service-headless.yaml
+
+tests:
+  - it: renders headless Service kind
+    asserts:
+      - equal:
+          path: kind
+          value: Service

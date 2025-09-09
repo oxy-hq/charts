@@ -1,0 +1,10 @@
+suite: configmap
+templates:
+  - configmap.yaml
+
+tests:
+  - it: renders ConfigMap kind
+    asserts:
+      - equal:
+          path: kind
+          value: ConfigMap
