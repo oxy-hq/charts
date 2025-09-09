@@ -35,6 +35,7 @@ jobs:
 
       - name: Run chart-testing (list-changed)
         id: list-changed
+        if: github.event_name == 'pull_request'
         run: |
           changed=$(ct list-changed --target-branch ${{ github.event.repository.default_branch }})
           if [[ -n "$changed" ]]; then
@@ -42,32 +43,32 @@ jobs:
           fi
 
       - name: Run chart-testing (lint)
-        if: steps.list-changed.outputs.changed == 'true'
+        if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
         run: |
           ct lint --target-branch ${{ github.event.repository.default_branch }} --config .ct.yaml
 
       - name: Install helm-unittest plugin
-        if: steps.list-changed.outputs.changed == 'true'
+        if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
         run: |
           helm plugin install https://github.com/quintush/helm-unittest
 
       - name: Run helm unittest for oxy-app
-        if: steps.list-changed.outputs.changed == 'true'
+        if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
         run: |
           # run unit tests located under charts/oxy-app/tests
           helm unittest ./charts/oxy-app
 
       - name: Create kind cluster
-        if: steps.list-changed.outputs.changed == 'true'
+        if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
         uses: helm/kind-action@v1.12.0
 
       - name: Run chart-testing (install)
-        if: steps.list-changed.outputs.changed == 'true'
+        if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
         run: |
           ct install --target-branch ${{ github.event.repository.default_branch }} --config .ct.yaml
 
       - name: Run assertions
-        if: steps.list-changed.outputs.changed == 'true'
+        if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
         run: |
           chmod +x .github/scripts/k8s-asserts.sh
           NAMESPACE=default RELEASE_NAME=oxy-app APP_NAME=oxy-app .github/scripts/k8s-asserts.sh
