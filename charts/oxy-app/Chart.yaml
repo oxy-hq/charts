@@ -13,7 +13,7 @@ sources:
   - https://github.com/oxy-hq/customer-demo
 maintainers:
   - name: Oxy Team
-    email: deploy@oxy.tech
+    email: hello@oxy.tech
 
 dependencies:
   - name: postgresql
