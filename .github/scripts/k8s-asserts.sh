@@ -18,15 +18,25 @@ kubectl get svc -n ${NAMESPACE} -o wide || true
 kubectl get svc -l app=${APP_NAME} -n ${NAMESPACE} -o wide || true
 kubectl get all -n ${NAMESPACE} -l app=${APP_NAME} -o wide || true
 
-echo "Checking Service ${APP_NAME}-service exists (no wait/retry)..."
-if kubectl get svc ${APP_NAME}-service -n ${NAMESPACE} >/dev/null 2>&1; then
-  echo "Found service ${APP_NAME}-service"
-else
-  echo "Error: Service ${APP_NAME}-service not found in namespace ${NAMESPACE}"
-  echo "Helpful debug: run these commands locally or in CI to inspect resources:"
-  echo "  kubectl get svc -n ${NAMESPACE} -o wide"
-  echo "  kubectl get svc -l app=${APP_NAME} -n ${NAMESPACE} -o wide"
-  echo "  kubectl get all -n ${NAMESPACE} -l app=${APP_NAME} -o wide"
+echo "Checking Service ${APP_NAME}-service exists (will wait up to 60s)..."
+FOUND=0
+for i in {1..12}; do
+  if kubectl get svc ${APP_NAME}-service -n ${NAMESPACE} >/dev/null 2>&1; then
+    FOUND=1
+    echo "Found service ${APP_NAME}-service"
+    break
+  fi
+  echo "Service ${APP_NAME}-service not present yet, retrying... ($i/12)"
+  sleep 5
+done
+if [ $FOUND -ne 1 ]; then
+  echo "Error: Service ${APP_NAME}-service not found in namespace ${NAMESPACE} after waiting"
+  echo "-- Namespaces --"
+  kubectl get ns || true
+  echo "-- Helm releases (all namespaces) --"
+  helm list -A || true
+  echo "-- Resources matching app=oxy-app (all namespaces) --"
+  kubectl get all --all-namespaces -l app=oxy-app || true
   exit 1
 fi
 

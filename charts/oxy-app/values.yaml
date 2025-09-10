@@ -35,6 +35,17 @@ persistence:
   storageClassName: gp3
   size: 20Gi
   accessMode: ReadWriteOnce
+  # Mount path inside the container where the PVC will be mounted
+  mountPath: /workspace
+  # Folder under the mountPath to use as the OXY_STATE_DIR
+  folder: oxy_data
+  # Optional metadata for the PVC
+  annotations: {}
+  labels: {}
+  # volumeMode can be "Filesystem" or "Block"
+  volumeMode: Filesystem
+  # Optional selector for matching existing PVs
+  selector: {}
 
 # Node selection and tolerations
 nodeSelector:

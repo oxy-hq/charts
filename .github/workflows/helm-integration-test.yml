@@ -67,16 +67,6 @@ jobs:
         run: |
           ct install --target-branch ${{ github.event.repository.default_branch }} --config ct.yaml
 
-      - name: Debug cluster and Helm state (before assertions)
-        if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
-        run: |
-          echo "-- Namespaces --"
-          kubectl get ns || true
-          echo "-- Helm releases (all namespaces) --"
-          helm list -A || true
-          echo "-- Resources matching app=oxy-app (all namespaces) --"
-          kubectl get all --all-namespaces -l app=oxy-app || true
-
       - name: Detect namespace for app=oxy-app
         if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
         id: detect-namespace

@@ -49,7 +49,7 @@ spec:
         - --verbose=1
         volumeMounts:
         - name: workspace
-          mountPath: /workspace
+          mountPath: {{ .Values.persistence.mountPath }}
         - name: git-ssh
           mountPath: /etc/git-secret
           readOnly: true
@@ -106,7 +106,7 @@ spec:
           echo "Environment setup completed"
         volumeMounts:
         - name: workspace
-          mountPath: /workspace
+          mountPath: {{ .Values.persistence.mountPath }}
         {{- /* mount each env secret under /secrets/env/<secretName> */}}
         {{- range $idx, $s := .Values.externalSecrets.envSecretNames }}
         - name: env-secret-{{ $idx }}
@@ -135,14 +135,20 @@ spec:
           protocol: TCP
           name: traffic-port
         env:
+        {{- if and .Values.env.OXY_STATE_DIR (ne .Values.env.OXY_STATE_DIR "") }}
         - name: OXY_STATE_DIR
           value: "{{ .Values.env.OXY_STATE_DIR }}"
+        {{- else }}
+        - name: OXY_STATE_DIR
+          value: "{{ printf "%s/%s" .Values.persistence.mountPath .Values.persistence.folder }}"
+        {{- end }}
 
-        # Database URL selection. Preference order:
+        # Database URL selection. Preference order (sqlite fallback intentionally omitted):
         # 1) explicit value provided by the caller via values.env.OXY_DATABASE_URL
         # 2) explicit external.connectionString or external fields
         # 3) postgres subchart connection (if user enabled it manually)
-        # 4) fallback to local sqlite file
+        # If none of the above are provided, OXY_DATABASE_URL will not be set and
+        # the application should operate without a database configuration.
         {{- if and .Values.env.OXY_DATABASE_URL (ne .Values.env.OXY_DATABASE_URL "") }}
         - name: OXY_DATABASE_URL
           value: "{{ .Values.env.OXY_DATABASE_URL }}"
@@ -155,9 +161,6 @@ spec:
         {{- else if .Values.database.postgres.enabled }}
         - name: OXY_DATABASE_URL
           value: "postgresql://{{ .Values.database.postgres.postgresqlUsername }}:{{ .Values.database.postgres.postgresqlPassword }}@{{ include "oxy-app.fullname" . }}-postgresql.{{ .Release.Namespace }}.svc.cluster.local:5432/{{ .Values.database.postgres.postgresqlDatabase }}"
-        {{- else }}
-        - name: OXY_DATABASE_URL
-          value: "sqlite:////workspace/oxy_data/oxy.db"
         {{- end }}
 
         envFrom:
@@ -167,7 +170,7 @@ spec:
           {{- toYaml .Values.resources | nindent 10 }}
         volumeMounts:
         - name: workspace
-          mountPath: /workspace
+          mountPath: {{ .Values.persistence.mountPath }}
         {{- range $idx, $s := .Values.externalSecrets.envSecretNames }}
         - name: env-secret-{{ $idx }}
           mountPath: /secrets/env/{{ $s }}
@@ -218,10 +221,21 @@ spec:
   volumeClaimTemplates:
   - metadata:
       name: workspace
+      annotations:
+        {{- toYaml .Values.persistence.annotations | nindent 8 }}
+      labels:
+        {{- toYaml .Values.persistence.labels | nindent 8 }}
     spec:
       accessModes: [ "{{ .Values.persistence.accessMode }}" ]
       {{- if .Values.persistence.storageClassName }}
       storageClassName: {{ .Values.persistence.storageClassName }}
+      {{- end }}
+      {{- if .Values.persistence.volumeMode }}
+      volumeMode: {{ .Values.persistence.volumeMode }}
+      {{- end }}
+      {{- if .Values.persistence.selector }}
+      selector:
+        {{- toYaml .Values.persistence.selector | nindent 8 }}
       {{- end }}
       resources:
         requests:

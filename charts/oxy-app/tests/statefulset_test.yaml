@@ -8,3 +8,20 @@ tests:
       - equal:
           path: kind
           value: StatefulSet
+
+  - it: sets OXY_STATE_DIR env from persistence.mountPath and folder
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_STATE_DIR
+            value: "/workspace/oxy_data"
+
+  - it: includes PVC metadata and volumeMode
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].metadata.name
+          value: workspace
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.volumeMode
+          value: Filesystem
