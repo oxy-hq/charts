@@ -120,15 +120,12 @@ sshKey:
 gitSync:
   image: k8s.gcr.io/git-sync/git-sync:v4.4.3
   period: 15s
-
-  # Repository and git options used by the init clone and optional git-sync
-  # sidecar. Users can set repository/branch and sshSecretName here.
   repository: ""
   branch: main
   userName: ""
   userEmail: ""
   sshSecretName: oxy-git-ssh
-  enabled: true
+  enabled: false
 
 database:
   # Subchart Postgres settings (optional; not selected automatically)

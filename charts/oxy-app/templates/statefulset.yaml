@@ -128,7 +128,7 @@ spec:
         - sh
         - -c
         - |
-          exec oxy serve {{- if not .Values.gitSync.enabled }} --read-only{{- end }}
+          exec oxy serve {{- if not .Values.gitSync.enabled }} --readonly{{- end }}
         workingDir: /workspace/customer-demo
         ports:
         - containerPort: {{ .Values.app.port }}

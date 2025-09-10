@@ -249,7 +249,7 @@ These notes explain subtle behaviors of the chart that affect runtime and upgrad
   - If you use the built-in postgres subchart, enable `database.postgres.enabled` and provide credentials via the `database.postgres.*` keys (or better, use External Secrets to manage them).
   - If you switch from sqlite to an external DB, ensure you migrate the sqlite data or reinitialize the app appropriately.
 
-### gitSync behavior (optional) and read-only fallback
+### gitSync behavior (optional) and readonly fallback
 
 - The chart includes optional git-sync behavior controlled by `gitSync.enabled` (default: `true`). When enabled, an init container performs a one-time secure clone into the workspace; optionally a long-running git-sync sidecar could be added if you prefer continuous updates.
 
@@ -269,7 +269,7 @@ These notes explain subtle behaviors of the chart that affect runtime and upgrad
 
   - The `git-clone` and `env-setup` init containers are not rendered into the pod spec.
   - The `git-ssh` secret volume is not mounted.
-  - The application command defaults to starting the server with the `--read-only` flag. This prevents the app from attempting to write content to the (empty) workspace directory when no git checkout is present.
+  - The application command defaults to starting the server with the `--readonly` flag. This prevents the app from attempting to write content to the (empty) workspace directory when no git checkout is present.
 
 - Security note: don't place private SSH keys directly in `values.yaml` for production. Instead create the secret in-cluster (or use External Secrets) and set `gitSync.sshSecretName` to point to it.
 
