@@ -8,9 +8,6 @@ keywords:
   - oxy
   - statefulset
   - eks
-home: https://github.com/oxy-hq/charts
-sources:
-  - https://github.com/oxy-hq/charts
 maintainers:
   - name: Oxy Team
     email: hello@oxy.tech
