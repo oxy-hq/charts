@@ -45,7 +45,7 @@ jobs:
       - name: Run chart-testing (lint)
         if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
         run: |
-          ct lint --target-branch ${{ github.event.repository.default_branch }} --config .ct.yaml
+          ct lint --target-branch ${{ github.event.repository.default_branch }} --config ct.yaml
 
       - name: Install helm-unittest plugin
         if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
@@ -65,10 +65,40 @@ jobs:
       - name: Run chart-testing (install)
         if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
         run: |
-          ct install --target-branch ${{ github.event.repository.default_branch }} --config .ct.yaml
+          ct install --target-branch ${{ github.event.repository.default_branch }} --config ct.yaml
+
+      - name: Debug cluster and Helm state (before assertions)
+        if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
+        run: |
+          echo "-- Namespaces --"
+          kubectl get ns || true
+          echo "-- Helm releases (all namespaces) --"
+          helm list -A || true
+          echo "-- Resources matching app=oxy-app (all namespaces) --"
+          kubectl get all --all-namespaces -l app=oxy-app || true
+
+      - name: Detect namespace for app=oxy-app
+        if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
+        id: detect-namespace
+        run: |
+          # Find any namespace which contains resources labeled app=oxy-app
+          ns=$(kubectl get all --all-namespaces -l app=oxy-app -o jsonpath='{.items[0].metadata.namespace}' 2>/dev/null || true)
+          if [ -z "$ns" ]; then
+            echo "No namespace detected for app=oxy-app, defaulting to 'default'"
+            ns=default
+          else
+            echo "Detected namespace: $ns"
+          fi
+          echo "$ns" > detected_namespace
+          echo "DETECTED_NAMESPACE=$ns"
 
       - name: Run assertions
         if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
         run: |
           chmod +x .github/scripts/k8s-asserts.sh
-          NAMESPACE=default RELEASE_NAME=oxy-app APP_NAME=oxy-app .github/scripts/k8s-asserts.sh
+          ns=default
+          if [ -f detected_namespace ]; then
+            ns=$(cat detected_namespace)
+          fi
+          echo "Running assertions against namespace: $ns"
+          NAMESPACE=$ns RELEASE_NAME=oxy-app APP_NAME=oxy-app .github/scripts/k8s-asserts.sh

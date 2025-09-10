@@ -1,4 +1,0 @@
-chart-dirs:
-  - charts
-exclude:
-  - charts/**/tests/**
