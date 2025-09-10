@@ -4,7 +4,8 @@
 # Application configuration
 app:
   name: oxy-app
-  image: ""
+  image: ghcr.io/oxy-hq/oxy
+  imageTag: ""
   port: 3000
   replicaCount: 1
 
