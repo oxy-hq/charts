@@ -2,7 +2,7 @@ apiVersion: v2
 name: oxy-app
 description: A Helm chart for Oxy application deployment on EKS
 type: application
-version: 0.1.0
+version: 0.1.1
 appVersion: "0.2.26"
 keywords:
   - oxy
@@ -19,3 +19,6 @@ dependencies:
     version: 15.2.2
     repository: "https://charts.bitnami.com/bitnami"
     condition: database.postgres.enabled
+
+
+

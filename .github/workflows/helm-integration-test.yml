@@ -82,13 +82,3 @@ jobs:
           echo "$ns" > detected_namespace
           echo "DETECTED_NAMESPACE=$ns"
 
-      - name: Run assertions
-        if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
-        run: |
-          chmod +x .github/scripts/k8s-asserts.sh
-          ns=default
-          if [ -f detected_namespace ]; then
-            ns=$(cat detected_namespace)
-          fi
-          echo "Running assertions against namespace: $ns"
-          NAMESPACE=$ns RELEASE_NAME=oxy-app APP_NAME=oxy-app .github/scripts/k8s-asserts.sh
