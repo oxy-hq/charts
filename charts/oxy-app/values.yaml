@@ -19,10 +19,7 @@ resources:
 
 # Environment variables
 env:
-  AWS_REGION: ""
   OXY_STATE_DIR: /workspace/oxy_data
-  CLUSTER_NAME: ""
-  ENVIRONMENT: dev
 
 # Service Account for IRSA
 serviceAccount:
@@ -40,14 +37,8 @@ persistence:
 
 # Node selection and tolerations
 nodeSelector:
-  workload-type: oxy-app
-  app: oxy-app
 
 tolerations:
-  - effect: NoSchedule
-    key: oxy-app
-    operator: Equal
-    value: "true"
 
 # Service configuration
 service:
@@ -119,7 +110,7 @@ externalSecrets:
 # SSH key for git operations (base64 encoded)
 # In production, this should be managed through external secrets
 sshKey:
-  # Keep keys out of chart values in production. Use `git.sshSecretName`
+  # Keep keys out of chart values in production. Use `gitSync.sshSecretName`
   # and create the secret in-cluster or via external secrets operator.
   privateKey: ""
   publicKey: ""
@@ -129,48 +120,39 @@ gitSync:
   image: k8s.gcr.io/git-sync/git-sync:v4.4.3
   period: 15s
 
-# Git secret name that contains 'ssh' and 'known_hosts' files
-git:
+  # Repository and git options used by the init clone and optional git-sync
+  # sidecar. Users can set repository/branch and sshSecretName here.
   repository: ""
   branch: main
   userName: ""
   userEmail: ""
   sshSecretName: oxy-git-ssh
- 
-# Database selection - default: sqlite (embedded). Set `database.type` to
-# "postgres" to enable the postgres subchart (controlled by `database.postgres.enabled`)
-# or `database.type: external` to provide an external connection string.
+  enabled: true
+
 database:
-  type: sqlite # options: sqlite, postgres, external
-  # Subchart Postgres settings (only used if database.type == "postgres")
+  # Subchart Postgres settings (optional; not selected automatically)
   postgres:
     enabled: false
     postgresqlPassword: postgres
     postgresqlDatabase: oxydb
     postgresqlUsername: oxy
 
-  # External DB settings (only used if database.type == "external")
+  # External DB settings (optional)
   external:
     enabled: false
-  # If enabled, the external DB may rely on secrets managed by the user.
-  # Use `externalSecrets.envSecretNames` and `externalSecrets.fileSecrets` to
-  # declare and mount any required secrets into the pod.
-    # External Secrets Operator configuration - no defaults for backends or paths
+    # If enabled, the external DB may rely on secrets managed by the user.
+    # Use `externalSecrets.envSecretNames` and `externalSecrets.fileSecrets` to
+    # declare and mount any required secrets into the pod.
     storeRef:
       name: ""
       kind: SecretStore # or ClusterSecretStore
 
-    # Mapping for the environment file secret (expected to produce a file .env)
     envSecret:
       backend: ""
-      # Path/prefix in the secret store (SSM parameter path or secret path)
       path: ""
-      # Optional key to fetch - if empty, user may configure multiple keys in the ExternalSecret
       key: ""
 
-    # Mapping for a data warehouse key (BigQuery, Snowflake, etc.)
     dataWarehouseSecret:
       backend: ""
       path: ""
       key: ""
-

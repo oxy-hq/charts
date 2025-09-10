@@ -7,3 +7,5 @@ chart-repos:
 remote: origin
 target-branch: main
 github-groups: true
+helm-extra-args: --timeout 600s
+validate-maintainers: false

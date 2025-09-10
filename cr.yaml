@@ -1,8 +1,5 @@
-owner: oxy-hq
-repo: charts
-charts_dir: charts
-git-base-url: https://api.github.com/
-charts_repo_url: https://oxy-hq.github.io/charts
-repositories:
-  - name: bitnami
-    url: https://charts.bitnami.com/bitnami
+sign: false
+
+# Enable automatic generation of release notes using GitHubs release notes generator.
+# see: https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes
+generate-release-notes: true

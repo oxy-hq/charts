@@ -30,14 +30,15 @@ spec:
       securityContext:
         fsGroup: {{ .Values.securityContext.fsGroup }}
       initContainers:
+      {{- if .Values.gitSync.enabled }}
       # One-time secure clone using kubernetes/git-sync. This creates a
       # linked copy at /workspace/current that the long-running git-sync
       # sidecar will keep up-to-date.
       - name: git-clone
         image: {{ .Values.gitSync.image }}
         args:
-        - --repo={{ .Values.git.repository }}
-        - --branch={{ .Values.git.branch }}
+        - --repo={{ .Values.gitSync.repository }}
+        - --branch={{ .Values.gitSync.branch }}
         - --root=/workspace/git
         - --link=/workspace/current
         - --one-time=true
@@ -52,7 +53,9 @@ spec:
         - name: git-ssh
           mountPath: /etc/git-secret
           readOnly: true
+      {{- end }}
 
+      {{- if .Values.gitSync.enabled }}
       # Environment setup container: concatenate env secret files into a single
       # .env, and copy any file secrets into the workspace.
       - name: env-setup
@@ -116,6 +119,7 @@ spec:
           mountPath: /secrets/files/{{ $f.name }}
           readOnly: true
         {{- end }}
+      {{- end }}
 
       containers:
       - name: {{ .Values.app.name }}
@@ -123,7 +127,8 @@ spec:
         command:
         - sh
         - -c
-        - "exec oxy serve --auth-mode built-in"
+        - |
+          exec oxy serve {{- if not .Values.gitSync.enabled }} --read-only{{- end }}
         workingDir: /workspace/customer-demo
         ports:
         - containerPort: {{ .Values.app.port }}
@@ -132,21 +137,24 @@ spec:
         env:
         - name: OXY_STATE_DIR
           value: "{{ .Values.env.OXY_STATE_DIR }}"
-        - name: AWS_REGION
-          value: "{{ .Values.env.AWS_REGION }}"
-        - name: CLUSTER_NAME
-          value: "{{ .Values.env.CLUSTER_NAME }}"
 
-        # Database URL selection. Default uses sqlite file in the workspace.
-        {{- if eq .Values.database.type "postgres" }}
+        # Database URL selection. Preference order:
+        # 1) explicit value provided by the caller via values.env.OXY_DATABASE_URL
+        # 2) explicit external.connectionString or external fields
+        # 3) postgres subchart connection (if user enabled it manually)
+        # 4) fallback to local sqlite file
+        {{- if and .Values.env.OXY_DATABASE_URL (ne .Values.env.OXY_DATABASE_URL "") }}
         - name: OXY_DATABASE_URL
-          value: "postgresql://{{ .Values.database.postgres.postgresqlUsername }}:{{ .Values.database.postgres.postgresqlPassword }}@{{ include "oxy-app.fullname" . }}-postgresql.{{ .Release.Namespace }}.svc.cluster.local:5432/{{ .Values.database.postgres.postgresqlDatabase }}"
+          value: "{{ .Values.env.OXY_DATABASE_URL }}"
         {{- else if and .Values.database.external.enabled (ne .Values.database.external.connectionString "") }}
         - name: OXY_DATABASE_URL
-          value: "${{ .Values.database.external.connectionString }}"
+          value: "{{ .Values.database.external.connectionString }}"
         {{- else if .Values.database.external.enabled }}
         - name: OXY_DATABASE_URL
           value: "postgresql://{{ .Values.database.external.user }}:{{ .Values.database.external.password }}@{{ .Values.database.external.host }}:{{ .Values.database.external.port }}/{{ .Values.database.external.database }}"
+        {{- else if .Values.database.postgres.enabled }}
+        - name: OXY_DATABASE_URL
+          value: "postgresql://{{ .Values.database.postgres.postgresqlUsername }}:{{ .Values.database.postgres.postgresqlPassword }}@{{ include "oxy-app.fullname" . }}-postgresql.{{ .Release.Namespace }}.svc.cluster.local:5432/{{ .Values.database.postgres.postgresqlDatabase }}"
         {{- else }}
         - name: OXY_DATABASE_URL
           value: "sqlite:////workspace/oxy_data/oxy.db"
@@ -176,10 +184,12 @@ spec:
           {{- toYaml .Values.readinessProbe | nindent 10 }}
 
       volumes:
+      {{- if .Values.gitSync.enabled }}
       - name: git-ssh
         secret:
-          secretName: {{ .Values.git.sshSecretName }}
+          secretName: {{ .Values.gitSync.sshSecretName }}
           optional: false
+      {{- end }}
 
       {{- range $idx, $s := .Values.externalSecrets.envSecretNames }}
       - name: env-secret-{{ $idx }}
