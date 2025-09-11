@@ -1,0 +1,16 @@
+suite: ingress
+templates:
+  - templates/ingress.yaml
+
+values:
+  - values-ingress.yaml
+
+tests:
+  - it: renders Ingress kind and annotations
+    asserts:
+      - equal:
+          path: kind
+          value: Ingress
+      - equal:
+          path: "metadata.annotations[\"kubernetes.io/ingress.class\"]"
+          value: nginx

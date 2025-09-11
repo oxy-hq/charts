@@ -9,6 +9,27 @@ app:
   port: 3000
   replicaCount: 1
 
+# Ingress configuration
+# Enable and configure Kubernetes Ingress for the application.
+ingress:
+  enabled: false
+  # ingressClassName allows selecting a specific IngressClass (empty = use default)
+  ingressClassName: ""
+  annotations: {}
+  # Default path and pathType for the first host entry
+  path: /
+  pathType: Prefix
+  # Primary hosts list. Each entry can contain a host and optional paths.
+  hosts:
+    - host: chart-example.local
+      paths: []
+  # TLS configuration. Example:
+  # tls:
+  #   - hosts:
+  #       - chart-example.local
+  #     secretName: chart-example-tls
+  tls: []
+
 # Resource configuration
 resources:
   requests:
