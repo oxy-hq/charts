@@ -1,0 +1,93 @@
+# Helm values for oxy-app (fill the REPLACE_* placeholders before running helm template)
+
+replicaCount: 1
+
+serviceAccount:
+  create: true
+  name: oxy-app-sa
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: "/metrics"
+    eks.amazonaws.com/role-arn: "REPLACE_IAM_ROLE_ARN" # arn:aws:iam::<ACCOUNT_ID>:role/<role>
+
+service:
+  port: 3000 # e.g. 3000
+
+env:
+  OXY_STATE_DIR: "/workspace/oxy_data"
+
+persistence:
+  enabled: true
+  storageClass: "gp3" # e.g. gp3
+  accessMode: ReadWriteOnce
+  size: "5Gi"
+  mountPath: "/workspace"
+
+nodeSelector:
+  workload-type: oxy-app
+  app: oxy-app
+
+tolerations:
+  - key: oxy-app
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"
+
+gitSync:
+  enabled: true
+  image: "k8s.gcr.io/git-sync/git-sync:v4.4.3"
+  repository: "git@github.com:oxy-hq/customer-demo.git"
+  branch: "main"
+  period: "24h"
+  sshSecretName: "wow" # e.g. oxy-git-ssh
+
+externalSecrets:
+  envSecretNames:
+    - "oxy-env-secret"
+  fileSecrets:
+    - name: "oxy-bigquery-secret"
+
+ingress:
+  enabled: true
+  ingressClassName: "alb"
+  annotations:
+    kubernetes.io/ingress.class: "alb"
+    alb.ingress.kubernetes.io/scheme: "internet-facing"
+    alb.ingress.kubernetes.io/target-type: "ip"
+    alb.ingress.kubernetes.io/load-balancer-name: "REPLACE_CLUSTER_NAME-oxy-app-alb"
+    alb.ingress.kubernetes.io/certificate-arn: "REPLACE_ACM_CERT_ARN"
+    external-dns.alpha.kubernetes.io/hostname: "REPLACE_HOSTNAME" # e.g. cloud-dev.example.com
+
+    # ALB healthchecks and attributes (strings)
+    alb.ingress.kubernetes.io/healthcheck-path: "/"
+    alb.ingress.kubernetes.io/healthcheck-port: "traffic-port"
+    alb.ingress.kubernetes.io/healthcheck-protocol: "HTTP"
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "30"
+    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: "10"
+    alb.ingress.kubernetes.io/healthy-threshold-count: "2"
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: "3"
+    alb.ingress.kubernetes.io/healthcheck-grace-period-seconds: "300"
+    alb.ingress.kubernetes.io/target-group-attributes: |
+      stickiness.enabled=true,
+      stickiness.lb_cookie.duration_seconds=86400,
+      stickiness.type=lb_cookie,
+      deregistration_delay.timeout_seconds=30,
+      load_balancing.algorithm.type=round_robin
+    alb.ingress.kubernetes.io/subnets: "REPLACE_PUBLIC_SUBNETS_COMMA_SEPARATED" # e.g. subnet-aaa,subnet-bbb
+    alb.ingress.kubernetes.io/security-groups: "REPLACE_ALB_SG_ID" # e.g. sg-0123456789
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/ssl-policy: "ELBSecurityPolicy-TLS-1-2-2017-01"
+    alb.ingress.kubernetes.io/load-balancer-attributes: |
+      idle_timeout.timeout_seconds=60,
+      routing.http2.enabled=true,
+      access_logs.s3.enabled=false,
+      deletion_protection.enabled=false
+
+  hosts:
+    - host: "REPLACE_HOSTNAME" # e.g. cloud-dev.example.com
+      paths: []
+
+  tls: []
+# End of values

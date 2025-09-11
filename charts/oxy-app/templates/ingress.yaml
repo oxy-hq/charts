@@ -1,5 +1,7 @@
 {{- if .Values.ingress.enabled -}}
 {{- $fullName := include "oxy-app.fullname" . -}}
+{{- $svcName := default (printf "%s-service" .Values.app.name) .Values.service.name -}}
+{{- $root := . -}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -29,18 +31,18 @@ spec:
             pathType: {{ $p.pathType | default $.Values.ingress.pathType }}
             backend:
               service:
-                name: {{ $fullName }}
+                name: {{ $svcName }}
                 port:
-                  number: {{ .Values.service.port }}
+                  number: {{ $root.Values.service.port }}
           {{- end }}
           {{- else }}
           - path: {{ $.Values.ingress.path | quote }}
             pathType: {{ $.Values.ingress.pathType }}
             backend:
               service:
-                name: {{ $fullName }}
+                name: {{ $svcName }}
                 port:
-                  number: {{ $.Values.service.port }}
+                  number: {{ $root.Values.service.port }}
           {{- end }}
     {{- end }}
 {{- end }}
