@@ -9,6 +9,7 @@ app:
   imageTag: ""
   port: 3000
   replicaCount: 1
+  imagePullPolicy: IfNotPresent
 
 # Ingress configuration
 # Enable and configure Kubernetes Ingress for the application.
@@ -169,6 +170,8 @@ gitSync:
   root: ""
   # Link path inside the mount that points to the latest synced revision (defaults to <persistence.mountPath>/current)
   link: ""
+  # Image pull policy for the git-sync init container. Valid values: Always, IfNotPresent, Never
+  imagePullPolicy: IfNotPresent
 
 database:
   # Subchart Postgres settings (optional; not selected automatically)
