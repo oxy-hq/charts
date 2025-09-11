@@ -58,71 +58,6 @@ spec:
             - name: git-ssh
               mountPath: /etc/git-secret
               readOnly: true
-
-        # Environment Setup Init Container
-        # Concatenate env secret files into a single .env file,
-        # and copy any file secrets into the workspace.
-        - name: env-setup
-          image: alpine:latest
-          command:
-            - sh
-            - -c
-            - |
-              set -euo pipefail
-              echo "Setting up environment..."
-
-              mkdir -p /workspace/customer-demo
-
-              # Build .env by concatenating all files under /secrets/env/*
-              if [ -d /secrets/env ]; then
-                echo "Building .env from mounted env secrets..."
-                rm -f /workspace/customer-demo/.env || true
-                for d in /secrets/env/*; do
-                  [ -d "$d" ] || continue
-                  for f in "$d"/*; do
-                    [ -f "$f" ] || continue
-                    echo "# from $(basename "$d")/$(basename "$f")" >> /workspace/customer-demo/.env
-                    cat "$f" >> /workspace/customer-demo/.env
-                    echo >> /workspace/customer-demo/.env
-                  done
-                done
-                [ -f /workspace/customer-demo/.env ] && echo ".env created at /workspace/customer-demo/.env" || echo "No env secret files found"
-              else
-                echo "No /secrets/env directory mounted"
-              fi
-
-              # Copy file secrets from /secrets/files/<name>/* into workspace
-              if [ -d /secrets/files ]; then
-                echo "Copying file secrets..."
-                for d in /secrets/files/*; do
-                  [ -d "$d" ] || continue
-                  for f in "$d"/*; do
-                    [ -f "$f" ] || continue
-                    key=$(basename "$f")
-                    cp "$f" /workspace/customer-demo/"$key" || echo "failed to copy $f"
-                    echo "copied $f to /workspace/customer-demo/$key"
-                  done
-                done
-              else
-                echo "No /secrets/files directory mounted"
-              fi
-
-              echo "Environment setup completed"
-          volumeMounts:
-            - name: workspace
-              mountPath: {{ .Values.persistence.mountPath }}
-            {{- /* Mount each env secret under /secrets/env/<secretName> */}}
-            {{- range $idx, $s := .Values.externalSecrets.envSecretNames }}
-            - name: env-secret-{{ $idx }}
-              mountPath: /secrets/env/{{ $s }}
-              readOnly: true
-            {{- end }}
-            {{- /* Mount each file secret under /secrets/files/<secretName> */}}
-            {{- range $idx, $f := .Values.externalSecrets.fileSecrets }}
-            - name: file-secret-{{ $idx }}
-              mountPath: /secrets/files/{{ $f.name }}
-              readOnly: true
-            {{- end }}
       {{- end }}
 
       # Main Application Container
@@ -174,11 +109,17 @@ spec:
               value: "postgresql://{{ .Values.database.postgres.postgresqlUsername }}:{{ .Values.database.postgres.postgresqlPassword }}@{{ include "oxy-app.fullname" . }}-postgresql.{{ .Release.Namespace }}.svc.cluster.local:5432/{{ .Values.database.postgres.postgresqlDatabase }}"
             {{- end }}
 
-          # ConfigMap Environment Variables
-          {{- if .Values.configMap.enabled }}
+          # ConfigMap / Secret Environment Variables
+          {{- if or .Values.configMap.enabled (gt (len .Values.externalSecrets.envSecretNames) 0) }}
           envFrom:
+            {{- if .Values.configMap.enabled }}
             - configMapRef:
                 name: {{ .Values.app.name }}-config
+            {{- end }}
+            {{- range $idx, $s := .Values.externalSecrets.envSecretNames }}
+            - secretRef:
+                name: {{ $s | quote }}
+            {{- end }}
           {{- end }}
 
           # Resource Limits and Requests
