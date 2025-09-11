@@ -3,6 +3,28 @@ entries:
   oxy-app:
   - apiVersion: v2
     appVersion: 0.2.28
+    created: "2025-09-11T08:32:06.725334Z"
+    dependencies:
+    - condition: database.postgres.enabled
+      name: postgresql
+      repository: https://charts.bitnami.com/bitnami
+      version: 15.2.2
+    description: A Helm chart for Oxy application deployment on kubernetes
+    digest: d9f268fd5834979bace783d84cb35d22ee43f6e906bdea84b020b8478d9a92cb
+    keywords:
+    - oxy
+    maintainers:
+    - email: hello@oxy.tech
+      name: Oxy Team
+    - email: luong@oxy.tech
+      name: Luong Vo
+    name: oxy-app
+    type: application
+    urls:
+    - https://github.com/oxy-hq/charts/releases/download/oxy-app-0.1.7/oxy-app-0.1.7.tgz
+    version: 0.1.7
+  - apiVersion: v2
+    appVersion: 0.2.28
     created: "2025-09-11T06:32:35.355853917Z"
     dependencies:
     - condition: database.postgres.enabled
@@ -89,4 +111,4 @@ entries:
     urls:
     - https://github.com/oxy-hq/charts/releases/download/oxy-app-0.1.3/oxy-app-0.1.3.tgz
     version: 0.1.3
-generated: "2025-09-11T06:32:35.355868093Z"
+generated: "2025-09-11T08:32:06.725352405Z"
