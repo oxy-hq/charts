@@ -37,7 +37,7 @@ This doc tries to focus only on chart-specific, differential behavior you won't 
   - When disabled, init containers and git-ssh mounts are omitted and the app uses `--readonly` mode
   - Provide SSH key material via an in-cluster Secret and set `gitSync.sshSecretName` (do not commit keys in `values.yaml`)
 - External secrets
-  - `externalSecrets.envSecretNames` concatenates named secrets into one `.env` file.
+  - `externalSecrets.envSecretNames` copies secret keys & values as env vars
   - `externalSecrets.fileSecrets` copies secret keys as files into the workspace.
 
 Validation & testing
