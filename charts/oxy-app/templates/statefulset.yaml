@@ -163,28 +163,30 @@ spec:
           value: "postgresql://{{ .Values.database.postgres.postgresqlUsername }}:{{ .Values.database.postgres.postgresqlPassword }}@{{ include "oxy-app.fullname" . }}-postgresql.{{ .Release.Namespace }}.svc.cluster.local:5432/{{ .Values.database.postgres.postgresqlDatabase }}"
         {{- end }}
 
-        envFrom:
+  {{- if .Values.configMap.enabled }}
+      envFrom:
         - configMapRef:
             name: {{ .Values.app.name }}-config
-        resources:
-          {{- toYaml .Values.resources | nindent 10 }}
-        volumeMounts:
-        - name: workspace
-          mountPath: {{ .Values.persistence.mountPath }}
-        {{- range $idx, $s := .Values.externalSecrets.envSecretNames }}
-        - name: env-secret-{{ $idx }}
-          mountPath: /secrets/env/{{ $s }}
-          readOnly: true
-        {{- end }}
-        {{- range $idx, $f := .Values.externalSecrets.fileSecrets }}
-        - name: file-secret-{{ $idx }}
-          mountPath: /secrets/files/{{ $f.name }}
-          readOnly: true
-        {{- end }}
-        livenessProbe:
-          {{- toYaml .Values.livenessProbe | nindent 10 }}
-        readinessProbe:
-          {{- toYaml .Values.readinessProbe | nindent 10 }}
+  {{- end }}
+      resources:
+        {{- toYaml .Values.resources | nindent 8 }}
+      volumeMounts:
+      - name: workspace
+        mountPath: {{ .Values.persistence.mountPath }}
+      {{- range $idx, $s := .Values.externalSecrets.envSecretNames }}
+      - name: env-secret-{{ $idx }}
+        mountPath: /secrets/env/{{ $s }}
+        readOnly: true
+      {{- end }}
+      {{- range $idx, $f := .Values.externalSecrets.fileSecrets }}
+      - name: file-secret-{{ $idx }}
+        mountPath: /secrets/files/{{ $f.name }}
+        readOnly: true
+      {{- end }}
+      livenessProbe:
+        {{- toYaml .Values.livenessProbe | nindent 8 }}
+      readinessProbe:
+        {{- toYaml .Values.readinessProbe | nindent 8 }}
 
       volumes:
       {{- if .Values.gitSync.enabled }}

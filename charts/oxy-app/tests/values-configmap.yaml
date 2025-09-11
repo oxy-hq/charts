@@ -1,0 +1,5 @@
+configMap:
+  enabled: true
+  data:
+    CUSTOM_KEY: custom-value
+    OXY_STATE_DIR: /custom/path

@@ -1,0 +1,19 @@
+suite: configmap-custom
+templates:
+  - configmap.yaml
+
+values:
+  - values-configmap.yaml
+
+tests:
+  - it: renders ConfigMap with custom keys
+    asserts:
+      - equal:
+          path: kind
+          value: ConfigMap
+      - equal:
+          path: data.CUSTOM_KEY
+          value: custom-value
+      - equal:
+          path: data.OXY_STATE_DIR
+          value: /custom/path

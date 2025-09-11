@@ -43,6 +43,11 @@ resources:
 env:
   OXY_STATE_DIR: /workspace/oxy_data
 
+configMap:
+  enabled: true
+  # free-form map of key -> value to be included in the ConfigMap
+  data: {}
+
 # Service Account for IRSA
 serviceAccount:
   create: true

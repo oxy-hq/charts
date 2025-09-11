@@ -1,3 +1,4 @@
+{{- if .Values.configMap.enabled }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -8,7 +9,6 @@ metadata:
     chart: {{ include "oxy-app.chart" . }}
     release: {{ .Release.Name }}
 data:
-  AWS_REGION: {{ .Values.env.AWS_REGION | quote }}
-  OXY_STATE_DIR: {{ .Values.env.OXY_STATE_DIR | quote }}
-  CLUSTER_NAME: {{ .Values.env.CLUSTER_NAME | quote }}
-  ENVIRONMENT: {{ .Values.env.ENVIRONMENT | quote }}
+  {{- /* Render explicit key/values only. toYaml handles empty maps. */}}
+  {{- toYaml .Values.configMap.data | nindent 2 }}
+{{- end }}
