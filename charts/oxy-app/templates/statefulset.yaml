@@ -1,15 +1,15 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ .Values.app.name }}
+  name: {{ .Release.Name }}
   namespace: {{ .Release.Namespace }}
   labels:
-    app: {{ .Values.app.name }}
+    app: {{ .Release.Name }}
     chart: {{ include "oxy-app.chart" . }}
     release: {{ .Release.Name }}
     version: v1
 spec:
-  serviceName: {{ .Values.app.name }}-headless
+  serviceName: {{ .Release.Name }}-headless
   replicas: {{ .Values.app.replicaCount }}
   updateStrategy:
     type: RollingUpdate
@@ -17,11 +17,11 @@ spec:
       partition: 0
   selector:
     matchLabels:
-      app: {{ .Values.app.name }}
+      app: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        app: {{ .Values.app.name }}
+        app: {{ .Release.Name }}
         version: v1
     spec:
       {{- if .Values.serviceAccount.create }}
@@ -62,7 +62,7 @@ spec:
 
       # Main Application Container
       containers:
-        - name: {{ .Values.app.name }}
+        - name: {{ .Release.Name }}
           image: "{{ .Values.app.image }}:{{ default .Chart.AppVersion .Values.app.imageTag }}"
           command:
             - sh
@@ -114,7 +114,7 @@ spec:
           envFrom:
             {{- if .Values.configMap.enabled }}
             - configMapRef:
-                name: {{ .Values.app.name }}-config
+                name: {{ .Release.Name }}-config
             {{- end }}
             {{- range $idx, $s := .Values.externalSecrets.envSecretNames }}
             - secretRef:

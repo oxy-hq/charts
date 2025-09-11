@@ -1,6 +1,6 @@
 # oxy-app
 
-![Version: 0.1.5](https://img.shields.io/badge/Version-0.1.5-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.2.28](https://img.shields.io/badge/AppVersion-0.2.28-informational?style=flat-square)
+![Version: 0.1.8](https://img.shields.io/badge/Version-0.1.8-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.2.28](https://img.shields.io/badge/AppVersion-0.2.28-informational?style=flat-square)
 
 A Helm chart for Oxy application deployment on kubernetes
 
@@ -23,7 +23,6 @@ A Helm chart for Oxy application deployment on kubernetes
 |-----|------|---------|-------------|
 | app.image | string | `"ghcr.io/oxy-hq/oxy"` |  |
 | app.imageTag | string | `""` |  |
-| app.name | string | `"oxy-app"` |  |
 | app.port | int | `3000` |  |
 | app.replicaCount | int | `1` |  |
 | configMap.data | object | `{}` |  |
@@ -72,6 +71,7 @@ A Helm chart for Oxy application deployment on kubernetes
 | livenessProbe.initialDelaySeconds | int | `60` |  |
 | livenessProbe.periodSeconds | int | `30` |  |
 | livenessProbe.timeoutSeconds | int | `10` |  |
+| name | string | `"oxy-app"` |  |
 | nodeSelector | string | `nil` |  |
 | persistence.accessMode | string | `"ReadWriteOnce"` |  |
 | persistence.annotations | object | `{}` |  |
