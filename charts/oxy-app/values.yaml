@@ -10,6 +10,10 @@ app:
   port: 3000
   replicaCount: 1
   imagePullPolicy: IfNotPresent
+  # Optional override for the container command. When empty, the chart will
+  # use the default shell wrapper that runs `oxy serve` (readonly if gitSync disabled).
+  # Example: ["/app/bin/oxy", "serve"]
+  command: []
 
 # Ingress configuration
 # Enable and configure Kubernetes Ingress for the application.

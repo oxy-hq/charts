@@ -1,6 +1,6 @@
 # oxy-app
 
-![Version: 0.1.8](https://img.shields.io/badge/Version-0.1.8-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.2.28](https://img.shields.io/badge/AppVersion-0.2.28-informational?style=flat-square)
+![Version: 0.1.10](https://img.shields.io/badge/Version-0.1.10-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.2.28](https://img.shields.io/badge/AppVersion-0.2.28-informational?style=flat-square)
 
 A Helm chart for Oxy application deployment on kubernetes
 
@@ -21,7 +21,9 @@ A Helm chart for Oxy application deployment on kubernetes
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
+| app.command | list | `[]` |  |
 | app.image | string | `"ghcr.io/oxy-hq/oxy"` |  |
+| app.imagePullPolicy | string | `"IfNotPresent"` |  |
 | app.imageTag | string | `""` |  |
 | app.port | int | `3000` |  |
 | app.replicaCount | int | `1` |  |
@@ -49,6 +51,7 @@ A Helm chart for Oxy application deployment on kubernetes
 | externalSecrets.storeRef.name | string | `""` |  |
 | gitSync.branch | string | `"main"` |  |
 | gitSync.enabled | bool | `false` |  |
+| gitSync.imagePullPolicy | string | `"IfNotPresent"` |  |
 | gitSync.link | string | `""` |  |
 | gitSync.period | string | `"15s"` |  |
 | gitSync.repository | string | `""` |  |

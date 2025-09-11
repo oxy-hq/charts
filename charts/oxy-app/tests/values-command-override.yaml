@@ -1,0 +1,4 @@
+app:
+  command:
+    - /bin/custom-entrypoint
+    - --serve

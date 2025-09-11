@@ -64,11 +64,18 @@ spec:
       containers:
         - name: {{ .Release.Name }}
           image: "{{ .Values.app.image }}:{{ default .Chart.AppVersion .Values.app.imageTag }}"
+          {{- if and .Values.app.command (gt (len .Values.app.command) 0) }}
+          command:
+            {{- range $i, $c := .Values.app.command }}
+            - {{ $c | quote }}
+            {{- end }}
+          {{- else }}
           command:
             - sh
             - -c
             - |
               exec oxy serve{{- if not .Values.gitSync.enabled }} --readonly{{- end }}
+          {{- end }}
           {{- if .Values.gitSync.enabled }}
           {{- $gitLink := default (printf "%s/current" .Values.persistence.mountPath) .Values.gitSync.link }}
           workingDir: {{ $gitLink }}

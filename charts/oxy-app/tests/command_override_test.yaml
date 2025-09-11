@@ -1,0 +1,16 @@
+suite: command-override
+templates:
+  - statefulset.yaml
+
+values:
+  - values-command-override.yaml
+
+tests:
+  - it: overrides the container command when app.command provided
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command[0]
+          value: "/bin/custom-entrypoint"
+      - equal:
+          path: spec.template.spec.containers[0].command[1]
+          value: "--serve"
