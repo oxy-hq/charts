@@ -29,7 +29,7 @@ spec:
       {{- end }}
       securityContext:
         fsGroup: {{ .Values.securityContext.fsGroup }}
-      
+
       # Init Containers
       initContainers:
       {{- if .Values.gitSync.enabled }}
@@ -38,7 +38,7 @@ spec:
         # linked copy at /workspace/current that the long-running git-sync
         # sidecar will keep up-to-date.
         - name: git-clone
-          image: {{ .Values.gitSync.image }}
+          image: k8s.gcr.io/git-sync/git-sync:v4.4.3
           args:
             - --repo={{ .Values.gitSync.repository }}
             - --branch={{ .Values.gitSync.branch }}
@@ -142,7 +142,7 @@ spec:
             - containerPort: {{ .Values.app.port }}
               protocol: TCP
               name: traffic-port
-          
+
           # Environment Variables
           env:
             # State Directory Configuration

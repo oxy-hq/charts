@@ -44,7 +44,7 @@ env:
   OXY_STATE_DIR: /workspace/oxy_data
 
 configMap:
-  enabled: true
+  enabled: false
   # free-form map of key -> value to be included in the ConfigMap
   data: {}
 
@@ -157,7 +157,6 @@ sshKey:
 
 # Git sync sidecar configuration
 gitSync:
-  image: k8s.gcr.io/git-sync/git-sync:v4.4.3
   period: 15s
   repository: ""
   branch: main
