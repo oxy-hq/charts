@@ -165,6 +165,10 @@ gitSync:
   userEmail: ""
   sshSecretName: oxy-git-ssh
   enabled: false
+  # Root directory where git-sync stores repo data (defaults to <persistence.mountPath>/git)
+  root: ""
+  # Link path inside the mount that points to the latest synced revision (defaults to <persistence.mountPath>/current)
+  link: ""
 
 database:
   # Subchart Postgres settings (optional; not selected automatically)
