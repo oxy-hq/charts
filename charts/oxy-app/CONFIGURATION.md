@@ -1,6 +1,6 @@
 # oxy-app
 
-![Version: 0.1.10](https://img.shields.io/badge/Version-0.1.10-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.2.28](https://img.shields.io/badge/AppVersion-0.2.28-informational?style=flat-square)
+![Version: 0.1.11](https://img.shields.io/badge/Version-0.1.11-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.2.28](https://img.shields.io/badge/AppVersion-0.2.28-informational?style=flat-square)
 
 A Helm chart for Oxy application deployment on kubernetes
 
@@ -29,19 +29,26 @@ A Helm chart for Oxy application deployment on kubernetes
 | app.replicaCount | int | `1` |  |
 | configMap.data | object | `{}` |  |
 | configMap.enabled | bool | `false` |  |
+| database.external.connectionString | string | `""` |  |
 | database.external.dataWarehouseSecret.backend | string | `""` |  |
 | database.external.dataWarehouseSecret.key | string | `""` |  |
 | database.external.dataWarehouseSecret.path | string | `""` |  |
+| database.external.database | string | `""` |  |
 | database.external.enabled | bool | `false` |  |
 | database.external.envSecret.backend | string | `""` |  |
 | database.external.envSecret.key | string | `""` |  |
 | database.external.envSecret.path | string | `""` |  |
+| database.external.host | string | `""` |  |
+| database.external.password | string | `""` |  |
+| database.external.port | int | `5432` |  |
 | database.external.storeRef.kind | string | `"SecretStore"` |  |
 | database.external.storeRef.name | string | `""` |  |
+| database.external.user | string | `""` |  |
 | database.postgres.enabled | bool | `false` |  |
 | database.postgres.postgresqlDatabase | string | `"oxydb"` |  |
 | database.postgres.postgresqlPassword | string | `"postgres"` |  |
 | database.postgres.postgresqlUsername | string | `"oxy"` |  |
+| env.OXY_DATABASE_URL | string | `""` |  |
 | env.OXY_STATE_DIR | string | `"/workspace/oxy_data"` |  |
 | externalSecrets.create | bool | `false` |  |
 | externalSecrets.envSecretMappings | object | `{}` |  |
@@ -49,6 +56,8 @@ A Helm chart for Oxy application deployment on kubernetes
 | externalSecrets.fileSecrets | list | `[]` |  |
 | externalSecrets.storeRef.kind | string | `""` |  |
 | externalSecrets.storeRef.name | string | `""` |  |
+| extraInitContainers | list | `[]` |  |
+| extraSidecars | list | `[]` |  |
 | gitSync.branch | string | `"main"` |  |
 | gitSync.enabled | bool | `false` |  |
 | gitSync.imagePullPolicy | string | `"IfNotPresent"` |  |
