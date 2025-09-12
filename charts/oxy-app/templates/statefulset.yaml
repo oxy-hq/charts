@@ -24,11 +24,14 @@ spec:
         app: {{ .Release.Name }}
         version: v1
     spec:
-      {{- if .Values.serviceAccount.create }}
+  {{- if .Values.serviceAccount.create }}
       serviceAccountName: {{ .Values.serviceAccount.name }}
       {{- end }}
       securityContext:
         fsGroup: {{ .Values.securityContext.fsGroup }}
+
+  {{- $gitRoot := default (printf "%s/git" .Values.persistence.mountPath) .Values.gitSync.root }}
+  {{- $gitLink := default (printf "%s/current" .Values.persistence.mountPath) .Values.gitSync.link }}
 
       # Init Containers
       initContainers:
@@ -39,11 +42,10 @@ spec:
         # sidecar will keep up-to-date.
         - name: git-clone
           image: k8s.gcr.io/git-sync/git-sync:v4.4.3
+          imagePullPolicy: {{ .Values.gitSync.imagePullPolicy }}
           args:
             - --repo={{ .Values.gitSync.repository }}
             - --branch={{ .Values.gitSync.branch }}
-            {{- $gitRoot := default (printf "%s/git" .Values.persistence.mountPath) .Values.gitSync.root }}
-            {{- $gitLink := default (printf "%s/current" .Values.persistence.mountPath) .Values.gitSync.link }}
             - --root={{ $gitRoot }}
             - --link={{ $gitLink }}
             - --one-time=true
@@ -52,6 +54,8 @@ spec:
             - --ssh-known-hosts-file=/etc/git-secret/known_hosts
             - --max-failures=5
             - --verbose=1
+            - --one-time
+            - --git-gc=off
           volumeMounts:
             - name: workspace
               mountPath: {{ .Values.persistence.mountPath }}
@@ -77,7 +81,6 @@ spec:
               exec oxy serve{{- if not .Values.gitSync.enabled }} --readonly{{- end }}
           {{- end }}
           {{- if .Values.gitSync.enabled }}
-          {{- $gitLink := default (printf "%s/current" .Values.persistence.mountPath) .Values.gitSync.link }}
           workingDir: {{ $gitLink }}
           {{- end }}
           ports:
@@ -155,6 +158,30 @@ spec:
             {{- toYaml .Values.livenessProbe | nindent 12 }}
           readinessProbe:
             {{- toYaml .Values.readinessProbe | nindent 12 }}
+
+        {{- if .Values.gitSync.enabled }}
+        # Git Sync Sidecar (keeps the repo up-to-date)
+        - name: git-sync
+          image: k8s.gcr.io/git-sync/git-sync:v4.4.3
+          imagePullPolicy: {{ .Values.gitSync.imagePullPolicy }}
+          args:
+            - --repo={{ .Values.gitSync.repository }}
+            - --branch={{ .Values.gitSync.branch }}
+            - --root={{ $gitRoot }}
+            - --link={{ $gitLink }}
+            - --period={{ .Values.gitSync.period }}
+            - --depth=1
+            - --ssh-key-file=/etc/git-secret/ssh
+            - --ssh-known-hosts-file=/etc/git-secret/known_hosts
+            - --max-failures=5
+            - --verbose=1
+          volumeMounts:
+            - name: workspace
+              mountPath: {{ .Values.persistence.mountPath }}
+            - name: git-ssh
+              mountPath: /etc/git-secret
+              readOnly: true
+        {{- end }}
 
       # Volume Definitions
       volumes:
