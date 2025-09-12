@@ -21,7 +21,7 @@ Notes: replace `oxy-app` release name, namespace, or values file as needed for y
 This doc tries to focus only on chart-specific, differential behavior you won't find in a generic Helm tutorial.
 
 - Deployment type: StatefulSet (requires a PVC). Reason: the app needs persistent storage for state, database files (if you are using sqlite), and git repo clones.
-- Architecture: single container, with optional init containers for git sync and env setup.
+- Architecture: single main container. Optional init containers are used only for git cloning when `gitSync.enabled` is true; env file assembly is no longer performed by an init-container.
 - State directory & persistence
   - PVC mounted at `/workspace`. App defaults to `OXY_STATE_DIR=/workspace/oxy_data`.
   - A sqlite database file is created at `OXY_STATE_DIR` when no external DB is provided.
@@ -33,9 +33,13 @@ This doc tries to focus only on chart-specific, differential behavior you won't 
 - For production, it is recommended to set `env.OXY_DATABASE_URL` or use an external managed DB.
 - gitSync / init-container
   - By default, gitSync is disabled. We start oxy with `--readonly` mode and no git repo. Git setup will be handled by the app UI
-  - Controlled by `gitSync.enabled` (default: `true`). When enabled, init containers clone and prepare `/workspace/current` and build an `.env` from secrets
-  - When disabled, init containers and git-ssh mounts are omitted and the app uses `--readonly` mode
+  - Controlled by `gitSync.enabled` (default: `false`). When enabled, init containers clone and prepare `/workspace/current`. The chart no longer builds an `.env` in an init container; environment variables should be provided via `env`, `configMap`, or mounted secrets.
+  - When disabled, init containers and git-ssh mounts are omitted and the app uses `--readonly` mode.
   - Provide SSH key material via an in-cluster Secret and set `gitSync.sshSecretName` (do not commit keys in `values.yaml`)
+- Extra containers
+  - The chart supports user-supplied init containers and sidecars via `extraInitContainers` and `extraSidecars` in `values.yaml`.
+  - Each entry should be a valid Kubernetes container spec (name, image, command, volumeMounts, etc.). These are rendered into the Pod `initContainers` and `containers` lists respectively.
+  - If your custom containers require additional volumes, add them using the chart's supported volume or PVC fields and reference the volume names in your container's `volumeMounts`.
 - External secrets
   - `externalSecrets.envSecretNames` copies secret keys & values as env vars
   - `externalSecrets.fileSecrets` copies secret keys as files into the workspace.
