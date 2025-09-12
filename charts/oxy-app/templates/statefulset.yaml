@@ -1,3 +1,9 @@
+{{/*
+Define git sync paths
+*/}}
+{{- $gitRoot := default (printf "%s/git" .Values.persistence.mountPath) .Values.gitSync.root -}}
+{{- $gitLink := default (printf "%s/current" .Values.persistence.mountPath) .Values.gitSync.link -}}
+
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -30,12 +36,9 @@ spec:
       securityContext:
         fsGroup: {{ .Values.securityContext.fsGroup }}
 
-  {{- $gitRoot := default (printf "%s/git" .Values.persistence.mountPath) .Values.gitSync.root }}
-  {{- $gitLink := default (printf "%s/current" .Values.persistence.mountPath) .Values.gitSync.link }}
-
-      # Init Containers
+      {{- if or .Values.gitSync.enabled .Values.extraInitContainers }}
       initContainers:
-      {{- if .Values.gitSync.enabled }}
+        {{- if .Values.gitSync.enabled }}
         # Git Clone Init Container
         # One-time secure clone using kubernetes/git-sync. This creates a
         # linked copy at /workspace/current that the long-running git-sync
@@ -62,21 +65,22 @@ spec:
             - name: git-ssh
               mountPath: /etc/git-secret
               readOnly: true
+        {{- end }}
+
+        {{- /* Render any user-supplied init containers */}}
+        {{- with .Values.extraInitContainers }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- end }}
 
-      {{- /* Render any user-supplied init containers */}}
-      {{- range $i, $c := .Values.extraInitContainers }}
-        - {{- toYaml $c | nindent 10 }}
-      {{- end }}
-
-      # Main Application Container
       containers:
+        # Main Application Container
         - name: {{ .Release.Name }}
           image: "{{ .Values.app.image }}:{{ default .Chart.AppVersion .Values.app.imageTag }}"
           {{- if and .Values.app.command (gt (len .Values.app.command) 0) }}
           command:
-            {{- range $i, $c := .Values.app.command }}
-            - {{ $c | quote }}
+            {{- range .Values.app.command }}
+            - {{ . | quote }}
             {{- end }}
           {{- else }}
           command:
@@ -98,10 +102,10 @@ spec:
             # State Directory Configuration
             {{- if and .Values.env.OXY_STATE_DIR (ne .Values.env.OXY_STATE_DIR "") }}
             - name: OXY_STATE_DIR
-              value: "{{ .Values.env.OXY_STATE_DIR }}"
+              value: {{ .Values.env.OXY_STATE_DIR | quote }}
             {{- else }}
             - name: OXY_STATE_DIR
-              value: "{{ printf "%s/%s" .Values.persistence.mountPath .Values.persistence.folder }}"
+              value: {{ printf "%s/%s" .Values.persistence.mountPath .Values.persistence.folder | quote }}
             {{- end }}
 
             # Database URL Configuration
@@ -112,16 +116,26 @@ spec:
             # If none are provided, OXY_DATABASE_URL will not be set
             {{- if and .Values.env.OXY_DATABASE_URL (ne .Values.env.OXY_DATABASE_URL "") }}
             - name: OXY_DATABASE_URL
-              value: "{{ .Values.env.OXY_DATABASE_URL }}"
+              value: {{ .Values.env.OXY_DATABASE_URL | quote }}
             {{- else if and .Values.database.external.enabled (ne .Values.database.external.connectionString "") }}
             - name: OXY_DATABASE_URL
-              value: "{{ .Values.database.external.connectionString }}"
+              value: {{ .Values.database.external.connectionString | quote }}
             {{- else if .Values.database.external.enabled }}
             - name: OXY_DATABASE_URL
-              value: "postgresql://{{ .Values.database.external.user }}:{{ .Values.database.external.password }}@{{ .Values.database.external.host }}:{{ .Values.database.external.port }}/{{ .Values.database.external.database }}"
+              value: {{ printf "postgresql://%s:%s@%s:%v/%s" 
+                .Values.database.external.user 
+                .Values.database.external.password 
+                .Values.database.external.host 
+                .Values.database.external.port 
+                .Values.database.external.database | quote }}
             {{- else if .Values.database.postgres.enabled }}
             - name: OXY_DATABASE_URL
-              value: "postgresql://{{ .Values.database.postgres.postgresqlUsername }}:{{ .Values.database.postgres.postgresqlPassword }}@{{ include "oxy-app.fullname" . }}-postgresql.{{ .Release.Namespace }}.svc.cluster.local:5432/{{ .Values.database.postgres.postgresqlDatabase }}"
+              value: {{ printf "postgresql://%s:%s@%s-postgresql.%s.svc.cluster.local:5432/%s" 
+                .Values.database.postgres.postgresqlUsername 
+                .Values.database.postgres.postgresqlPassword 
+                (include "oxy-app.fullname" .) 
+                .Release.Namespace 
+                .Values.database.postgres.postgresqlDatabase | quote }}
             {{- end }}
 
           # ConfigMap / Secret Environment Variables
@@ -131,38 +145,45 @@ spec:
             - configMapRef:
                 name: {{ .Release.Name }}-config
             {{- end }}
-            {{- range $idx, $s := .Values.externalSecrets.envSecretNames }}
+            {{- range .Values.externalSecrets.envSecretNames }}
             - secretRef:
-                name: {{ $s | quote }}
+                name: {{ . | quote }}
             {{- end }}
           {{- end }}
 
           # Resource Limits and Requests
+          {{- with .Values.resources }}
           resources:
-            {{- toYaml .Values.resources | nindent 12 }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
 
           # Volume Mounts
           volumeMounts:
             - name: workspace
               mountPath: {{ .Values.persistence.mountPath }}
             {{- /* Mount environment secrets */}}
-            {{- range $idx, $s := .Values.externalSecrets.envSecretNames }}
+            {{- range $idx, $secretName := .Values.externalSecrets.envSecretNames }}
             - name: env-secret-{{ $idx }}
-              mountPath: /secrets/env/{{ $s }}
+              mountPath: /secrets/env/{{ $secretName }}
               readOnly: true
             {{- end }}
             {{- /* Mount file secrets */}}
-            {{- range $idx, $f := .Values.externalSecrets.fileSecrets }}
+            {{- range $idx, $fileSecret := .Values.externalSecrets.fileSecrets }}
             - name: file-secret-{{ $idx }}
-              mountPath: /secrets/files/{{ $f.name }}
+              mountPath: /secrets/files/{{ $fileSecret.name }}
               readOnly: true
             {{- end }}
 
           # Health Checks
+          {{- with .Values.livenessProbe }}
           livenessProbe:
-            {{- toYaml .Values.livenessProbe | nindent 12 }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
           readinessProbe:
-            {{- toYaml .Values.readinessProbe | nindent 12 }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
         {{- if .Values.gitSync.enabled }}
         # Git Sync Sidecar (keeps the repo up-to-date)
         - name: git-sync
@@ -188,8 +209,8 @@ spec:
         {{- end }}
 
         {{- /* Render user-supplied sidecars after built-in sidecars */}}
-        {{- range $i, $s := .Values.extraSidecars }}
-          - {{- toYaml $s | nindent 10 }}
+        {{- with .Values.extraSidecars }}
+        {{- toYaml . | nindent 8 }}
         {{- end }}
 
       # Volume Definitions
@@ -201,17 +222,17 @@ spec:
             optional: false
         {{- end }}
         {{- /* Environment secret volumes */}}
-        {{- range $idx, $s := .Values.externalSecrets.envSecretNames }}
+        {{- range $idx, $secretName := .Values.externalSecrets.envSecretNames }}
         - name: env-secret-{{ $idx }}
           secret:
-            secretName: {{ $s | quote }}
+            secretName: {{ $secretName | quote }}
             optional: true
         {{- end }}
         {{- /* File secret volumes */}}
-        {{- range $idx, $f := .Values.externalSecrets.fileSecrets }}
+        {{- range $idx, $fileSecret := .Values.externalSecrets.fileSecrets }}
         - name: file-secret-{{ $idx }}
           secret:
-            secretName: {{ $f.name | quote }}
+            secretName: {{ $fileSecret.name | quote }}
             optional: true
         {{- end }}
 
@@ -224,27 +245,35 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
 
   # Persistent Volume Claim Templates
   volumeClaimTemplates:
     - metadata:
         name: workspace
+        {{- with .Values.persistence.annotations }}
         annotations:
-          {{- toYaml .Values.persistence.annotations | nindent 10 }}
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.persistence.labels }}
         labels:
-          {{- toYaml .Values.persistence.labels | nindent 10 }}
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
       spec:
         accessModes:
-          - "{{ .Values.persistence.accessMode }}"
-        {{- if .Values.persistence.storageClassName }}
-        storageClassName: {{ .Values.persistence.storageClassName }}
+          - {{ .Values.persistence.accessMode | quote }}
+        {{- with .Values.persistence.storageClassName }}
+        storageClassName: {{ . }}
         {{- end }}
-        {{- if .Values.persistence.volumeMode }}
-        volumeMode: {{ .Values.persistence.volumeMode }}
+        {{- with .Values.persistence.volumeMode }}
+        volumeMode: {{ . }}
         {{- end }}
-        {{- if .Values.persistence.selector }}
+        {{- with .Values.persistence.selector }}
         selector:
-          {{- toYaml .Values.persistence.selector | nindent 10 }}
+          {{- toYaml . | nindent 10 }}
         {{- end }}
         resources:
           requests:

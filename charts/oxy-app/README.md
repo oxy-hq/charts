@@ -14,6 +14,28 @@ helm install oxy-app ./charts/oxy-app --namespace oxy --create-namespace
 helm install oxy-app ./charts/oxy-app -f charts/oxy-app/values.yaml --namespace oxy --create-namespace
 ```
 
+- Install directly from the OCI registry
+
+```bash
+# install from the OCI registry
+helm install oxy-app oci://ghcr.io/oxy-hq/helm-charts/oxy-app --namespace oxy --create-namespace
+
+# with a values file
+helm install oxy-app oci://ghcr.io/oxy-hq/helm-charts/oxy-app -f charts/oxy-app/values.yaml --namespace oxy --create-namespace
+```
+
+- Install from the classic Helm repository
+
+```bash
+helm repo add oxy-hq https://oxy-hq.github.io/charts/
+helm repo update
+
+helm install oxy-app oxy-hq/oxy-app --namespace oxy --create-namespace
+
+# with a values file
+helm install oxy-app oxy-hq/oxy-app -f charts/oxy-app/values.yaml --namespace oxy --create-namespace
+```
+
 Notes: replace `oxy-app` release name, namespace, or values file as needed for your environment.
 
 ## Overview
