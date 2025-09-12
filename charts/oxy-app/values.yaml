@@ -48,6 +48,8 @@ resources:
 # Environment variables
 env:
   OXY_STATE_DIR: /workspace/oxy_data
+  # Optional explicit database URL. If set, this takes precedence over other DB settings.
+  OXY_DATABASE_URL: ""
 
 configMap:
   enabled: false
@@ -204,3 +206,31 @@ database:
       backend: ""
       path: ""
       key: ""
+
+    # Optional connection details for an external database. Leave empty to
+    # let callers supply a full connection string via `connectionString` or
+    # rely on mounted secrets.
+    connectionString: ""
+    user: ""
+    password: ""
+    host: ""
+    port: 5432
+    database: ""
+
+# Allow users to supply arbitrary initContainers and sidecar containers.
+# Each entry should be a Kubernetes container spec. Examples below show
+# how to mount a secret and run a simple command. These are merged into
+# the Pod spec as-is; the user is responsible for valid container specs.
+extraInitContainers: []
+
+# Extra sidecar containers to run alongside the main application container.
+# Example usage:
+# extraSidecars:
+#   - name: my-sidecar
+#     image: busybox:1.36
+#     imagePullPolicy: IfNotPresent
+#     command: ["sh", "-c", "while true; do echo sidecar; sleep 60; done"]
+#     volumeMounts:
+#       - name: workspace
+#         mountPath: /workspace
+extraSidecars: []
