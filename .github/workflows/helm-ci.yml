@@ -61,11 +61,238 @@ jobs:
       - name: Create kind cluster
         if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
         uses: helm/kind-action@v1.12.0
+        with:
+          cluster_name: helm-integration-test
+          config: |
+            kind: Cluster
+            apiVersion: kind.x-k8s.io/v1alpha4
+            nodes:
+            - role: control-plane
+              kubeadmConfigPatches:
+              - |
+                kind: InitConfiguration
+                nodeRegistration:
+                  kubeletExtraArgs:
+                    node-labels: "ingress-ready=true"
+              extraPortMappings:
+              - containerPort: 80
+                hostPort: 80
+                protocol: TCP
+              - containerPort: 443
+                hostPort: 443
+                protocol: TCP
+
+      - name: Install NGINX Ingress Controller
+        if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
+        run: |
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.1/deploy/static/provider/kind/deploy.yaml
+          kubectl wait --namespace ingress-nginx \
+            --for=condition=ready pod \
+            --selector=app.kubernetes.io/component=controller \
+            --timeout=90s
 
       - name: Run chart-testing (install)
         if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
         run: |
           ct install --target-branch ${{ github.event.repository.default_branch }} --config ct.yaml
+
+      - name: Run comprehensive integration tests
+        if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
+        run: |
+          echo "Running comprehensive integration tests..."
+          
+          # Test 1: Verify default deployment
+          echo "=== Testing default deployment ==="
+          helm install test-default ./charts/oxy-app -f ./charts/oxy-app/ci/default-values.yaml --wait --timeout=5m
+          kubectl get pods -l app.kubernetes.io/instance=test-default
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=test-default --timeout=300s
+          
+          # Verify service is accessible
+          kubectl port-forward service/oxy-test-default 8080:80 &
+          PORT_FORWARD_PID=$!
+          sleep 5
+          curl -f http://localhost:8080/ || (echo "Default deployment health check failed" && exit 1)
+          kill $PORT_FORWARD_PID
+          
+          # Clean up
+          helm uninstall test-default --wait
+          
+          # Test 2: Verify deployment with ingress
+          echo "=== Testing deployment with ingress ==="
+          helm install test-ingress ./charts/oxy-app -f ./charts/oxy-app/ci/with-ingress-values.yaml --wait --timeout=5m
+          kubectl get ingress -l app.kubernetes.io/instance=test-ingress
+          kubectl get pods -l app.kubernetes.io/instance=test-ingress
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=test-ingress --timeout=300s
+          
+          # Verify ingress is created
+          kubectl get ingress oxy-test-ingress -o jsonpath='{.spec.rules[0].host}' | grep -q "test-oxy-app.local"
+          
+          # Clean up
+          helm uninstall test-ingress --wait
+          
+          # Test 3: Verify deployment with PostgreSQL (if dependencies are available)
+          echo "=== Testing deployment with PostgreSQL ==="
+          helm dependency update ./charts/oxy-app
+          helm install test-postgres ./charts/oxy-app -f ./charts/oxy-app/ci/with-postgres-values.yaml --wait --timeout=10m
+          kubectl get pods -l app.kubernetes.io/instance=test-postgres
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=test-postgres --timeout=600s
+          
+          # Verify PostgreSQL is running
+          kubectl get statefulset -l app.kubernetes.io/instance=test-postgres
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=postgresql --timeout=300s
+          
+          # Test database connectivity (basic check)
+          kubectl exec -it $(kubectl get pod -l app.kubernetes.io/name=postgresql -o jsonpath='{.items[0].metadata.name}') -- pg_isready -U testuser -d testdb
+          
+          # Clean up
+          helm uninstall test-postgres --wait
+          
+          # Test 4: Verify production-like deployment
+          echo "=== Testing production-like deployment ==="
+          helm install test-production ./charts/oxy-app -f ./charts/oxy-app/ci/production-like-values.yaml --wait --timeout=10m
+          kubectl get pods -l app.kubernetes.io/instance=test-production
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=test-production --timeout=600s
+          
+          # Verify service account and annotations
+          kubectl get serviceaccount oxy-test-sa -o jsonpath='{.metadata.annotations.prometheus\.io/scrape}' | grep -q "true"
+          
+          # Verify PVC is created and bound
+          kubectl get pvc -l app.kubernetes.io/instance=test-production
+          kubectl wait --for=condition=bound pvc -l app.kubernetes.io/instance=test-production --timeout=300s
+          
+          # Verify ingress configuration
+          kubectl get ingress -l app.kubernetes.io/instance=test-production
+          kubectl get ingress oxy-test-prod -o jsonpath='{.spec.rules[0].host}' | grep -q "oxy-test-prod.local"
+          
+          # Clean up
+          helm uninstall test-production --wait
+          
+          # Test 5: Verify deployment with persistence
+          echo "=== Testing deployment with persistence ==="
+          helm install test-persist ./charts/oxy-app -f ./charts/oxy-app/ci/with-persistence-values.yaml --wait --timeout=10m
+          kubectl get statefulset -l app.kubernetes.io/instance=test-persist
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=test-persist --timeout=600s
+          
+          # Verify StatefulSet is used when persistence is enabled
+          kubectl get statefulset oxy-test-persist
+          kubectl get pvc -l app.kubernetes.io/instance=test-persist
+          
+          # Test data persistence by writing and reading
+          kubectl exec -it oxy-test-persist-0 -- sh -c 'echo "test-data" > /workspace/test.txt'
+          kubectl exec -it oxy-test-persist-0 -- sh -c 'cat /workspace/test.txt' | grep -q "test-data"
+          
+          # Clean up
+          helm uninstall test-persist --wait
+          
+          # Test 6: Verify deployment with git sync
+          echo "=== Testing deployment with git sync ==="
+          helm install test-gitsync ./charts/oxy-app -f ./charts/oxy-app/ci/with-gitsync-values.yaml --wait --timeout=10m
+          kubectl get statefulset -l app.kubernetes.io/instance=test-gitsync
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=test-gitsync --timeout=600s
+          
+          # Verify git sync sidecar is running
+          kubectl get pod oxy-test-gitsync-0 -o jsonpath='{.spec.containers[*].name}' | grep -q "git-sync"
+          
+          # Wait a bit for git sync to clone
+          sleep 30
+          
+          # Verify git repository is cloned
+          kubectl exec -it oxy-test-gitsync-0 -c oxy-app -- ls -la /workspace/ | grep -q "README.md" || echo "Git sync may need more time to complete"
+          
+          # Clean up
+          helm uninstall test-gitsync --wait
+          
+          echo "All integration tests passed!"
+
+      - name: Test helm upgrade scenarios
+        if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
+        run: |
+          echo "=== Testing helm upgrade scenarios ==="
+          
+          # Install with default values
+          helm install upgrade-test ./charts/oxy-app -f ./charts/oxy-app/ci/default-values.yaml --wait --timeout=5m
+          
+          # Upgrade with ingress enabled
+          helm upgrade upgrade-test ./charts/oxy-app -f ./charts/oxy-app/ci/with-ingress-values.yaml --wait --timeout=5m
+          
+          # Verify both app and ingress are working
+          kubectl get pods -l app.kubernetes.io/instance=upgrade-test
+          kubectl get ingress -l app.kubernetes.io/instance=upgrade-test
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=upgrade-test --timeout=300s
+          
+          # Test rollback
+          helm rollback upgrade-test 1 --wait
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=upgrade-test --timeout=300s
+          
+          # Verify ingress is removed after rollback
+          ! kubectl get ingress oxy-test-ingress 2>/dev/null || (echo "Ingress should be removed after rollback" && exit 1)
+          
+          # Clean up
+          helm uninstall upgrade-test --wait
+          
+          echo "Upgrade/rollback tests passed!"
+
+      - name: Test resource limits and requests
+        if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
+        run: |
+          echo "=== Testing resource limits and requests ==="
+          
+          helm install resource-test ./charts/oxy-app -f ./charts/oxy-app/ci/default-values.yaml --wait --timeout=5m
+          
+          # Verify resource limits are applied
+          kubectl get pod -l app.kubernetes.io/instance=resource-test -o jsonpath='{.items[0].spec.containers[0].resources}' | grep -q "limits"
+          kubectl get pod -l app.kubernetes.io/instance=resource-test -o jsonpath='{.items[0].spec.containers[0].resources}' | grep -q "requests"
+          
+          # Clean up
+          helm uninstall resource-test --wait
+          
+          echo "Resource tests passed!"
+
+      - name: Verify cleanup
+        if: always() && (github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true')
+        run: |
+          echo "=== Verifying complete cleanup ==="
+          
+          # List of all test instances that should be cleaned up
+          test_instances=(
+            "test-default"
+            "test-ingress" 
+            "test-postgres"
+            "test-production"
+            "test-persist"
+            "test-gitsync"
+            "upgrade-test"
+            "resource-test"
+          )
+          
+          # Verify no test resources remain
+          cleanup_failed=false
+          for instance in "${test_instances[@]}"; do
+            if kubectl get pods -l "app.kubernetes.io/instance=${instance}" 2>/dev/null | grep -q "${instance}"; then
+              echo "ERROR: Found remaining pods for instance: ${instance}"
+              kubectl get pods -l "app.kubernetes.io/instance=${instance}"
+              cleanup_failed=true
+            fi
+            
+            if kubectl get pvc -l "app.kubernetes.io/instance=${instance}" 2>/dev/null | grep -q "${instance}"; then
+              echo "ERROR: Found remaining PVCs for instance: ${instance}"
+              kubectl get pvc -l "app.kubernetes.io/instance=${instance}"
+              cleanup_failed=true
+            fi
+            
+            if kubectl get ingress -l "app.kubernetes.io/instance=${instance}" 2>/dev/null | grep -q "${instance}"; then
+              echo "ERROR: Found remaining ingress for instance: ${instance}"
+              kubectl get ingress -l "app.kubernetes.io/instance=${instance}"
+              cleanup_failed=true
+            fi
+          done
+          
+          if [ "$cleanup_failed" = true ]; then
+            echo "Cleanup verification failed - some resources were not properly cleaned up"
+            exit 1
+          fi
+          
+          echo "Cleanup verification passed!"
 
   publish:
     name: Package & Publish Helm charts

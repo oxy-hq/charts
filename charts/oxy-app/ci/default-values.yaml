@@ -1,0 +1,28 @@
+# Integration test with default minimal configuration
+nameOverride: "oxy-test-default"
+fullnameOverride: "oxy-test-default"
+
+image:
+  repository: nginx  # Use nginx for testing instead of real app
+  tag: "1.21-alpine"
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 80
+
+# Disable external dependencies for testing
+database:
+  postgres:
+    enabled: false
+
+# Use minimal resources for CI
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi

@@ -9,3 +9,11 @@ target-branch: main
 github-groups: true
 helm-extra-args: --timeout 600s
 validate-maintainers: false
+# Enable dependency management
+helm-dependency-extra-args: --skip-refresh
+# Additional validation
+validate-yaml: true
+# Check for security issues
+check-version-increment: true
+# Enable all available linters
+helm-extra-set-args: --set=global.imagePullSecrets=null

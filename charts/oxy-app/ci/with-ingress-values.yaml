@@ -1,0 +1,39 @@
+# Integration test with ingress enabled
+nameOverride: "oxy-test-ingress"
+fullnameOverride: "oxy-test-ingress"
+
+image:
+  repository: nginx
+  tag: "1.21-alpine"
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+  hosts:
+    - host: test-oxy-app.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# Disable external dependencies
+database:
+  postgres:
+    enabled: false
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi

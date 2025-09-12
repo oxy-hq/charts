@@ -1,0 +1,51 @@
+# Integration test with git sync enabled
+nameOverride: "oxy-test-gitsync"
+fullnameOverride: "oxy-test-gitsync"
+
+app:
+  image: "nginx"
+  imageTag: "1.21-alpine"
+  imagePullPolicy: "IfNotPresent"
+  replicaCount: 1
+
+service:
+  port: 80
+  targetPort: 80
+
+# Enable git sync for testing sidecar behavior
+gitSync:
+  enabled: true
+  repository: "https://github.com/octocat/Hello-World.git"  # Public repo for testing
+  branch: "master"
+  period: "60s"  # Short period for testing
+  # Don't use SSH for testing to avoid secret requirements
+  sshSecretName: ""
+
+# Environment variables
+env:
+  OXY_STATE_DIR: "/workspace/oxy_data"
+
+# Resource limits
+resources:
+  requests:
+    cpu: "50m"
+    memory: "64Mi"
+  limits:
+    cpu: "100m"
+    memory: "128Mi"
+
+# Enable persistence as git sync usually needs storage
+persistence:
+  enabled: true
+  accessMode: "ReadWriteOnce" 
+  size: "1Gi"
+  mountPath: "/workspace"
+
+# Disable external dependencies
+database:
+  postgres:
+    enabled: false
+
+externalSecrets:
+  envSecretNames: []
+  fileSecrets: []

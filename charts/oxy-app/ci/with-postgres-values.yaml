@@ -1,0 +1,44 @@
+# Integration test with PostgreSQL enabled
+nameOverride: "oxy-test-postgres"
+fullnameOverride: "oxy-test-postgres"
+
+image:
+  repository: nginx
+  tag: "1.21-alpine"
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 80
+
+# Enable PostgreSQL dependency
+database:
+  postgres:
+    enabled: true
+
+# Configure PostgreSQL for testing
+postgresql:
+  auth:
+    username: testuser
+    password: testpass
+    database: testdb
+  primary:
+    persistence:
+      enabled: false  # Disable persistence for CI
+    resources:
+      limits:
+        cpu: 200m
+        memory: 256Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi

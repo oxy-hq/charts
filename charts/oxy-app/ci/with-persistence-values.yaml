@@ -1,0 +1,46 @@
+# Integration test with persistence enabled
+nameOverride: "oxy-test-persist"
+fullnameOverride: "oxy-test-persist"
+
+app:
+  image: "nginx"
+  imageTag: "1.21-alpine"
+  imagePullPolicy: "IfNotPresent"
+  replicaCount: 1
+
+service:
+  port: 80
+  targetPort: 80
+
+# Enable persistence for testing StatefulSet behavior
+persistence:
+  enabled: true
+  accessMode: "ReadWriteOnce"
+  size: "1Gi"
+  mountPath: "/workspace"
+  # Test without storageClass to use default
+
+# Environment variables
+env:
+  OXY_STATE_DIR: "/workspace/oxy_data"
+
+# Resource limits for CI
+resources:
+  requests:
+    cpu: "50m"
+    memory: "64Mi"
+  limits:
+    cpu: "100m"
+    memory: "128Mi"
+
+# Disable external dependencies
+database:
+  postgres:
+    enabled: false
+
+gitSync:
+  enabled: false
+
+externalSecrets:
+  envSecretNames: []
+  fileSecrets: []

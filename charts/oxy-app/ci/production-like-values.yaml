@@ -1,0 +1,76 @@
+# Integration test with production-like configuration
+nameOverride: "oxy-test-prod"
+fullnameOverride: "oxy-test-prod"
+
+app:
+  image: "nginx"  # Use nginx for testing instead of real app
+  imageTag: "1.21-alpine"
+  imagePullPolicy: "IfNotPresent"
+  replicaCount: 1
+
+# Service account configuration
+serviceAccount:
+  create: true
+  name: "oxy-test-sa"
+  annotations:
+    "prometheus.io/scrape": "true"
+    "prometheus.io/port": "8080"
+    "prometheus.io/path": "/metrics"
+
+# Service configuration matching production
+service:
+  port: 80
+  targetPort: 80  # nginx default port instead of 3000
+
+# Environment variables for testing
+env:
+  OXY_STATE_DIR: "/workspace/oxy_data"
+  OXY_DATABASE_URL: "postgresql://testuser:testpass@test-postgres:5432/testdb"
+
+# Resource configuration similar to production but smaller for CI
+resources:
+  requests:
+    cpu: "100m"
+    memory: "128Mi"
+  limits:
+    cpu: "200m"
+    memory: "256Mi"
+
+# Test persistence with smaller size
+persistence:
+  enabled: true
+  accessMode: "ReadWriteOnce"
+  size: "1Gi"
+  mountPath: "/workspace"
+
+# Node scheduling (testing tolerations and selectors)
+nodeSelector: {}
+
+tolerations: []
+
+# Git synchronization disabled for testing
+gitSync:
+  enabled: false
+
+# External secrets disabled for basic testing
+externalSecrets:
+  envSecretNames: []
+  fileSecrets: []
+
+# Ingress with basic configuration
+ingress:
+  enabled: true
+  ingressClassName: "nginx"
+  annotations:
+    "nginx.ingress.kubernetes.io/rewrite-target": "/"
+  hosts:
+    - host: "oxy-test-prod.local"
+      paths:
+        - path: "/"
+          pathType: "Prefix"
+  tls: []
+
+# Disable external database dependency for this test
+database:
+  postgres:
+    enabled: false
