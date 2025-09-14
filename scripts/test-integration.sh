@@ -89,7 +89,7 @@ test_default_deployment() {
     log_info "Testing default deployment..."
     
     helm install test-default "$CHART_PATH" \
-        -f "$CHART_PATH/ci/default-values.yaml" \
+        -f "$CHART_PATH/test-values/default-values.yaml" \
         --namespace "$NAMESPACE" \
         --wait --timeout=5m
     
@@ -125,7 +125,7 @@ test_ingress_deployment() {
     log_info "Testing deployment with ingress..."
     
     helm install test-ingress "$CHART_PATH" \
-        -f "$CHART_PATH/ci/with-ingress-values.yaml" \
+        -f "$CHART_PATH/test-values/with-ingress-values.yaml" \
         --namespace "$NAMESPACE" \
         --wait --timeout=5m
     
@@ -153,7 +153,7 @@ test_postgres_deployment() {
     log_info "Testing deployment with PostgreSQL..."
     
     helm install test-postgres "$CHART_PATH" \
-        -f "$CHART_PATH/ci/with-postgres-values.yaml" \
+        -f "$CHART_PATH/test-values/with-postgres-values.yaml" \
         --namespace "$NAMESPACE" \
         --wait --timeout=10m
     
@@ -189,13 +189,13 @@ test_upgrade_scenarios() {
     
     # Install with default values
     helm install upgrade-test "$CHART_PATH" \
-        -f "$CHART_PATH/ci/default-values.yaml" \
+        -f "$CHART_PATH/test-values/default-values.yaml" \
         --namespace "$NAMESPACE" \
         --wait --timeout=5m
     
     # Upgrade with ingress enabled
     helm upgrade upgrade-test "$CHART_PATH" \
-        -f "$CHART_PATH/ci/with-ingress-values.yaml" \
+        -f "$CHART_PATH/test-values/with-ingress-values.yaml" \
         --namespace "$NAMESPACE" \
         --wait --timeout=5m
     
@@ -231,7 +231,7 @@ test_production_like_deployment() {
     log_info "Testing production-like deployment..."
     
     helm install test-production "$CHART_PATH" \
-        -f "$CHART_PATH/ci/production-like-values.yaml" \
+        -f "$CHART_PATH/test-values/production-like-values.yaml" \
         --namespace "$NAMESPACE" \
         --wait --timeout=10m
     
@@ -273,7 +273,7 @@ test_persistence_deployment() {
     log_info "Testing deployment with persistence..."
     
     helm install test-persist "$CHART_PATH" \
-        -f "$CHART_PATH/ci/with-persistence-values.yaml" \
+        -f "$CHART_PATH/test-values/with-persistence-values.yaml" \
         --namespace "$NAMESPACE" \
         --wait --timeout=10m
     
@@ -311,7 +311,7 @@ test_gitsync_deployment() {
     log_info "Testing deployment with git sync..."
     
     helm install test-gitsync "$CHART_PATH" \
-        -f "$CHART_PATH/ci/with-gitsync-values.yaml" \
+        -f "$CHART_PATH/test-values/with-gitsync-values.yaml" \
         --namespace "$NAMESPACE" \
         --wait --timeout=10m
     

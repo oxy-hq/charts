@@ -4,7 +4,9 @@
       "Bash(mkdir:*)",
       "Bash(helm unittest:*)",
       "Bash(helm plugin:*)",
-      "Bash(helm template:*)"
+      "Bash(helm template:*)",
+      "Bash(ct lint:*)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []

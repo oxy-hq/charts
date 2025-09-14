@@ -150,7 +150,7 @@ jobs:
           
           # Test 1: Verify default deployment
           echo "=== Testing default deployment ==="
-          helm install test-default ./charts/oxy-app -f ./charts/oxy-app/ci/default-values.yaml --wait --timeout=5m
+          helm install test-default ./charts/oxy-app -f ./charts/oxy-app/test-values/default-values.yaml --wait --timeout=5m
           kubectl get pods -l app.kubernetes.io/instance=test-default
           kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=test-default --timeout=300s
           
@@ -166,7 +166,7 @@ jobs:
           
           # Test 2: Verify deployment with ingress
           echo "=== Testing deployment with ingress ==="
-          helm install test-ingress ./charts/oxy-app -f ./charts/oxy-app/ci/with-ingress-values.yaml --wait --timeout=5m
+          helm install test-ingress ./charts/oxy-app -f ./charts/oxy-app/test-values/with-ingress-values.yaml --wait --timeout=5m
           kubectl get ingress -l app.kubernetes.io/instance=test-ingress
           kubectl get pods -l app.kubernetes.io/instance=test-ingress
           kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=test-ingress --timeout=300s
@@ -180,7 +180,7 @@ jobs:
           # Test 3: Verify deployment with PostgreSQL (if dependencies are available)
           echo "=== Testing deployment with PostgreSQL ==="
           helm dependency update ./charts/oxy-app
-          helm install test-postgres ./charts/oxy-app -f ./charts/oxy-app/ci/with-postgres-values.yaml --wait --timeout=10m
+          helm install test-postgres ./charts/oxy-app -f ./charts/oxy-app/test-values/with-postgres-values.yaml --wait --timeout=10m
           kubectl get pods -l app.kubernetes.io/instance=test-postgres
           kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=test-postgres --timeout=600s
           
@@ -196,7 +196,7 @@ jobs:
           
           # Test 4: Verify production-like deployment
           echo "=== Testing production-like deployment ==="
-          helm install test-production ./charts/oxy-app -f ./charts/oxy-app/ci/production-like-values.yaml --wait --timeout=10m
+          helm install test-production ./charts/oxy-app -f ./charts/oxy-app/test-values/production-like-values.yaml --wait --timeout=10m
           kubectl get pods -l app.kubernetes.io/instance=test-production
           kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=test-production --timeout=600s
           
@@ -216,7 +216,7 @@ jobs:
           
           # Test 5: Verify deployment with persistence
           echo "=== Testing deployment with persistence ==="
-          helm install test-persist ./charts/oxy-app -f ./charts/oxy-app/ci/with-persistence-values.yaml --wait --timeout=10m
+          helm install test-persist ./charts/oxy-app -f ./charts/oxy-app/test-values/with-persistence-values.yaml --wait --timeout=10m
           kubectl get statefulset -l app.kubernetes.io/instance=test-persist
           kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=test-persist --timeout=600s
           
@@ -233,7 +233,7 @@ jobs:
           
           # Test 6: Verify deployment with git sync
           echo "=== Testing deployment with git sync ==="
-          helm install test-gitsync ./charts/oxy-app -f ./charts/oxy-app/ci/with-gitsync-values.yaml --wait --timeout=10m
+          helm install test-gitsync ./charts/oxy-app -f ./charts/oxy-app/test-values/with-gitsync-values.yaml --wait --timeout=10m
           kubectl get statefulset -l app.kubernetes.io/instance=test-gitsync
           kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=test-gitsync --timeout=600s
           
@@ -252,7 +252,7 @@ jobs:
           # Test 7: ALL FEATURES ENABLED - Maximum complexity test
           echo "=== Testing ALL FEATURES deployment (maximum complexity) ==="
           helm dependency update ./charts/oxy-app
-          helm install test-all-features ./charts/oxy-app -f ./charts/oxy-app/ci/all-features-values.yaml --wait --timeout=15m
+          helm install test-all-features ./charts/oxy-app -f ./charts/oxy-app/test-values/all-features-values.yaml --wait --timeout=15m
           
           # Wait for all components to be ready
           kubectl get all -l app.kubernetes.io/instance=test-all-features
@@ -317,7 +317,7 @@ jobs:
           
           # Test 8: Security hardened deployment
           echo "=== Testing security hardened deployment ==="
-          helm install test-security ./charts/oxy-app -f ./charts/oxy-app/ci/security-hardened-values.yaml --wait --timeout=10m
+          helm install test-security ./charts/oxy-app -f ./charts/oxy-app/test-values/security-hardened-values.yaml --wait --timeout=10m
           kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=test-security --timeout=600s
           
           # Verify security context is applied
@@ -338,7 +338,7 @@ jobs:
           
           # Test 9: External database configuration
           echo "=== Testing external database deployment ==="
-          helm install test-extdb ./charts/oxy-app -f ./charts/oxy-app/ci/external-db-values.yaml --wait --timeout=10m
+          helm install test-extdb ./charts/oxy-app -f ./charts/oxy-app/test-values/external-db-values.yaml --wait --timeout=10m
           kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=test-extdb --timeout=600s
           
           # Verify external database environment variables
@@ -353,7 +353,7 @@ jobs:
           
           # Test 10: Advanced networking and multi-host ingress
           echo "=== Testing advanced networking ==="
-          helm install test-network ./charts/oxy-app -f ./charts/oxy-app/ci/advanced-networking-values.yaml --wait --timeout=10m
+          helm install test-network ./charts/oxy-app -f ./charts/oxy-app/test-values/advanced-networking-values.yaml --wait --timeout=10m
           kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=test-network --timeout=600s
           
           # Verify multiple replicas for networking
@@ -387,10 +387,10 @@ jobs:
           echo "=== Testing helm upgrade scenarios ==="
           
           # Install with default values
-          helm install upgrade-test ./charts/oxy-app -f ./charts/oxy-app/ci/default-values.yaml --wait --timeout=5m
+          helm install upgrade-test ./charts/oxy-app -f ./charts/oxy-app/test-values/default-values.yaml --wait --timeout=5m
           
           # Upgrade with ingress enabled
-          helm upgrade upgrade-test ./charts/oxy-app -f ./charts/oxy-app/ci/with-ingress-values.yaml --wait --timeout=5m
+          helm upgrade upgrade-test ./charts/oxy-app -f ./charts/oxy-app/test-values/with-ingress-values.yaml --wait --timeout=5m
           
           # Verify both app and ingress are working
           kubectl get pods -l app.kubernetes.io/instance=upgrade-test
@@ -415,7 +415,7 @@ jobs:
           echo "=== Testing failure scenarios and resilience ==="
           
           # Test 1: Resource-constrained deployment
-          helm install test-failure ./charts/oxy-app -f ./charts/oxy-app/ci/failure-simulation-values.yaml --wait --timeout=10m
+          helm install test-failure ./charts/oxy-app -f ./charts/oxy-app/test-values/failure-simulation-values.yaml --wait --timeout=10m
           kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=test-failure --timeout=600s
           
           # Verify tight resource constraints are applied
@@ -445,7 +445,7 @@ jobs:
           
           # Test 2: Probe failure simulation
           echo "=== Testing probe failure scenarios ==="
-          helm install test-probe-fail ./charts/oxy-app -f ./charts/oxy-app/ci/failure-simulation-values.yaml --wait --timeout=10m
+          helm install test-probe-fail ./charts/oxy-app -f ./charts/oxy-app/test-values/failure-simulation-values.yaml --wait --timeout=10m
           
           # Modify probe to fail by changing the path to non-existent endpoint
           kubectl patch statefulset oxy-test-fail -p '{"spec":{"template":{"spec":{"containers":[{"name":"oxy-app","livenessProbe":{"httpGet":{"path":"/nonexistent"}}}]}}}}'
@@ -462,7 +462,7 @@ jobs:
           
           # Test 3: Rolling update failure and rollback
           echo "=== Testing rolling update failure scenarios ==="
-          helm install test-rollback ./charts/oxy-app -f ./charts/oxy-app/ci/default-values.yaml --wait --timeout=5m
+          helm install test-rollback ./charts/oxy-app -f ./charts/oxy-app/test-values/default-values.yaml --wait --timeout=5m
           
           # Record current revision
           original_revision=$(helm get revision test-rollback)
@@ -487,7 +487,7 @@ jobs:
         run: |
           echo "=== Testing resource limits and requests ==="
           
-          helm install resource-test ./charts/oxy-app -f ./charts/oxy-app/ci/default-values.yaml --wait --timeout=5m
+          helm install resource-test ./charts/oxy-app -f ./charts/oxy-app/test-values/default-values.yaml --wait --timeout=5m
           
           # Verify resource limits are applied
           kubectl get pod -l app.kubernetes.io/instance=resource-test -o jsonpath='{.items[0].spec.containers[0].resources}' | grep -q "limits"
