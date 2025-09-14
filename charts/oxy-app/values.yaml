@@ -195,7 +195,7 @@ database:
     # declare and mount any required secrets into the pod.
     storeRef:
       name: ""
-      kind: SecretStore # or ClusterSecretStore
+      kind: SecretStore
 
     envSecret:
       backend: ""
