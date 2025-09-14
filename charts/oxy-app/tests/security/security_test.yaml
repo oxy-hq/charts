@@ -1,0 +1,347 @@
+suite: security configuration tests
+templates:
+  - statefulset.yaml
+  - serviceaccount.yaml
+  - externalsecret.yaml
+
+tests:
+  # Security context validation
+  - it: applies correct default security context
+    template: statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 1000
+
+  - it: allows custom security context configuration
+    template: statefulset.yaml
+    set:
+      securityContext:
+        fsGroup: 2000
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroupChangePolicy: "OnRootMismatch"
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 2000
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 1001
+      - equal:
+          path: spec.template.spec.securityContext.runAsGroup
+          value: 1001
+      - equal:
+          path: spec.template.spec.securityContext.fsGroupChangePolicy
+          value: "OnRootMismatch"
+
+  # Container security context
+  - it: allows container-level security context
+    template: statefulset.yaml
+    set:
+      app:
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+              - ALL
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsUser
+          value: 1000
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - contains:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          content: "ALL"
+
+  # Service account security
+  - it: creates service account with default configuration
+    template: serviceaccount.yaml
+    asserts:
+      - equal:
+          path: kind
+          value: ServiceAccount
+      - equal:
+          path: metadata.name
+          value: oxy-app-sa
+      - equal:
+          path: automountServiceAccountToken
+          value: true
+
+  - it: allows disabling service account token automounting
+    template: serviceaccount.yaml
+    set:
+      serviceAccount:
+        create: true
+        automountServiceAccountToken: false
+    asserts:
+      - equal:
+          path: automountServiceAccountToken
+          value: false
+
+  - it: supports IRSA annotations for AWS
+    template: serviceaccount.yaml
+    set:
+      serviceAccount:
+        create: true
+        annotations:
+          "eks.amazonaws.com/role-arn": "arn:aws:iam::123456789012:role/my-oxy-app-role"
+          "eks.amazonaws.com/sts-regional-endpoints": "true"
+    asserts:
+      - equal:
+          path: metadata.annotations["eks.amazonaws.com/role-arn"]
+          value: "arn:aws:iam::123456789012:role/my-oxy-app-role"
+      - equal:
+          path: metadata.annotations["eks.amazonaws.com/sts-regional-endpoints"]
+          value: "true"
+
+  # Secret handling security
+  - it: mounts secrets with read-only permissions
+    template: statefulset.yaml
+    set:
+      externalSecrets:
+        fileSecrets:
+          - name: "tls-certs"
+            key: "tls.crt"
+            dest: "server.crt"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: file-secret-tls-certs
+            mountPath: "/secrets/files/server.crt"
+            subPath: "tls.crt"
+            readOnly: true
+
+  # Git sync security
+  - it: mounts SSH secrets with restrictive permissions
+    template: statefulset.yaml
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:test/repo.git"
+        sshSecretName: "git-ssh-secret"
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: git-ssh-secret
+            secret:
+              secretName: git-ssh-secret
+              defaultMode: 256  # 0400 in decimal (read-only for owner)
+
+  # Probe security - prevents information disclosure
+  - it: configures probes to avoid information disclosure
+    template: statefulset.yaml
+    set:
+      livenessProbe:
+        httpGet:
+          path: "/health"
+          port: 3000
+          httpHeaders:
+            - name: "User-Agent"
+              value: "kube-probe/1.0"
+      readinessProbe:
+        httpGet:
+          path: "/ready"
+          port: 3000
+          httpHeaders:
+            - name: "User-Agent"
+              value: "kube-probe/1.0"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.httpHeaders
+          content:
+            name: "User-Agent"
+            value: "kube-probe/1.0"
+
+  # Environment variable security
+  - it: does not include sensitive values in plain text
+    template: statefulset.yaml
+    set:
+      env:
+        # These should come from secrets, not plain values
+        DATABASE_PASSWORD: ""
+        API_KEY: ""
+        JWT_SECRET: ""
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DATABASE_PASSWORD
+            value: "plaintext-password"
+
+  # Network policy compatibility (labels)
+  - it: includes labels for network policy selection
+    template: statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels.app
+          value: RELEASE-NAME
+      - equal:
+          path: spec.template.metadata.labels.version
+          value: v1
+
+  # Resource limits for security (prevent resource exhaustion)
+  - it: enforces resource limits by default
+    template: statefulset.yaml
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+      - exists:
+          path: spec.template.spec.containers[0].resources.limits.memory
+      - exists:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+      - exists:
+          path: spec.template.spec.containers[0].resources.requests.memory
+
+  # Init container security
+  - it: applies security context to init containers
+    template: statefulset.yaml
+    set:
+      extraInitContainers:
+        - name: secure-init
+          image: busybox:1.36
+          command: ["sh", "-c", "echo 'secure init'"]
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.runAsUser
+          value: 1000
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.allowPrivilegeEscalation
+          value: false
+
+  # Sidecar container security
+  - it: applies security context to sidecar containers
+    template: statefulset.yaml
+    set:
+      extraSidecars:
+        - name: secure-sidecar
+          image: nginx:1.25-alpine
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 101
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[1].securityContext.readOnlyRootFilesystem
+          value: true
+      - contains:
+          path: spec.template.spec.containers[1].securityContext.capabilities.drop
+          content: "ALL"
+
+  # Volume security
+  - it: configures volumes with appropriate security settings
+    template: statefulset.yaml
+    set:
+      persistence:
+        enabled: true
+        volumeMode: "Filesystem"
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.volumeMode
+          value: "Filesystem"
+
+  # External secrets security validation
+  - it: validates external secrets configuration for security
+    template: externalsecret.yaml
+    set:
+      externalSecrets:
+        create: true
+        storeRef:
+          name: "secure-vault-store"
+          kind: "SecretStore"
+        envSecretMappings:
+          secure-secrets:
+            DATABASE_PASSWORD: "/secure/db/password"
+            API_TOKEN: "/secure/api/token"
+    asserts:
+      - equal:
+          path: spec.secretStoreRef.name
+          value: "secure-vault-store"
+      - contains:
+          path: spec.data
+          content:
+            secretKey: DATABASE_PASSWORD
+            remoteRef:
+              key: "/secure/db/password"
+
+  # Annotations for security scanning
+  - it: supports security scanning annotations
+    template: statefulset.yaml
+    set:
+      app:
+        annotations:
+          "security.scan/enabled": "true"
+          "security.scan/level": "high"
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["security.scan/enabled"]
+          value: "true"
+      - equal:
+          path: spec.template.metadata.annotations["security.scan/level"]
+          value: "high"
+
+  # Pod security standards compliance
+  - it: complies with restricted pod security standards
+    template: statefulset.yaml
+    set:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      app:
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+              - ALL
+          seccompProfile:
+            type: RuntimeDefault
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.securityContext.seccompProfile.type
+          value: RuntimeDefault
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.seccompProfile.type
+          value: RuntimeDefault

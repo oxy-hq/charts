@@ -1,0 +1,102 @@
+# Integration test with external database configuration
+nameOverride: "oxy-test-extdb"
+fullnameOverride: "oxy-test-extdb"
+
+app:
+  image: "nginx"
+  imageTag: "1.21-alpine" 
+  imagePullPolicy: "IfNotPresent"
+  replicaCount: 1
+
+# External database configuration
+database:
+  postgres:
+    enabled: false  # Disable internal postgres
+
+  external:
+    enabled: true
+    storeRef:
+      name: "external-db-store"
+      kind: "SecretStore"
+    
+    envSecret:
+      backend: "vault"
+      path: "/secret/database"
+      key: "connection-string"
+    
+    dataWarehouseSecret:
+      backend: "vault" 
+      path: "/secret/warehouse"
+      key: "bigquery-credentials"
+    
+    # Connection details for testing
+    connectionString: "postgresql://testuser:testpass@external-postgres:5432/external_db"
+    user: "testuser"
+    password: "testpass"
+    host: "external-postgres"
+    port: 5432
+    database: "external_db"
+
+# Environment with external DB URL
+env:
+  OXY_STATE_DIR: "/workspace/oxy_data"
+  OXY_DATABASE_URL: "postgresql://testuser:testpass@external-postgres:5432/external_db"
+  EXTERNAL_DB_MODE: "true"
+
+# External secrets for database credentials
+externalSecrets:
+  create: false  # Simulate external creation
+  envSecretNames:
+    - "external-db-credentials"
+    - "warehouse-credentials"
+  
+  envSecretMappings:
+    external-db-credentials:
+      DATABASE_URL: "/secrets/db/url"
+      DATABASE_PASSWORD: "/secrets/db/password"
+    warehouse-credentials:
+      BIGQUERY_CREDENTIALS: "/secrets/warehouse/credentials.json"
+  
+  fileSecrets:
+    - name: "warehouse-credentials"
+      key: "bigquery-key.json"
+      dest: "bigquery-credentials.json"
+
+# Service configuration
+service:
+  type: "ClusterIP"
+  port: 80
+  targetPort: 3000
+
+# Basic persistence for external DB scenario
+persistence:
+  enabled: true
+  size: "1Gi"
+  accessMode: "ReadWriteOnce"
+  mountPath: "/workspace"
+
+# Resources for external DB testing
+resources:
+  requests:
+    cpu: "100m"
+    memory: "128Mi"
+  limits:
+    cpu: "200m"
+    memory: "256Mi"
+
+# Service account
+serviceAccount:
+  create: true
+  name: "oxy-extdb-sa"
+  annotations:
+    "database.test/type": "external"
+
+# Disable other features to focus on external DB
+gitSync:
+  enabled: false
+
+ingress:
+  enabled: false
+
+extraInitContainers: []
+extraSidecars: []

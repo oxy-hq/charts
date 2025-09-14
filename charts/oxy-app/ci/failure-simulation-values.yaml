@@ -1,0 +1,125 @@
+# Failure simulation test - tests error handling and recovery
+nameOverride: "oxy-test-fail"
+fullnameOverride: "oxy-test-fail"
+
+app:
+  image: "nginx"
+  imageTag: "1.21-alpine"
+  imagePullPolicy: "IfNotPresent"
+  replicaCount: 1
+
+# Intentionally problematic configurations for testing resilience
+resources:
+  requests:
+    cpu: "10m"      # Very low CPU
+    memory: "32Mi"  # Very low memory
+  limits:
+    cpu: "20m"      # Tight limits
+    memory: "64Mi"
+
+# Environment that might cause issues
+env:
+  OXY_STATE_DIR: "/workspace/oxy_data"
+  FAILURE_TEST_MODE: "true"
+  MEMORY_PRESSURE: "high"
+
+# Aggressive probes to test failure scenarios
+livenessProbe:
+  httpGet:
+    path: "/"
+    port: 3000
+  initialDelaySeconds: 10  # Short delay
+  periodSeconds: 5         # Frequent checks
+  timeoutSeconds: 2        # Short timeout
+  failureThreshold: 2      # Fail fast
+
+readinessProbe:
+  httpGet:
+    path: "/"
+    port: 3000
+  initialDelaySeconds: 5   # Very short delay
+  periodSeconds: 3         # Very frequent
+  timeoutSeconds: 1        # Very short timeout
+  failureThreshold: 1      # Fail immediately
+
+# Service configuration
+service:
+  type: "ClusterIP"
+  port: 80
+  targetPort: 3000
+
+# Basic persistence
+persistence:
+  enabled: true
+  size: "100Mi"  # Minimal size
+  accessMode: "ReadWriteOnce"
+  mountPath: "/workspace"
+
+# Service account
+serviceAccount:
+  create: true
+  name: "oxy-fail-sa"
+  annotations:
+    "test.failure/simulation": "enabled"
+
+# Security context
+securityContext:
+  fsGroup: 1000
+
+# Failure-inducing init container (for testing)
+extraInitContainers:
+  - name: "failure-sim-init"
+    image: "busybox:1.36"
+    imagePullPolicy: "IfNotPresent"
+    command: ["sh", "-c"]
+    args:
+      - |
+        echo "Testing init container failure recovery..."
+        # Simulate slow init
+        sleep 20
+        # Create some test conditions
+        mkdir -p /workspace/test-failure
+        echo "failure-test" > /workspace/test-failure/marker
+        echo "Init complete with simulated delays"
+    volumeMounts:
+      - name: "workspace"
+        mountPath: "/workspace"
+
+# Sidecar that might consume resources
+extraSidecars:
+  - name: "resource-consumer"
+    image: "busybox:1.36"
+    imagePullPolicy: "IfNotPresent"
+    command: ["sh", "-c"]
+    args:
+      - |
+        while true; do
+          echo "Consuming resources for failure testing..."
+          # Create some CPU/memory pressure
+          dd if=/dev/zero of=/tmp/test bs=1M count=10 2>/dev/null || true
+          sleep 10
+          rm -f /tmp/test
+        done
+    resources:
+      requests:
+        cpu: "5m"
+        memory: "16Mi"
+      limits:
+        cpu: "10m"
+        memory: "32Mi"
+
+# Disable other features to focus on failure scenarios
+gitSync:
+  enabled: false
+
+database:
+  postgres:
+    enabled: false
+
+ingress:
+  enabled: false
+
+externalSecrets:
+  create: false
+  envSecretNames: []
+  fileSecrets: []

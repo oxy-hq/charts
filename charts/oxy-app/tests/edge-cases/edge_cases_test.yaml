@@ -1,0 +1,323 @@
+suite: edge cases and boundary conditions
+templates:
+  - statefulset.yaml
+  - service.yaml
+  - ingress.yaml
+  - configmap.yaml
+  - serviceaccount.yaml
+
+tests:
+  # Empty and null values handling
+  - it: handles empty string values gracefully
+    template: statefulset.yaml
+    set:
+      app.imageTag: ""
+      app.command: []
+      env.OXY_DATABASE_URL: ""
+      gitSync.repository: ""
+      gitSync.userName: ""
+      gitSync.userEmail: ""
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "ghcr.io/oxy-hq/oxy:"
+      - notExists:
+          path: spec.template.spec.containers[0].command
+
+  # Extremely large replica count
+  - it: handles large replica count
+    template: statefulset.yaml
+    set:
+      app.replicaCount: 100
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 100
+
+  # Zero replica count
+  - it: handles zero replica count
+    template: statefulset.yaml
+    set:
+      app.replicaCount: 0
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 0
+
+  # Minimal resource requests/limits
+  - it: handles minimal resource configuration
+    template: statefulset.yaml
+    set:
+      resources:
+        requests:
+          cpu: "1m"
+          memory: "1Mi"
+        limits:
+          cpu: "1m"
+          memory: "1Mi"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: "1m"
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: "1Mi"
+
+  # Extremely large resource requests/limits
+  - it: handles large resource configuration
+    template: statefulset.yaml
+    set:
+      resources:
+        requests:
+          cpu: "64000m"
+          memory: "128Gi"
+        limits:
+          cpu: "128000m"
+          memory: "256Gi"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: "64000m"
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: "256Gi"
+
+  # Special characters in values
+  - it: handles special characters in names and values
+    template: statefulset.yaml
+    set:
+      nameOverride: "test-app_with.special-chars123"
+      env:
+        SPECIAL_VAR: "value@with#special$chars%and^symbols*"
+        URL_WITH_PARAMS: "https://example.com/path?param1=value1&param2=value2"
+    asserts:
+      - equal:
+          path: metadata.name
+          value: "test-app_with.special-chars123"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SPECIAL_VAR
+            value: "value@with#special$chars%and^symbols*"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: URL_WITH_PARAMS
+            value: "https://example.com/path?param1=value1&param2=value2"
+
+  # Long string values
+  - it: handles very long string values
+    template: statefulset.yaml
+    set:
+      env:
+        LONG_VALUE: "this-is-a-very-long-environment-variable-value-that-contains-many-characters-and-could-potentially-cause-issues-if-not-handled-properly-by-the-template-engine-or-kubernetes-itself-when-processing-the-manifest-files"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: LONG_VALUE
+            value: "this-is-a-very-long-environment-variable-value-that-contains-many-characters-and-could-potentially-cause-issues-if-not-handled-properly-by-the-template-engine-or-kubernetes-itself-when-processing-the-manifest-files"
+
+  # Unicode characters
+  - it: handles unicode characters in values
+    template: statefulset.yaml
+    set:
+      env:
+        UNICODE_VAR: "Hello 世界 🌍 Ñoño café naïve résumé"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: UNICODE_VAR
+            value: "Hello 世界 🌍 Ñoño café naïve résumé"
+
+  # Probe configuration edge cases
+  - it: handles minimal probe timeouts
+    template: statefulset.yaml
+    set:
+      livenessProbe:
+        initialDelaySeconds: 1
+        periodSeconds: 1
+        timeoutSeconds: 1
+        failureThreshold: 1
+      readinessProbe:
+        initialDelaySeconds: 1
+        periodSeconds: 1
+        timeoutSeconds: 1
+        failureThreshold: 1
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.initialDelaySeconds
+          value: 1
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.timeoutSeconds
+          value: 1
+
+  # Maximum probe timeouts
+  - it: handles maximum probe timeouts
+    template: statefulset.yaml
+    set:
+      livenessProbe:
+        initialDelaySeconds: 3600
+        periodSeconds: 300
+        timeoutSeconds: 60
+        failureThreshold: 30
+      readinessProbe:
+        initialDelaySeconds: 1800
+        periodSeconds: 120
+        timeoutSeconds: 30
+        failureThreshold: 20
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.initialDelaySeconds
+          value: 3600
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.failureThreshold
+          value: 20
+
+  # Storage size edge cases
+  - it: handles minimal storage size
+    template: statefulset.yaml
+    set:
+      persistence.size: "1Mi"
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: "1Mi"
+
+  - it: handles large storage size
+    template: statefulset.yaml
+    set:
+      persistence.size: "100Ti"
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: "100Ti"
+
+  # Service port edge cases
+  - it: handles port 1
+    template: service.yaml
+    set:
+      service.port: 1
+      service.targetPort: 1
+    asserts:
+      - contains:
+          path: spec.ports
+          content:
+            port: 1
+            targetPort: 1
+
+  - it: handles port 65535
+    template: service.yaml
+    set:
+      service.port: 65535
+      service.targetPort: 65535
+    asserts:
+      - contains:
+          path: spec.ports
+          content:
+            port: 65535
+            targetPort: 65535
+
+  # ConfigMap with empty data
+  - it: does not render ConfigMap when data is empty
+    template: configmap.yaml
+    set:
+      configMap.enabled: true
+      configMap.data: {}
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # ConfigMap with null data
+  - it: handles null configMap data
+    template: configmap.yaml
+    set:
+      configMap.enabled: true
+      configMap.data: null
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # Service account with empty annotations
+  - it: handles empty service account annotations
+    template: serviceaccount.yaml
+    set:
+      serviceAccount.create: true
+      serviceAccount.annotations: {}
+    asserts:
+      - equal:
+          path: kind
+          value: ServiceAccount
+      - notExists:
+          path: metadata.annotations
+
+  # Ingress with complex regex patterns
+  - it: handles complex regex patterns in ingress paths
+    template: ingress.yaml
+    set:
+      ingress.enabled: true
+      ingress.annotations:
+        nginx.ingress.kubernetes.io/use-regex: "true"
+      ingress.hosts:
+        - host: "api.example.com"
+          paths:
+            - path: "/api/v([0-9]+)/(.*)"
+              pathType: "Prefix"
+            - path: "~* ^/static/(.+\\.(css|js|png|jpg|gif|ico))$"
+              pathType: "Prefix"
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[0].path
+          value: "/api/v([0-9]+)/(.*)"
+      - equal:
+          path: spec.rules[0].http.paths[1].path
+          value: "~* ^/static/(.+\\.(css|js|png|jpg|gif|ico))$"
+
+  # Extreme number of environment variables
+  - it: handles many environment variables
+    template: statefulset.yaml
+    set:
+      env:
+        VAR1: "value1"
+        VAR2: "value2"
+        VAR3: "value3"
+        VAR4: "value4"
+        VAR5: "value5"
+        VAR6: "value6"
+        VAR7: "value7"
+        VAR8: "value8"
+        VAR9: "value9"
+        VAR10: "value10"
+        VAR11: "value11"
+        VAR12: "value12"
+        VAR13: "value13"
+        VAR14: "value14"
+        VAR15: "value15"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env | length
+          value: 16  # 15 custom + 1 default (OXY_STATE_DIR)
+
+  # Boolean values as strings
+  - it: handles boolean values as strings
+    template: statefulset.yaml
+    set:
+      env:
+        BOOL_TRUE: "true"
+        BOOL_FALSE: "false"
+        BOOL_YES: "yes"
+        BOOL_NO: "no"
+        BOOL_1: "1"
+        BOOL_0: "0"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: BOOL_TRUE
+            value: "true"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: BOOL_FALSE
+            value: "false"

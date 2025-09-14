@@ -1,0 +1,286 @@
+suite: init containers and sidecars tests
+templates:
+  - statefulset.yaml
+
+tests:
+  # Default - no extra containers
+  - it: has only main container by default
+    asserts:
+      - equal:
+          path: spec.template.spec.containers | length
+          value: 1
+      - notExists:
+          path: spec.template.spec.initContainers
+
+  # Extra init containers
+  - it: adds extra init containers when specified
+    set:
+      extraInitContainers:
+        - name: init-permissions
+          image: busybox:1.36
+          command: ["sh", "-c", "chmod 755 /workspace"]
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+        - name: init-config
+          image: alpine:3.18
+          command: ["sh", "-c", "echo 'config' > /workspace/config.txt"]
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers | length
+          value: 2
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: init-permissions
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: busybox:1.36
+      - contains:
+          path: spec.template.spec.initContainers[0].command
+          content: "sh"
+      - contains:
+          path: spec.template.spec.initContainers[0].command
+          content: "-c"
+      - contains:
+          path: spec.template.spec.initContainers[0].command
+          content: "chmod 755 /workspace"
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: init-config
+      - equal:
+          path: spec.template.spec.initContainers[1].image
+          value: alpine:3.18
+
+  # Extra sidecar containers
+  - it: adds extra sidecar containers when specified
+    set:
+      extraSidecars:
+        - name: log-forwarder
+          image: fluent/fluent-bit:2.1
+          command: ["/fluent-bit/bin/fluent-bit"]
+          args: ["--config=/fluent-bit/etc/fluent-bit.conf"]
+        - name: metrics-collector
+          image: prom/node-exporter:v1.6.0
+          ports:
+            - name: metrics
+              containerPort: 9100
+              protocol: TCP
+    asserts:
+      - equal:
+          path: spec.template.spec.containers | length
+          value: 3  # main + 2 sidecars
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: log-forwarder
+      - equal:
+          path: spec.template.spec.containers[1].image
+          value: fluent/fluent-bit:2.1
+      - contains:
+          path: spec.template.spec.containers[1].command
+          content: "/fluent-bit/bin/fluent-bit"
+      - contains:
+          path: spec.template.spec.containers[1].args
+          content: "--config=/fluent-bit/etc/fluent-bit.conf"
+      - equal:
+          path: spec.template.spec.containers[2].name
+          value: metrics-collector
+      - equal:
+          path: spec.template.spec.containers[2].image
+          value: prom/node-exporter:v1.6.0
+      - contains:
+          path: spec.template.spec.containers[2].ports
+          content:
+            name: metrics
+            containerPort: 9100
+            protocol: TCP
+
+  # Combined with git sync
+  - it: works with git sync enabled and extra containers
+    set:
+      gitSync.enabled: true
+      gitSync.repository: "https://github.com/test/repo.git"
+      extraInitContainers:
+        - name: custom-init
+          image: busybox:1.36
+          command: ["echo", "init"]
+      extraSidecars:
+        - name: custom-sidecar
+          image: busybox:1.36
+          command: ["sleep", "infinity"]
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers | length
+          value: 2  # git-clone + custom-init
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: git-clone
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: custom-init
+      - equal:
+          path: spec.template.spec.containers | length
+          value: 3  # main + git-sync + custom-sidecar
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: oxy-app
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: git-sync
+      - equal:
+          path: spec.template.spec.containers[2].name
+          value: custom-sidecar
+
+  # Complex init container with multiple volume mounts
+  - it: supports complex init container configurations
+    set:
+      extraInitContainers:
+        - name: complex-init
+          image: alpine:3.18
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c"]
+          args:
+            - |
+              echo "Setting up complex initialization..."
+              mkdir -p /workspace/data /workspace/logs /workspace/config
+              echo "init-complete" > /workspace/.init-done
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            - name: config
+              mountPath: /etc/config
+              readOnly: true
+          env:
+            - name: INIT_MODE
+              value: "complex"
+            - name: LOG_LEVEL
+              value: "debug"
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: complex-init
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: alpine:3.18
+      - equal:
+          path: spec.template.spec.initContainers[0].imagePullPolicy
+          value: IfNotPresent
+      - contains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: workspace
+            mountPath: /workspace
+      - contains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: config
+            mountPath: /etc/config
+            readOnly: true
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: INIT_MODE
+            value: "complex"
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: LOG_LEVEL
+            value: "debug"
+      - equal:
+          path: spec.template.spec.initContainers[0].resources.requests.cpu
+          value: 10m
+      - equal:
+          path: spec.template.spec.initContainers[0].resources.limits.memory
+          value: 32Mi
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.runAsUser
+          value: 0
+
+  # Complex sidecar with resources and probes
+  - it: supports complex sidecar configurations
+    set:
+      extraSidecars:
+        - name: complex-sidecar
+          image: nginx:1.25-alpine
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          env:
+            - name: SIDECAR_MODE
+              value: "production"
+          volumeMounts:
+            - name: workspace
+              mountPath: /var/log/app
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 101
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: complex-sidecar
+      - equal:
+          path: spec.template.spec.containers[1].imagePullPolicy
+          value: Always
+      - contains:
+          path: spec.template.spec.containers[1].ports
+          content:
+            name: http
+            containerPort: 8080
+            protocol: TCP
+      - contains:
+          path: spec.template.spec.containers[1].ports
+          content:
+            name: metrics
+            containerPort: 9090
+            protocol: TCP
+      - equal:
+          path: spec.template.spec.containers[1].livenessProbe.httpGet.path
+          value: /health
+      - equal:
+          path: spec.template.spec.containers[1].livenessProbe.httpGet.port
+          value: 8080
+      - equal:
+          path: spec.template.spec.containers[1].readinessProbe.initialDelaySeconds
+          value: 5
+      - equal:
+          path: spec.template.spec.containers[1].resources.limits.cpu
+          value: 500m
+      - equal:
+          path: spec.template.spec.containers[1].securityContext.runAsUser
+          value: 101

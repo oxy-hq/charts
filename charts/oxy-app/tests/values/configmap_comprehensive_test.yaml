@@ -1,0 +1,245 @@
+suite: configmap comprehensive tests
+templates:
+  - configmap.yaml
+  - statefulset.yaml
+
+tests:
+  # ConfigMap disabled by default
+  - it: does not render ConfigMap when disabled
+    template: configmap.yaml
+    set:
+      configMap.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # ConfigMap with no data
+  - it: does not render ConfigMap when data is empty
+    template: configmap.yaml
+    set:
+      configMap.enabled: true
+      configMap.data: {}
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # ConfigMap basic functionality
+  - it: renders ConfigMap with data
+    template: configmap.yaml
+    set:
+      configMap.enabled: true
+      configMap.data:
+        app.conf: |
+          server {
+            listen 3000;
+            location / {
+              return 200 'OK';
+            }
+          }
+        config.json: |
+          {
+            "debug": true,
+            "log_level": "info"
+          }
+    asserts:
+      - equal:
+          path: kind
+          value: ConfigMap
+      - equal:
+          path: apiVersion
+          value: v1
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-config
+      - contains:
+          path: metadata.labels
+          content:
+            app: RELEASE-NAME
+            chart: oxy-app-0.1.13
+            release: RELEASE-NAME
+      - equal:
+          path: data["app.conf"]
+          value: |
+            server {
+              listen 3000;
+              location / {
+                return 200 'OK';
+              }
+            }
+      - matchRegex:
+          path: data["config.json"]
+          pattern: '.*"debug":\s*true.*'
+
+  # ConfigMap mounted in StatefulSet
+  - it: mounts ConfigMap in StatefulSet when enabled
+    template: statefulset.yaml
+    set:
+      configMap.enabled: true
+      configMap.data:
+        app.conf: "test config"
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: config
+            configMap:
+              name: RELEASE-NAME-config
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: config
+            mountPath: /etc/config
+            readOnly: true
+
+  # ConfigMap not mounted when disabled
+  - it: does not mount ConfigMap in StatefulSet when disabled
+    template: statefulset.yaml
+    set:
+      configMap.enabled: false
+    asserts:
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: config
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: config
+
+  # Complex ConfigMap data
+  - it: handles complex ConfigMap data structures
+    template: configmap.yaml
+    set:
+      configMap.enabled: true
+      configMap.data:
+        nginx.conf: |
+          events {
+            worker_connections 1024;
+          }
+          http {
+            upstream backend {
+              server 127.0.0.1:3000;
+            }
+            server {
+              listen 80;
+              location / {
+                proxy_pass http://backend;
+              }
+            }
+          }
+        app-config.yaml: |
+          database:
+            host: localhost
+            port: 5432
+            name: app_db
+          cache:
+            type: redis
+            url: redis://localhost:6379
+          features:
+            - feature_a
+            - feature_b
+            - feature_c
+        env.properties: |
+          LOG_LEVEL=debug
+          DEBUG=true
+          CACHE_TTL=3600
+          MAX_CONNECTIONS=100
+    asserts:
+      - equal:
+          path: data | length
+          value: 3
+      - matchRegex:
+          path: data["nginx.conf"]
+          pattern: '.*worker_connections 1024.*'
+      - matchRegex:
+          path: data["app-config.yaml"]
+          pattern: '.*database:.*'
+      - matchRegex:
+          path: data["env.properties"]
+          pattern: '.*LOG_LEVEL=debug.*'
+
+  # Binary data in ConfigMap (edge case)
+  - it: handles binary-like data in ConfigMap
+    template: configmap.yaml
+    set:
+      configMap.enabled: true
+      configMap.data:
+        binary.dat: "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAhIiM="
+        cert.pem: |
+          -----BEGIN CERTIFICATE-----
+          MIIDXTCCAkWgAwIBAgIJAKoK/OvD/XjiMA0GCSqGSIb3DQEBCwUAMEUxCzAJBgNV
+          BAYTAkFVMRMwEQYDVQQIDApTb21lLVN0YXRlMSEwHwYDVQQKDBhJbnRlcm5ldCBX
+          aWRnaXRzIFB0eSBMdGQwHhcNMTYxMTA5MTUzOTM4WhcNMTcxMTA5MTUzOTM4WjBF
+          -----END CERTIFICATE-----
+    asserts:
+      - equal:
+          path: data["binary.dat"]
+          value: "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAhIiM="
+      - matchRegex:
+          path: data["cert.pem"]
+          pattern: '.*BEGIN CERTIFICATE.*'
+
+  # Large ConfigMap data
+  - it: handles large ConfigMap data
+    template: configmap.yaml
+    set:
+      configMap.enabled: true
+      configMap.data:
+        large-config.txt: |
+          This is a large configuration file that contains multiple lines
+          and a lot of content to test how the ConfigMap handles larger
+          data structures. This should not cause any issues with the
+          template rendering or Kubernetes processing, but it's good to
+          test edge cases like this to ensure our chart is robust.
+          
+          Here's some more content to make this file larger:
+          Line 1 of additional content
+          Line 2 of additional content
+          Line 3 of additional content
+          Line 4 of additional content
+          Line 5 of additional content
+          
+          [Section 1]
+          key1=value1
+          key2=value2
+          key3=value3
+          
+          [Section 2]
+          option_a=true
+          option_b=false
+          option_c=maybe
+          
+          # Comments are also supported
+          # This is another comment line
+          final_line=end_of_config
+    asserts:
+      - matchRegex:
+          path: data["large-config.txt"]
+          pattern: '.*This is a large configuration file.*'
+      - matchRegex:
+          path: data["large-config.txt"]
+          pattern: '.*final_line=end_of_config.*'
+
+  # Special characters in ConfigMap keys and values
+  - it: handles special characters in ConfigMap
+    template: configmap.yaml
+    set:
+      configMap.enabled: true
+      configMap.data:
+        "config-with-dashes.conf": "config with dashes"
+        "config_with_underscores.conf": "config with underscores"
+        "config.with.dots.conf": "config with dots"
+        "special-chars": "Value with spaces, symbols !@#$%^&*()_+-={}[]|;:'\",.<>?"
+    asserts:
+      - equal:
+          path: data["config-with-dashes.conf"]
+          value: "config with dashes"
+      - equal:
+          path: data["config_with_underscores.conf"]
+          value: "config with underscores"
+      - equal:
+          path: data["config.with.dots.conf"]
+          value: "config with dots"
+      - equal:
+          path: data["special-chars"]
+          value: "Value with spaces, symbols !@#$%^&*()_+-={}[]|;:'\",.<>?"
