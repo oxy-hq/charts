@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(mkdir:*)",
-      "Bash(helm unittest:*)"
+      "Bash(helm unittest:*)",
+      "Bash(helm plugin:*)",
+      "Bash(helm template:*)"
     ],
     "deny": [],
     "ask": []

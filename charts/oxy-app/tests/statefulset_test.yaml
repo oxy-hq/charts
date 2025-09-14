@@ -1,0 +1,204 @@
+suite: statefulset tests
+templates:
+  - statefulset.yaml
+
+tests:
+  # Basic StatefulSet validation
+  - it: should render StatefulSet with correct metadata
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME
+      - equal:
+          path: metadata.labels.app
+          value: RELEASE-NAME
+      - equal:
+          path: metadata.labels.release
+          value: RELEASE-NAME
+
+  # Default configuration
+  - it: should set correct defaults
+    asserts:
+      - equal:
+          path: spec.serviceName
+          value: RELEASE-NAME-headless
+      - equal:
+          path: spec.replicas
+          value: 1
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: RELEASE-NAME
+
+  # Container configuration
+  - it: should configure container correctly
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "ghcr.io/oxy-hq/oxy:0.2.28"
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            containerPort: 3000
+            protocol: TCP
+            name: traffic-port
+
+  # Environment variables
+  - it: should set default environment variables
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_STATE_DIR
+            value: "/workspace/oxy_data"
+
+  # Custom environment variables
+  - it: should allow custom database URL
+    set:
+      env:
+        OXY_DATABASE_URL: "postgresql://user:pass@host:5432/db"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_DATABASE_URL
+            value: "postgresql://user:pass@host:5432/db"
+
+  # Volumes and persistence
+  - it: should configure persistence correctly
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].metadata.name
+          value: workspace
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: 20Gi
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.storageClassName
+          value: gp3
+
+  # Custom persistence
+  - it: should allow custom persistence settings
+    set:
+      persistence:
+        size: 100Gi
+        storageClassName: fast-ssd
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: 100Gi
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.storageClassName
+          value: fast-ssd
+
+  # Resource configuration
+  - it: should set resource limits and requests
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 250m
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 512Mi
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 1000m
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 2Gi
+
+  # Custom resource configuration
+  - it: should allow custom resources
+    set:
+      resources:
+        requests:
+          cpu: 500m
+          memory: 1Gi
+        limits:
+          cpu: 2000m
+          memory: 4Gi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 500m
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 4Gi
+
+  # Probes configuration
+  - it: should configure health probes
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: "/"
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.port
+          value: 3000
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: "/"
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.port
+          value: 3000
+
+  # Custom probes
+  - it: should allow custom probe configuration
+    set:
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 3000
+        initialDelaySeconds: 90
+        periodSeconds: 45
+      readinessProbe:
+        httpGet:
+          path: /ready
+          port: 3000
+        initialDelaySeconds: 15
+        periodSeconds: 5
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: "/health"
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.initialDelaySeconds
+          value: 90
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: "/ready"
+
+  # Replica scaling
+  - it: should support replica scaling
+    set:
+      app:
+        replicaCount: 3
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 3
+
+  # Custom image
+  - it: should support custom image
+    set:
+      app:
+        image: "custom/oxy-app"
+        imageTag: "v2.0.0"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "custom/oxy-app:v2.0.0"
+
+  # Security context
+  - it: should apply security context
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 1000
+
+  # ServiceAccount
+  - it: should use correct service account
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: oxy-app-sa
