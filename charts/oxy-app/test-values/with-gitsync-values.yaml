@@ -3,8 +3,8 @@ nameOverride: "oxy-test-gitsync"
 fullnameOverride: "oxy-test-gitsync"
 
 app:
-  image: "nginx"
-  imageTag: "1.21-alpine"
+  image: "ghcr.io/oxy-hq/oxy"
+  imageTag: "0.2.28"
   imagePullPolicy: "IfNotPresent"
   replicaCount: 1
 
