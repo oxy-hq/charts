@@ -22,7 +22,6 @@ fullnameOverride: "oxy-ct-test"
 # Use standard storage class for kind clusters
 persistence:
   enabled: true
-  storageClassName: "standard"
   size: "1Gi"
 
 # Disable external dependencies
