@@ -64,7 +64,7 @@ cleanup() {
     log_info "Cleaning up test resources..."
 
     # List of test releases to clean up
-    releases=("test-default" "test-ingress" "test-postgres" "test-production" "test-persist" "test-gitsync" "upgrade-test" "resource-test")
+    releases=("test-default" "test-ingress" "test-postgres" "test-production" "test-persist" "upgrade-test" "resource-test")
 
     for release in "${releases[@]}"; do
         if helm list -q -n "$NAMESPACE" 2>/dev/null | grep -q "^${release}$"; then
