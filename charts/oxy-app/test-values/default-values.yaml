@@ -2,16 +2,17 @@
 nameOverride: "oxy-test-default"
 fullnameOverride: "oxy-test-default"
 
-image:
-  repository: nginx  # Use nginx for testing instead of real app
-  tag: "1.21-alpine"
-  pullPolicy: IfNotPresent
+app:
+  image: "ghcr.io/oxy-hq/oxy"
+  imageTag: "0.2.28"
+  imagePullPolicy: "IfNotPresent"
 
 replicaCount: 1
 
 service:
   type: ClusterIP
   port: 80
+  targetPort: 80
 
 # Disable external dependencies for testing
 database:
