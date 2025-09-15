@@ -253,7 +253,7 @@ tests:
     asserts:
       - equal:
           path: spec.serviceName
-          value: RELEASE-NAME-headless
+          value: RELEASE-NAME-oxy-app-headless
 
   # Security context
   - it: should apply security context

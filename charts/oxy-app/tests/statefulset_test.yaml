@@ -12,10 +12,10 @@ tests:
           path: metadata.name
           value: RELEASE-NAME
       - equal:
-          path: metadata.labels.app
-          value: RELEASE-NAME
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: oxy-app
       - equal:
-          path: metadata.labels.release
+          path: metadata.labels["app.kubernetes.io/instance"]
           value: RELEASE-NAME
 
   # Default configuration
@@ -23,7 +23,7 @@ tests:
     asserts:
       - equal:
           path: spec.serviceName
-          value: RELEASE-NAME-headless
+          value: RELEASE-NAME-oxy-app-headless
       - equal:
           path: spec.replicas
           value: 1
