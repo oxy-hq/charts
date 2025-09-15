@@ -66,7 +66,7 @@ livenessProbe:
     path: "/"
     port: 3000
     scheme: "HTTP"
-  initialDelaySeconds: 60
+  initialDelaySeconds: 30
   periodSeconds: 30
   timeoutSeconds: 10
   failureThreshold: 3

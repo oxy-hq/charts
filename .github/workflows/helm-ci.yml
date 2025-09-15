@@ -20,6 +20,10 @@ on:
 
 jobs:
   test:
+    concurrency:
+      group: "test-${{ github.ref }}"
+      cancel-in-progress: true
+
     name: Test charts
     runs-on: ubuntu-latest
     permissions:
