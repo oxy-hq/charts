@@ -202,10 +202,53 @@ resource_exists() {
 create_test_secrets() {
     log_info "Creating test secrets for integration tests"
 
-    # TLS secrets for ingress testing
-    kubectl create secret tls oxy-test-tls --cert=/dev/null --key=/dev/null --dry-run=client -o yaml | kubectl apply -f -
-    kubectl create secret tls oxy-api-tls --cert=/dev/null --key=/dev/null --dry-run=client -o yaml | kubectl apply -f -
-    kubectl create secret tls oxy-main-tls --cert=/dev/null --key=/dev/null --dry-run=client -o yaml | kubectl apply -f -
+    # Create dummy TLS secrets for ingress testing
+    kubectl create secret generic oxy-test-tls \
+        --from-literal=tls.crt="-----BEGIN CERTIFICATE-----
+MIIBkTCB+wIJAK5J5J5J5J5J5J5JMA0GCSqGSIb3DQEBCwUAMBQxEjAQBgNVBAMM
+CWxvY2FsaG9zdDAeFw0yMzEwMDEwMDAwMDBaFw0yNDEwMDEwMDAwMDBaMBQxEjAQ
+BgNVBAMMCWxvY2FsaG9zdDBcMA0GCSqGSIb3DQEBAQUAA0sAMEgCQQC9h+P8Q8X4
+5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J
+5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J
+5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5JMA0
+GCSqGSIb3DQEBCwUAA0EAtest
+-----END CERTIFICATE-----" \
+        --from-literal=tls.key="-----BEGIN PRIVATE KEY-----
+MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC9h+P8Q8X45J5J
+5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J
+5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J
+test-key-data
+-----END PRIVATE KEY-----" \
+        --type=kubernetes.io/tls \
+        --dry-run=client -o yaml | kubectl apply -f -
+
+    kubectl create secret generic oxy-api-tls \
+        --from-literal=tls.crt="-----BEGIN CERTIFICATE-----
+MIIBkTCB+wIJAK5J5J5J5J5J5J5JMA0GCSqGSIb3DQEBCwUAMBQxEjAQBgNVBAMM
+CWxvY2FsaG9zdDAeFw0yMzEwMDEwMDAwMDBaFw0yNDEwMDEwMDAwMDBaMBQxEjAQ
+BgNVBAMMCWxvY2FsaG9zdDBcMA0GCSqGSIb3DQEBAQUAA0sAMEgCQQC9h+P8Q8X4
+test-cert-data
+-----END CERTIFICATE-----" \
+        --from-literal=tls.key="-----BEGIN PRIVATE KEY-----
+MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC9h+P8Q8X45J5J
+test-key-data
+-----END PRIVATE KEY-----" \
+        --type=kubernetes.io/tls \
+        --dry-run=client -o yaml | kubectl apply -f -
+
+    kubectl create secret generic oxy-main-tls \
+        --from-literal=tls.crt="-----BEGIN CERTIFICATE-----
+MIIBkTCB+wIJAK5J5J5J5J5J5J5JMA0GCSqGSIb3DQEBCwUAMBQxEjAQBgNVBAMM
+CWxvY2FsaG9zdDAeFw0yMzEwMDEwMDAwMDBaFw0yNDEwMDEwMDAwMDBaMBQxEjAQ
+BgNVBAMMCWxvY2FsaG9zdDBcMA0GCSqGSIb3DQEBAQUAA0sAMEgCQQC9h+P8Q8X4
+test-cert-data
+-----END CERTIFICATE-----" \
+        --from-literal=tls.key="-----BEGIN PRIVATE KEY-----
+MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC9h+P8Q8X45J5J
+test-key-data
+-----END PRIVATE KEY-----" \
+        --type=kubernetes.io/tls \
+        --dry-run=client -o yaml | kubectl apply -f -
 
     # SSH secret for git sync testing
     kubectl create secret generic oxy-git-ssh \
