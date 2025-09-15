@@ -12,7 +12,10 @@
       "Bash(xargs:*)",
       "Bash(export CI=true)",
       "Bash(kubectl get all:*)",
-      "Bash(./scripts/test-integration.sh:*)"
+      "Bash(./scripts/test-integration.sh:*)",
+      "Bash(kubectl get pods:*)",
+      "Bash(helm :*)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": []

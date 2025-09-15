@@ -41,9 +41,10 @@ is_ci() {
 wait_for_deployment() {
     local instance_name="$1"
     local timeout="${2:-300s}"
+    local namespace="${3:-default}"
 
     log_info "Waiting for deployment $instance_name to be ready (timeout: $timeout)"
-    kubectl wait --for=condition=ready pod -l "app.kubernetes.io/instance=$instance_name" --timeout="$timeout"
+    kubectl wait --for=condition=ready pod -l "app.kubernetes.io/instance=$instance_name" -n "$namespace" --timeout="$timeout"
 }
 
 # Wait for statefulset to be ready
@@ -51,12 +52,13 @@ wait_for_statefulset() {
     local statefulset_name="$1"
     local expected_replicas="${2:-1}"
     local timeout="${3:-600}"
+    local namespace="${4:-default}"
 
     log_info "Waiting for StatefulSet $statefulset_name to have $expected_replicas ready replicas"
 
     local count=0
     while [[ $count -lt $timeout ]]; do
-        local ready=$(kubectl get statefulset "$statefulset_name" -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
+        local ready=$(kubectl get statefulset "$statefulset_name" -n "$namespace" -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
         if [[ "$ready" == "$expected_replicas" ]]; then
             log_success "StatefulSet $statefulset_name is ready with $ready replicas"
             return 0
@@ -76,11 +78,12 @@ test_service_connectivity() {
     local service_port="${3:-80}"
     local test_path="${4:-/}"
     local expected_content="${5:-}"
+    local namespace="${6:-default}"
 
     log_info "Testing connectivity to service $service_name"
 
     # Start port forwarding in background
-    kubectl port-forward "service/$service_name" "$local_port:$service_port" &
+    kubectl port-forward "service/$service_name" "$local_port:$service_port" -n "$namespace" &
     local pf_pid=$!
 
     # Cleanup function
@@ -129,11 +132,12 @@ helm_install_with_retry() {
     local values_file="$3"
     local timeout="${4:-5m}"
     local retries="${5:-3}"
+    local namespace="${6:-default}"
 
     log_info "Installing Helm chart: $release_name with values: $values_file"
 
     for ((i=1; i<=retries; i++)); do
-        if helm install "$release_name" "$chart_path" -f "$values_file" --wait --timeout="$timeout"; then
+        if helm install "$release_name" "$chart_path" -f "$values_file" -n "$namespace" --wait --timeout="$timeout"; then
             log_success "Helm install succeeded on attempt $i"
             return 0
         else
@@ -153,14 +157,15 @@ helm_install_with_retry() {
 helm_uninstall_with_cleanup() {
     local release_name="$1"
     local timeout="${2:-5m}"
+    local namespace="${3:-default}"
 
     log_info "Uninstalling Helm release: $release_name"
 
-    if helm list -q | grep -q "^$release_name$"; then
-        helm uninstall "$release_name" --wait --timeout="$timeout" || {
+    if helm list -q -n "$namespace" | grep -q "^$release_name$"; then
+        helm uninstall "$release_name" -n "$namespace" --wait --timeout="$timeout" || {
             log_warning "Helm uninstall had issues, forcing cleanup..."
             # Force delete any remaining resources
-            kubectl delete pods,pvc,ingress -l "app.kubernetes.io/instance=$release_name" --ignore-not-found=true
+            kubectl delete pods,pvc,ingress -l "app.kubernetes.io/instance=$release_name" -n "$namespace" --ignore-not-found=true
         }
         log_success "Helm release $release_name uninstalled"
     else
@@ -174,11 +179,12 @@ verify_resource() {
     local resource_name="$2"
     local jsonpath="$3"
     local expected_value="$4"
+    local namespace="${5:-default}"
 
     log_info "Verifying $resource_type/$resource_name has $jsonpath=$expected_value"
 
     local actual_value
-    actual_value=$(kubectl get "$resource_type" "$resource_name" -o jsonpath="$jsonpath" 2>/dev/null || echo "")
+    actual_value=$(kubectl get "$resource_type" "$resource_name" -n "$namespace" -o jsonpath="$jsonpath" 2>/dev/null || echo "")
 
     if [[ "$actual_value" == "$expected_value" ]]; then
         log_success "Verification passed: $resource_type/$resource_name.$jsonpath = $expected_value"
@@ -200,10 +206,11 @@ resource_exists() {
 
 # Create test secrets for integration tests
 create_test_secrets() {
-    log_info "Creating test secrets for integration tests"
+    local namespace="${1:-default}"
+    log_info "Creating test secrets for integration tests in namespace $namespace"
 
     # Create dummy TLS secrets for ingress testing
-    kubectl create secret generic oxy-test-tls \
+    kubectl create secret -n "$namespace" generic oxy-test-tls \
         --from-literal=tls.crt="-----BEGIN CERTIFICATE-----
 MIIBkTCB+wIJAK5J5J5J5J5J5J5JMA0GCSqGSIb3DQEBCwUAMBQxEjAQBgNVBAMM
 CWxvY2FsaG9zdDAeFw0yMzEwMDEwMDAwMDBaFw0yNDEwMDEwMDAwMDBaMBQxEjAQ
@@ -222,7 +229,7 @@ test-key-data
         --type=kubernetes.io/tls \
         --dry-run=client -o yaml | kubectl apply -f -
 
-    kubectl create secret generic oxy-api-tls \
+    kubectl create secret -n "$namespace" generic oxy-api-tls \
         --from-literal=tls.crt="-----BEGIN CERTIFICATE-----
 MIIBkTCB+wIJAK5J5J5J5J5J5J5JMA0GCSqGSIb3DQEBCwUAMBQxEjAQBgNVBAMM
 CWxvY2FsaG9zdDAeFw0yMzEwMDEwMDAwMDBaFw0yNDEwMDEwMDAwMDBaMBQxEjAQ
@@ -236,7 +243,7 @@ test-key-data
         --type=kubernetes.io/tls \
         --dry-run=client -o yaml | kubectl apply -f -
 
-    kubectl create secret generic oxy-main-tls \
+    kubectl create secret -n "$namespace" generic oxy-main-tls \
         --from-literal=tls.crt="-----BEGIN CERTIFICATE-----
 MIIBkTCB+wIJAK5J5J5J5J5J5J5JMA0GCSqGSIb3DQEBCwUAMBQxEjAQBgNVBAMM
 CWxvY2FsaG9zdDAeFw0yMzEwMDEwMDAwMDBaFw0yNDEwMDEwMDAwMDBaMBQxEjAQ
@@ -251,32 +258,32 @@ test-key-data
         --dry-run=client -o yaml | kubectl apply -f -
 
     # SSH secret for git sync testing
-    kubectl create secret generic oxy-git-ssh \
+    kubectl create secret -n "$namespace" generic oxy-git-ssh \
         --from-literal=ssh-privatekey="$(echo -e '-----BEGIN OPENSSH PRIVATE KEY-----\nfake-key-for-testing\n-----END OPENSSH PRIVATE KEY-----')" \
         --from-literal=ssh-publickey="ssh-rsa fake-public-key-for-testing" \
         --dry-run=client -o yaml | kubectl apply -f -
 
     # Environment secrets
-    kubectl create secret generic oxy-env-secrets \
+    kubectl create secret -n "$namespace" generic oxy-env-secrets \
         --from-literal=DATABASE_PASSWORD="test-password" \
         --from-literal=API_KEY="test-api-key" \
         --dry-run=client -o yaml | kubectl apply -f -
 
-    kubectl create secret generic oxy-db-secrets \
+    kubectl create secret -n "$namespace" generic oxy-db-secrets \
         --from-literal=CONNECTION_STRING="postgresql://test:test@localhost:5432/test" \
         --dry-run=client -o yaml | kubectl apply -f -
 
-    kubectl create secret generic external-db-credentials \
+    kubectl create secret -n "$namespace" generic external-db-credentials \
         --from-literal=DATABASE_URL="postgresql://external:test@localhost:5432/external" \
         --from-literal=DATABASE_PASSWORD="external-password" \
         --dry-run=client -o yaml | kubectl apply -f -
 
-    kubectl create secret generic warehouse-credentials \
+    kubectl create secret -n "$namespace" generic warehouse-credentials \
         --from-literal=bigquery-key.json='{"type":"service_account","project_id":"test"}' \
         --from-literal=BIGQUERY_CREDENTIALS="test-credentials" \
         --dry-run=client -o yaml | kubectl apply -f -
 
-    kubectl create secret generic oxy-certs \
+    kubectl create secret -n "$namespace" generic oxy-certs \
         --from-literal=tls.crt="-----BEGIN CERTIFICATE-----\nfake-cert\n-----END CERTIFICATE-----" \
         --from-literal=tls.key="-----BEGIN PRIVATE KEY-----\nfake-key\n-----END PRIVATE KEY-----" \
         --dry-run=client -o yaml | kubectl apply -f -
