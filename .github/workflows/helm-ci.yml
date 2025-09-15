@@ -61,19 +61,18 @@ jobs:
 
       - name: Make scripts executable
         run: |
-          chmod +x scripts/**/*.sh
+          chmod +x scripts/test.sh
 
       - name: Run chart-testing (lint)
         if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
         run: |
           ct lint --target-branch ${{ github.event.repository.default_branch }} --config ct.yaml
 
-      - name: Run helm unittest for oxy-app
+      - name: Run unit tests
         if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
         run: |
-          # Run comprehensive unit tests located under charts/oxy-app/tests
-          # Tests are now organized as focused test suites
-          helm unittest ./charts/oxy-app
+          export CI=true
+          ./scripts/test.sh unit
 
       - name: Create kind cluster
         if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
@@ -96,38 +95,11 @@ jobs:
         run: |
           ct install --target-branch ${{ github.event.repository.default_branch }} --config ct.yaml
 
-      - name: Setup test environment
-        if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
-        run: |
-          # Create test secrets and setup environment using our common utilities
-          export CI=true
-          source scripts/utils/common.sh
-          create_test_secrets
-          update_test_values_for_kind
-
-      - name: Run basic integration tests
+      - name: Run integration tests
         if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
         run: |
           export CI=true
-          ./scripts/tests/01-basic-tests.sh
-
-      - name: Run advanced feature tests
-        if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
-        run: |
-          export CI=true
-          ./scripts/tests/02-advanced-tests.sh
-
-      - name: Run comprehensive feature tests
-        if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
-        run: |
-          export CI=true
-          ./scripts/tests/03-comprehensive-tests.sh
-
-      - name: Verify cleanup
-        if: always() && (github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true')
-        run: |
-          export CI=true
-          ./scripts/utils/cleanup.sh --verify-only
+          ./scripts/test.sh integration --cleanup
 
   publish:
     name: Package & Publish Helm charts
