@@ -1,4 +1,4 @@
-name: Helm tests and release (Improved)
+name: Helm tests and release
 
 # This workflow runs comprehensive tests on all chart changes (both PRs and pushes to main)
 # but only publishes/releases charts when pushing to the main branch.

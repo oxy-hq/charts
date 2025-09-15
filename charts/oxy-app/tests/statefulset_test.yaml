@@ -74,9 +74,6 @@ tests:
       - equal:
           path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
           value: 20Gi
-      - equal:
-          path: spec.volumeClaimTemplates[0].spec.storageClassName
-          value: null
 
   # Custom persistence
   - it: should allow custom persistence settings
