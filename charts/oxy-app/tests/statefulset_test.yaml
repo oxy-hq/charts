@@ -3,8 +3,11 @@ templates:
   - statefulset.yaml
 
 tests:
-  # Basic StatefulSet validation
-  - it: should render StatefulSet with correct metadata
+  # =======================
+  # Basic StatefulSet Tests
+  # =======================
+
+  - it: should create a StatefulSet with correct metadata
     asserts:
       - isKind:
           of: StatefulSet
@@ -18,8 +21,7 @@ tests:
           path: metadata.labels["app.kubernetes.io/instance"]
           value: RELEASE-NAME
 
-  # Default configuration
-  - it: should set correct defaults
+  - it: should configure StatefulSet with correct defaults
     asserts:
       - equal:
           path: spec.serviceName
@@ -31,8 +33,20 @@ tests:
           path: spec.template.spec.containers[0].name
           value: RELEASE-NAME
 
-  # Container configuration
-  - it: should configure container correctly
+  - it: should support replica scaling
+    set:
+      app:
+        replicaCount: 3
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 3
+
+  # =======================
+  # Container Configuration
+  # =======================
+
+  - it: should configure main container correctly
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
@@ -44,7 +58,20 @@ tests:
             protocol: TCP
             name: traffic-port
 
-  # Environment variables
+  - it: should support custom image configuration
+    set:
+      app:
+        image: "custom/oxy-app"
+        imageTag: "v2.0.0"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "custom/oxy-app:v2.0.0"
+
+  # =======================
+  # Environment Variables
+  # =======================
+
   - it: should set default environment variables
     asserts:
       - contains:
@@ -53,7 +80,6 @@ tests:
             name: OXY_STATE_DIR
             value: "/workspace/oxy_data"
 
-  # Custom environment variables
   - it: should allow custom database URL
     set:
       env:
@@ -65,7 +91,276 @@ tests:
             name: OXY_DATABASE_URL
             value: "postgresql://user:pass@host:5432/db"
 
-  # Volumes and persistence
+  # =======================
+  # Database Configuration
+  # =======================
+
+  - it: should configure PostgreSQL database URL correctly
+    set:
+      database:
+        postgres:
+          enabled: true
+          postgresqlUsername: "testuser"
+          postgresqlPassword: "testpass"
+          postgresqlDatabase: "testdb"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_DATABASE_URL
+            value: "postgresql://testuser:testpass@RELEASE-NAME-postgresql.NAMESPACE.svc.cluster.local:5432/testdb"
+
+  - it: should support new Bitnami PostgreSQL chart format
+    set:
+      database:
+        postgres:
+          enabled: true
+      postgresql:
+        auth:
+          username: "bitnami-user"
+          password: "bitnami-pass"
+          database: "bitnami-db"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_DATABASE_URL
+            value: "postgresql://bitnami-user:bitnami-pass@RELEASE-NAME-postgresql.NAMESPACE.svc.cluster.local:5432/bitnami-db"
+
+  # =======================
+  # Init Containers
+  # =======================
+
+  - it: should not have init containers by default
+    set:
+      gitSync:
+        enabled: false
+      database:
+        postgres:
+          enabled: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.initContainers
+
+  - it: should create PostgreSQL wait init container when database enabled
+    set:
+      database:
+        postgres:
+          enabled: true
+      postgresql:
+        auth:
+          username: "testuser"
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.initContainers
+          count: 1
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: wait-for-postgres
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: "postgres:16-alpine"
+
+  - it: should create git clone init container when git sync enabled
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      persistence:
+        enabled: true
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.initContainers
+          count: 1
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: git-clone
+
+  - it: should create both PostgreSQL and git init containers when both enabled
+    set:
+      database:
+        postgres:
+          enabled: true
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      persistence:
+        enabled: true
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.initContainers
+          count: 2
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: wait-for-postgres
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: git-clone
+
+  - it: should add extra init containers
+    set:
+      extraInitContainers:
+        - name: custom-init
+          image: busybox:1.36
+          command: ["echo", "hello"]
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.initContainers
+          count: 1
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: custom-init
+
+  # =======================
+  # Git Sync Configuration
+  # =======================
+
+  - it: should have single container when git sync disabled
+    set:
+      gitSync:
+        enabled: false
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 1
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: RELEASE-NAME
+
+  - it: should include readonly flag when git sync disabled
+    set:
+      gitSync:
+        enabled: false
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--readonly.*"
+
+  - it: should have two containers when git sync enabled
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      persistence:
+        enabled: true
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 2
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: RELEASE-NAME
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: git-sync
+
+  - it: should not include readonly flag when git sync enabled
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      persistence:
+        enabled: true
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--readonly.*"
+
+  - it: should configure git sync container correctly
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+        branch: "develop"
+        period: "30s"
+        imagePullPolicy: "Always"
+      persistence:
+        enabled: true
+        mountPath: "/workspace"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].image
+          value: "k8s.gcr.io/git-sync/git-sync:v4.4.3"
+      - equal:
+          path: spec.template.spec.containers[1].imagePullPolicy
+          value: "Always"
+      - contains:
+          path: spec.template.spec.containers[1].args
+          content: "--repo=git@github.com:example/repo.git"
+      - contains:
+          path: spec.template.spec.containers[1].args
+          content: "--branch=develop"
+      - contains:
+          path: spec.template.spec.containers[1].args
+          content: "--period=30s"
+
+  - it: should configure git clone init container correctly
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:test/repo.git"
+        branch: "main"
+      persistence:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: "k8s.gcr.io/git-sync/git-sync:v4.4.3"
+      - contains:
+          path: spec.template.spec.initContainers[0].args
+          content: "--repo=git@github.com:test/repo.git"
+      - contains:
+          path: spec.template.spec.initContainers[0].args
+          content: "--branch=main"
+      - contains:
+          path: spec.template.spec.initContainers[0].args
+          content: "--one-time=true"
+
+  # =======================
+  # Sidecar Containers
+  # =======================
+
+  - it: should add extra sidecar containers
+    set:
+      extraSidecars:
+        - name: monitoring
+          image: prom/node-exporter:v1.6.0
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 2
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: monitoring
+
+  - it: should work with git sync and sidecars together
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      extraSidecars:
+        - name: monitoring
+          image: prom/node-exporter:v1.6.0
+      persistence:
+        enabled: true
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 3
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: RELEASE-NAME
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: git-sync
+      - equal:
+          path: spec.template.spec.containers[2].name
+          value: monitoring
+
+  # =======================
+  # Persistence & Volumes
+  # =======================
+
   - it: should configure persistence correctly
     asserts:
       - equal:
@@ -75,7 +370,6 @@ tests:
           path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
           value: 20Gi
 
-  # Custom persistence
   - it: should allow custom persistence settings
     set:
       persistence:
@@ -89,8 +383,90 @@ tests:
           path: spec.volumeClaimTemplates[0].spec.storageClassName
           value: fast-ssd
 
-  # Resource configuration
-  - it: should set resource limits and requests
+  - it: should always create workspace volume claim template
+    set:
+      persistence:
+        enabled: false
+    asserts:
+      - lengthEqual:
+          path: spec.volumeClaimTemplates
+          count: 1
+      - equal:
+          path: spec.volumeClaimTemplates[0].metadata.name
+          value: workspace
+
+  - it: should share workspace volume between containers
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      persistence:
+        enabled: true
+        mountPath: "/data"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: workspace
+            mountPath: "/data"
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          content:
+            name: workspace
+            mountPath: "/data"
+
+  - it: should have empty volumes list by default
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.volumes
+          count: 0
+
+  - it: should mount SSH secret when git sync enabled
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+        sshSecretName: "my-git-ssh"
+      persistence:
+        enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          content:
+            name: git-ssh
+            mountPath: /etc/git-secret
+            readOnly: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: git-ssh
+            secret:
+              secretName: "my-git-ssh"
+              optional: false
+
+  # =======================
+  # External Secrets
+  # =======================
+
+  - it: should mount environment secrets when specified
+    set:
+      externalSecrets:
+        envSecretNames:
+          - "app-secrets"
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: env-secret-0
+            secret:
+              secretName: "app-secrets"
+              optional: true
+
+  # =======================
+  # Resource Configuration
+  # =======================
+
+  - it: should set default resource limits and requests
     asserts:
       - equal:
           path: spec.template.spec.containers[0].resources.requests.cpu
@@ -105,8 +481,7 @@ tests:
           path: spec.template.spec.containers[0].resources.limits.memory
           value: 2Gi
 
-  # Custom resource configuration
-  - it: should allow custom resources
+  - it: should allow custom resource configuration
     set:
       resources:
         requests:
@@ -123,8 +498,11 @@ tests:
           path: spec.template.spec.containers[0].resources.limits.memory
           value: 4Gi
 
-  # Probes configuration
-  - it: should configure health probes
+  # =======================
+  # Health Probes
+  # =======================
+
+  - it: should configure default health probes
     asserts:
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.httpGet.path
@@ -139,14 +517,13 @@ tests:
           path: spec.template.spec.containers[0].readinessProbe.httpGet.port
           value: 3000
 
-  # Custom probes
   - it: should allow custom probe configuration
     set:
       livenessProbe:
         httpGet:
           path: /health
           port: 3000
-        initialDelaySeconds: 30
+        initialDelaySeconds: 90
         periodSeconds: 45
       readinessProbe:
         httpGet:
@@ -165,35 +542,19 @@ tests:
           path: spec.template.spec.containers[0].readinessProbe.httpGet.path
           value: "/ready"
 
-  # Replica scaling
-  - it: should support replica scaling
-    set:
-      app:
-        replicaCount: 3
-    asserts:
-      - equal:
-          path: spec.replicas
-          value: 3
+  # =======================
+  # Security & Service Account
+  # =======================
 
-  # Custom image
-  - it: should support custom image
-    set:
-      app:
-        image: "custom/oxy-app"
-        imageTag: "v2.0.0"
-    asserts:
-      - equal:
-          path: spec.template.spec.containers[0].image
-          value: "custom/oxy-app:v2.0.0"
-
-  # Security context
   - it: should apply security context
+    set:
+      securityContext:
+        fsGroup: 2000
     asserts:
       - equal:
           path: spec.template.spec.securityContext.fsGroup
-          value: 1000
+          value: 2000
 
-  # ServiceAccount
   - it: should use correct service account
     asserts:
       - equal:
