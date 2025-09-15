@@ -10,12 +10,10 @@ metadata:
   name: {{ .Release.Name }}
   namespace: {{ .Release.Namespace }}
   labels:
-    app: {{ .Release.Name }}
-    chart: {{ include "oxy-app.chart" . }}
-    release: {{ .Release.Name }}
+    {{- include "oxy-app.labels" . | nindent 4 }}
     version: v1
 spec:
-  serviceName: {{ .Release.Name }}-headless
+  serviceName: {{ include "oxy-app.fullname" . }}-headless
   replicas: {{ .Values.app.replicaCount }}
   updateStrategy:
     type: RollingUpdate
@@ -23,11 +21,11 @@ spec:
       partition: 0
   selector:
     matchLabels:
-      app: {{ .Release.Name }}
+      {{- include "oxy-app.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        app: {{ .Release.Name }}
+        {{- include "oxy-app.selectorLabels" . | nindent 8 }}
         version: v1
     spec:
       {{- if .Values.serviceAccount.create }}

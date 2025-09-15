@@ -2,15 +2,13 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Release.Name }}-headless
+  name: {{ include "oxy-app.fullname" . }}-headless
   namespace: {{ .Release.Namespace }}
   labels:
-    app: {{ .Release.Name }}
-    chart: {{ include "oxy-app.chart" . }}
-    release: {{ .Release.Name }}
+    {{- include "oxy-app.labels" . | nindent 4 }}
 spec:
   selector:
-    app: {{ .Release.Name }}
+    {{- include "oxy-app.selectorLabels" . | nindent 4 }}
   ports:
   - port: {{ .Values.app.port }}
     targetPort: {{ .Values.app.port }}

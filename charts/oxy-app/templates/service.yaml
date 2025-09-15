@@ -1,15 +1,13 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ default (printf "%s-service" .Release.Name) .Values.service.name }}
+  name: {{ include "oxy-app.fullname" . }}
   namespace: {{ .Release.Namespace }}
   labels:
-    app: {{ .Release.Name }}
-    chart: {{ include "oxy-app.chart" . }}
-    release: {{ .Release.Name }}
+    {{- include "oxy-app.labels" . | nindent 4 }}
 spec:
   selector:
-    app: {{ .Release.Name }}
+    {{- include "oxy-app.selectorLabels" . | nindent 4 }}
   ports:
   - port: {{ .Values.service.port }}
     targetPort: {{ .Values.service.targetPort }}

@@ -9,7 +9,10 @@
       "Bash(cat:*)",
       "Bash(chmod:*)",
       "Bash(find:*)",
-      "Bash(xargs:*)"
+      "Bash(xargs:*)",
+      "Bash(export CI=true)",
+      "Bash(kubectl get all:*)",
+      "Bash(./scripts/test-integration.sh:*)"
     ],
     "deny": [],
     "ask": []
