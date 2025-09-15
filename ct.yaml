@@ -16,4 +16,4 @@ validate-yaml: true
 # Check for security issues
 check-version-increment: true
 # Enable all available linters
-helm-extra-set-args: --set=global.imagePullSecrets=null
+helm-extra-set-args: --set=global.imagePullSecrets=null,--set=oxy-app.persistence.storageClassName=
