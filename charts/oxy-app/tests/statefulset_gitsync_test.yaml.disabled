@@ -1,0 +1,383 @@
+suite: statefulset git sync tests
+templates:
+  - statefulset.yaml
+
+tests:
+  # Git sync disabled scenarios
+  - it: should create StatefulSet without git-sync when disabled
+    set:
+      gitSync:
+        enabled: false
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 1
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: RELEASE-NAME
+      - notExists:
+          path: spec.template.spec.containers[1]
+
+  - it: should use deployment-style command when git sync disabled
+    set:
+      gitSync:
+        enabled: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].command
+          content: "sh"
+      - contains:
+          path: spec.template.spec.containers[0].command
+          content: "-c"
+
+  - it: should mount workspace volume when git sync disabled
+    set:
+      gitSync:
+        enabled: false
+      persistence:
+        enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: workspace
+            mountPath: /workspace
+
+  # Git sync enabled scenarios
+  - it: should create StatefulSet with git-sync sidecar when enabled
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.template.spec.containers | length
+          value: 2
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: RELEASE-NAME
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: git-sync
+
+  - it: should configure git-sync container correctly
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+        branch: "develop"
+        period: "30s"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].image
+          value: "registry.k8s.io/git-sync/git-sync:v4.2.1"
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: GITSYNC_REPO
+            value: "git@github.com:example/repo.git"
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: GITSYNC_BRANCH
+            value: "develop"
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: GITSYNC_PERIOD
+            value: "30s"
+
+  - it: should configure git sync SSH authentication
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+        sshSecretName: "my-git-ssh"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: GITSYNC_SSH_KEY_FILE
+            value: "/etc/git-secret/ssh-privatekey"
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          content:
+            name: git-ssh-key
+            mountPath: /etc/git-secret
+            readOnly: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: git-ssh-key
+            secret:
+              secretName: "my-git-ssh"
+              defaultMode: 0400
+
+  - it: should configure git sync volume mounts correctly
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      persistence:
+        enabled: true
+        mountPath: "/data"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          content:
+            name: workspace
+            mountPath: /data
+
+  - it: should set git sync root and link paths
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+        root: "/workspace/git-data"
+        link: "/workspace/current-repo"
+      persistence:
+        mountPath: "/workspace"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: GITSYNC_ROOT
+            value: "/workspace/git-data"
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: GITSYNC_LINK
+            value: "/workspace/current-repo"
+
+  - it: should set default git sync paths when not specified
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      persistence:
+        mountPath: "/workspace"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: GITSYNC_ROOT
+            value: "/workspace/git"
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: GITSYNC_LINK
+            value: "/workspace/current"
+
+  # Persistence behavior with git sync
+  - it: should require persistence when git sync is enabled
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      persistence:
+        enabled: false
+    asserts:
+      - failedTemplate:
+          errorMessage: "persistence.enabled must be true when gitSync.enabled is true"
+
+  - it: should create volume claim template when git sync enabled
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      persistence:
+        enabled: true
+        size: "50Gi"
+        storageClassName: "fast-ssd"
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates | length
+          value: 1
+      - equal:
+          path: spec.volumeClaimTemplates[0].metadata.name
+          value: workspace
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: "50Gi"
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.storageClassName
+          value: "fast-ssd"
+
+  # Git sync with multiple replicas
+  - it: should support git sync with multiple replicas
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      app:
+        replicaCount: 3
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 3
+      - equal:
+          path: spec.template.spec.containers | length
+          value: 2
+
+  # Git sync container resource limits
+  - it: should allow custom git sync resources
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+          limits:
+            cpu: "100m"
+            memory: "128Mi"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].resources.requests.cpu
+          value: "50m"
+      - equal:
+          path: spec.template.spec.containers[1].resources.limits.memory
+          value: "128Mi"
+
+  # Git sync with user configuration
+  - it: should configure git user when specified
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+        userName: "John Doe"
+        userEmail: "john@example.com"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: GITSYNC_USERNAME
+            value: "John Doe"
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: GITSYNC_EMAIL
+            value: "john@example.com"
+
+  # Git sync image pull policy
+  - it: should respect git sync image pull policy
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+        imagePullPolicy: "Always"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].imagePullPolicy
+          value: "Always"
+
+  # Volume configuration differences
+  - it: should mount workspace differently when git sync enabled vs disabled
+    set:
+      gitSync:
+        enabled: false
+      persistence:
+        enabled: true
+        mountPath: "/data"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: workspace
+            mountPath: "/data"
+
+  - it: should share workspace volume between main and git-sync containers
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      persistence:
+        mountPath: "/shared"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: workspace
+            mountPath: "/shared"
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          content:
+            name: workspace
+            mountPath: "/shared"
+
+  # Command differences based on git sync
+  - it: should use readonly mode when git sync disabled
+    set:
+      gitSync:
+        enabled: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].command
+          content: "exec oxy serve --readonly"
+
+  - it: should use read-write mode when git sync enabled
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].command
+          content: "exec oxy serve"
+      - notContains:
+          path: spec.template.spec.containers[0].command
+          content: "--readonly"
+
+  # Service account behavior
+  - it: should use same service account for both containers when git sync enabled
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      serviceAccount:
+        name: "custom-sa"
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: "custom-sa"
+
+  # Security context with git sync
+  - it: should apply security context to both containers
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      securityContext:
+        fsGroup: 2000
+        runAsUser: 1500
+        runAsNonRoot: true
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 2000
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 1500
+
+  # Edge cases and error conditions
+  - it: should fail when git sync enabled but no repository specified
+    set:
+      gitSync:
+        enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "gitSync.repository is required when gitSync.enabled is true"
+
+  - it: should handle empty git sync repository
+    set:
+      gitSync:
+        enabled: true
+        repository: ""
+    asserts:
+      - failedTemplate:
+          errorMessage: "gitSync.repository cannot be empty when gitSync.enabled is true"

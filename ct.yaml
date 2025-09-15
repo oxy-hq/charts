@@ -7,7 +7,7 @@ chart-repos:
 remote: origin
 target-branch: main
 github-groups: true
-helm-extra-args: --timeout 600s
+helm-extra-args: --timeout 600s --values chart-testing-values.yaml
 validate-maintainers: false
 # Enable dependency management
 helm-dependency-extra-args: --skip-refresh
@@ -15,5 +15,3 @@ helm-dependency-extra-args: --skip-refresh
 validate-yaml: true
 # Check for security issues
 check-version-increment: true
-# Enable all available linters
-helm-extra-set-args: --set=global.imagePullSecrets=null,--set=oxy-app.persistence.storageClassName=

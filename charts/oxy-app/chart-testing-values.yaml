@@ -1,0 +1,86 @@
+# Chart-testing values - minimal configuration for ct install
+# This file is specifically for chart-testing (ct) to avoid conflicts with ci/ folder
+
+# Use nginx for testing instead of the real app to avoid image pull issues
+image:
+  repository: nginx
+  tag: "1.21-alpine"
+  pullPolicy: IfNotPresent
+
+# Override app configuration for testing
+app:
+  image: nginx
+  imageTag: "1.21-alpine"
+  port: 80
+
+replicaCount: 1
+
+# Override naming to avoid conflicts
+nameOverride: "oxy-ct-test"
+fullnameOverride: "oxy-ct-test"
+
+# Use standard storage class for kind clusters
+persistence:
+  enabled: true
+  storageClassName: "standard"
+  size: "1Gi"
+
+# Disable external dependencies
+database:
+  postgres:
+    enabled: false
+
+gitSync:
+  enabled: false
+
+# Use minimal resources for fast testing
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+# Disable ingress for basic testing
+ingress:
+  enabled: false
+
+# Basic service configuration
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 80
+
+# Disable external secrets for testing
+externalSecrets:
+  create: false
+  envSecretNames: []
+  fileSecrets: []
+
+# Simple probes for nginx
+livenessProbe:
+  httpGet:
+    path: /
+    port: 80
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /
+    port: 80
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# Minimal security context
+securityContext:
+  fsGroup: 101  # nginx group
+
+# No extra containers for basic testing
+extraInitContainers: []
+extraSidecars: []

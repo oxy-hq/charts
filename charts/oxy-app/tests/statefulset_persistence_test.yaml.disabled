@@ -1,0 +1,313 @@
+suite: statefulset persistence tests
+templates:
+  - statefulset.yaml
+
+tests:
+  # Persistence enabled scenarios
+  - it: should create VolumeClaimTemplate when persistence enabled
+    set:
+      persistence:
+        enabled: true
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.volumeClaimTemplates | length
+          value: 1
+      - equal:
+          path: spec.volumeClaimTemplates[0].metadata.name
+          value: workspace
+
+  - it: should configure VolumeClaimTemplate with correct specs
+    set:
+      persistence:
+        enabled: true
+        size: "100Gi"
+        storageClassName: "premium-ssd"
+        accessMode: "ReadWriteOnce"
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: "100Gi"
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.storageClassName
+          value: "premium-ssd"
+      - contains:
+          path: spec.volumeClaimTemplates[0].spec.accessModes
+          content: "ReadWriteOnce"
+
+  - it: should support custom PVC annotations and labels
+    set:
+      persistence:
+        enabled: true
+        annotations:
+          backup.policy: "daily"
+          retention.days: "30"
+        labels:
+          tier: "storage"
+          environment: "production"
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].metadata.annotations["backup.policy"]
+          value: "daily"
+      - equal:
+          path: spec.volumeClaimTemplates[0].metadata.annotations["retention.days"]
+          value: "30"
+      - equal:
+          path: spec.volumeClaimTemplates[0].metadata.labels.tier
+          value: "storage"
+      - equal:
+          path: spec.volumeClaimTemplates[0].metadata.labels.environment
+          value: "production"
+
+  - it: should configure volume mode correctly
+    set:
+      persistence:
+        enabled: true
+        volumeMode: "Block"
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.volumeMode
+          value: "Block"
+
+  - it: should support PV selector
+    set:
+      persistence:
+        enabled: true
+        selector:
+          matchLabels:
+            disk-type: "ssd"
+            zone: "us-west-2a"
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.selector.matchLabels["disk-type"]
+          value: "ssd"
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.selector.matchLabels.zone
+          value: "us-west-2a"
+
+  # Persistence disabled scenarios
+  - it: should not create VolumeClaimTemplate when persistence disabled
+    set:
+      persistence:
+        enabled: false
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - notExists:
+          path: spec.volumeClaimTemplates
+
+  - it: should use emptyDir volume when persistence disabled
+    set:
+      persistence:
+        enabled: false
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: workspace
+            emptyDir: {}
+
+  # Mount path configurations
+  - it: should mount volume at correct path
+    set:
+      persistence:
+        enabled: true
+        mountPath: "/custom/mount/path"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: workspace
+            mountPath: "/custom/mount/path"
+
+  - it: should configure subPath when folder specified
+    set:
+      persistence:
+        enabled: true
+        mountPath: "/workspace"
+        folder: "app_data"
+      env:
+        OXY_STATE_DIR: "/workspace/app_data"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: workspace
+            mountPath: "/workspace"
+
+  # Storage class variations
+  - it: should handle default storage class
+    set:
+      persistence:
+        enabled: true
+        storageClassName: ""
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.storageClassName
+          value: ""
+
+  - it: should handle dynamic storage classes
+    set:
+      persistence:
+        enabled: true
+        storageClassName: "gp3-encrypted"
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.storageClassName
+          value: "gp3-encrypted"
+
+  # Multiple access modes
+  - it: should support ReadWriteMany access mode
+    set:
+      persistence:
+        enabled: true
+        accessMode: "ReadWriteMany"
+    asserts:
+      - contains:
+          path: spec.volumeClaimTemplates[0].spec.accessModes
+          content: "ReadWriteMany"
+
+  - it: should support ReadOnlyMany access mode
+    set:
+      persistence:
+        enabled: true
+        accessMode: "ReadOnlyMany"
+    asserts:
+      - contains:
+          path: spec.volumeClaimTemplates[0].spec.accessModes
+          content: "ReadOnlyMany"
+
+  # Replica scaling with persistence
+  - it: should create separate PVCs for each replica when scaled
+    set:
+      persistence:
+        enabled: true
+      app:
+        replicaCount: 3
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 3
+      - equal:
+          path: spec.volumeClaimTemplates | length
+          value: 1
+      # StatefulSet will create workspace-{statefulset-name}-0, workspace-{statefulset-name}-1, etc.
+
+  # Persistence with different storage sizes
+  - it: should handle large storage requests
+    set:
+      persistence:
+        enabled: true
+        size: "10Ti"
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: "10Ti"
+
+  - it: should handle small storage requests
+    set:
+      persistence:
+        enabled: true
+        size: "512Mi"
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: "512Mi"
+
+  # Environment variable configuration with persistence
+  - it: should correctly configure OXY_STATE_DIR with persistence
+    set:
+      persistence:
+        enabled: true
+        mountPath: "/data"
+        folder: "state"
+      env:
+        OXY_STATE_DIR: "/data/state"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_STATE_DIR
+            value: "/data/state"
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: workspace
+            mountPath: "/data"
+
+  # Security implications with persistence
+  - it: should maintain consistent ownership with fsGroup
+    set:
+      persistence:
+        enabled: true
+      securityContext:
+        fsGroup: 2000
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 2000
+
+  # Persistence with init containers
+  - it: should share persistent volume with init containers
+    set:
+      persistence:
+        enabled: true
+      extraInitContainers:
+        - name: setup-data
+          image: busybox:1.36
+          command: ["sh", "-c", "mkdir -p /workspace/app_data"]
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers | length
+          value: 1
+      - contains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: workspace
+            mountPath: /workspace
+
+  # Persistence with sidecars
+  - it: should share persistent volume with sidecar containers
+    set:
+      persistence:
+        enabled: true
+      extraSidecars:
+        - name: log-collector
+          image: fluent/fluent-bit:2.0
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+              readOnly: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers | length
+          value: 2
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          content:
+            name: workspace
+            mountPath: /workspace
+            readOnly: true
+
+  # Error conditions
+  - it: should fail with invalid storage size
+    set:
+      persistence:
+        enabled: true
+        size: "invalid-size"
+    asserts:
+      - failedTemplate:
+          errorMessage: "invalid storage size format"
+
+  - it: should fail with invalid access mode
+    set:
+      persistence:
+        enabled: true
+        accessMode: "InvalidMode"
+    asserts:
+      - failedTemplate:
+          errorMessage: "invalid access mode"

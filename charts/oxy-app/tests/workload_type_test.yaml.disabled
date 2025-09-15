@@ -1,0 +1,305 @@
+suite: workload type selection tests
+templates:
+  - statefulset.yaml
+  - deployment.yaml
+
+tests:
+  # StatefulSet creation conditions
+  - it: should create StatefulSet when persistence is enabled
+    set:
+      persistence:
+        enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME
+
+  - it: should create StatefulSet when git sync is enabled
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      persistence:
+        enabled: true  # Required when git sync is enabled
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: StatefulSet
+
+  - it: should create StatefulSet when both persistence and git sync enabled
+    set:
+      persistence:
+        enabled: true
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: StatefulSet
+
+  # Deployment creation conditions (not implemented in current chart, but testing logic)
+  - it: should prefer StatefulSet over Deployment when persistence enabled
+    set:
+      persistence:
+        enabled: true
+    templates:
+      - statefulset.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: StatefulSet
+
+  - it: should not create Deployment when StatefulSet conditions are met
+    set:
+      persistence:
+        enabled: true
+    templates:
+      - deployment.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # StatefulSet specific configurations
+  - it: should configure StatefulSet service name correctly
+    set:
+      persistence:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.serviceName
+          value: RELEASE-NAME-headless
+
+  - it: should use headless service with StatefulSet
+    set:
+      persistence:
+        enabled: true
+      headlessService:
+        enabled: true
+    templates:
+      - statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.serviceName
+          value: RELEASE-NAME-headless
+
+  - it: should handle custom headless service name
+    set:
+      persistence:
+        enabled: true
+      headlessService:
+        enabled: true
+        name: "custom-headless"
+    asserts:
+      - equal:
+          path: spec.serviceName
+          value: "custom-headless"
+
+  # Replica behavior differences
+  - it: should support StatefulSet replica scaling
+    set:
+      persistence:
+        enabled: true
+      app:
+        replicaCount: 5
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 5
+
+  - it: should create ordered pod names with StatefulSet
+    set:
+      persistence:
+        enabled: true
+      app:
+        replicaCount: 3
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 3
+      # StatefulSet will create pods: {name}-0, {name}-1, {name}-2
+
+  # Update strategy differences
+  - it: should use RollingUpdate by default for StatefulSet
+    set:
+      persistence:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.updateStrategy.type
+          value: "RollingUpdate"
+
+  - it: should support custom update strategy for StatefulSet
+    set:
+      persistence:
+        enabled: true
+      updateStrategy:
+        type: "OnDelete"
+    asserts:
+      - equal:
+          path: spec.updateStrategy.type
+          value: "OnDelete"
+
+  - it: should configure rolling update partition
+    set:
+      persistence:
+        enabled: true
+      updateStrategy:
+        type: "RollingUpdate"
+        rollingUpdate:
+          partition: 2
+    asserts:
+      - equal:
+          path: spec.updateStrategy.rollingUpdate.partition
+          value: 2
+
+  # Pod management policy
+  - it: should use OrderedReady pod management by default
+    set:
+      persistence:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.podManagementPolicy
+          value: "OrderedReady"
+
+  - it: should support Parallel pod management
+    set:
+      persistence:
+        enabled: true
+      podManagementPolicy: "Parallel"
+    asserts:
+      - equal:
+          path: spec.podManagementPolicy
+          value: "Parallel"
+
+  # Volume claim template behavior
+  - it: should include volume claim templates in StatefulSet
+    set:
+      persistence:
+        enabled: true
+        size: "50Gi"
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates | length
+          value: 1
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: "50Gi"
+
+  - it: should not include volume claim templates when persistence disabled
+    set:
+      persistence:
+        enabled: false
+    asserts:
+      - notExists:
+          path: spec.volumeClaimTemplates
+
+  # StatefulSet selector requirements
+  - it: should have stable selector labels
+    set:
+      persistence:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels.app
+          value: RELEASE-NAME
+      - equal:
+          path: spec.selector.matchLabels.release
+          value: RELEASE-NAME
+
+  - it: should maintain selector consistency with template labels
+    set:
+      persistence:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels.app
+          value: RELEASE-NAME
+      - equal:
+          path: spec.template.metadata.labels.app
+          value: RELEASE-NAME
+
+  # StatefulSet with complex scenarios
+  - it: should handle StatefulSet with all features
+    set:
+      persistence:
+        enabled: true
+        size: "100Gi"
+        storageClassName: "fast-ssd"
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      app:
+        replicaCount: 3
+      extraSidecars:
+        - name: monitoring
+          image: prom/node-exporter:v1.6.0
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.replicas
+          value: 3
+      - equal:
+          path: spec.template.spec.containers | length
+          value: 3  # main + git-sync + monitoring
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: "100Gi"
+
+  # Resource naming consistency
+  - it: should use consistent naming across StatefulSet resources
+    set:
+      persistence:
+        enabled: true
+      fullnameOverride: "custom-oxy-app"
+    asserts:
+      - equal:
+          path: metadata.name
+          value: "custom-oxy-app"
+      - equal:
+          path: spec.serviceName
+          value: "custom-oxy-app-headless"
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: "custom-oxy-app"
+
+  # Persistence requirements validation
+  - it: should enforce persistence when git sync enabled
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      persistence:
+        enabled: false
+    asserts:
+      - failedTemplate:
+          errorMessage: "persistence.enabled must be true when gitSync.enabled is true"
+
+  # StatefulSet revision history
+  - it: should set default revision history limit
+    set:
+      persistence:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.revisionHistoryLimit
+          value: 10
+
+  - it: should allow custom revision history limit
+    set:
+      persistence:
+        enabled: true
+      revisionHistoryLimit: 5
+    asserts:
+      - equal:
+          path: spec.revisionHistoryLimit
+          value: 5

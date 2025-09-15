@@ -6,7 +6,10 @@
       "Bash(helm plugin:*)",
       "Bash(helm template:*)",
       "Bash(ct lint:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(chmod:*)",
+      "Bash(find:*)",
+      "Bash(xargs:*)"
     ],
     "deny": [],
     "ask": []

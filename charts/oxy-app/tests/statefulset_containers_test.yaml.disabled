@@ -1,0 +1,356 @@
+suite: statefulset extra containers tests
+templates:
+  - statefulset.yaml
+
+tests:
+  # Init containers
+  - it: should not have init containers by default
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - notExists:
+          path: spec.template.spec.initContainers
+
+  - it: should add custom init containers
+    set:
+      extraInitContainers:
+        - name: data-setup
+          image: busybox:1.36
+          command: ["sh", "-c", "echo 'Setting up data' && mkdir -p /workspace/data"]
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+        - name: config-init
+          image: alpine:3.18
+          command: ["sh", "-c", "echo 'Initializing config'"]
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers | length
+          value: 2
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: "data-setup"
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: "busybox:1.36"
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: "config-init"
+
+  - it: should configure init container volume mounts
+    set:
+      extraInitContainers:
+        - name: volume-setup
+          image: busybox:1.36
+          volumeMounts:
+            - name: workspace
+              mountPath: /data
+            - name: temp-volume
+              mountPath: /tmp/init
+      persistence:
+        enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: workspace
+            mountPath: /data
+
+  - it: should support init containers with resource limits
+    set:
+      extraInitContainers:
+        - name: resource-limited-init
+          image: busybox:1.36
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+            limits:
+              cpu: "100m"
+              memory: "64Mi"
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].resources.requests.cpu
+          value: "50m"
+      - equal:
+          path: spec.template.spec.initContainers[0].resources.limits.memory
+          value: "64Mi"
+
+  # Sidecar containers
+  - it: should have only main container by default
+    asserts:
+      - equal:
+          path: spec.template.spec.containers | length
+          value: 1
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: RELEASE-NAME
+
+  - it: should add sidecar containers
+    set:
+      extraSidecars:
+        - name: log-forwarder
+          image: fluent/fluent-bit:2.0
+          command: ["fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf"]
+        - name: metrics-collector
+          image: prom/node-exporter:v1.6.0
+          ports:
+            - containerPort: 9100
+              name: metrics
+    asserts:
+      - equal:
+          path: spec.template.spec.containers | length
+          value: 3
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: RELEASE-NAME
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: "log-forwarder"
+      - equal:
+          path: spec.template.spec.containers[2].name
+          value: "metrics-collector"
+
+  - it: should configure sidecar container ports
+    set:
+      extraSidecars:
+        - name: metrics-sidecar
+          image: prom/node-exporter:v1.6.0
+          ports:
+            - containerPort: 9100
+              name: metrics
+              protocol: TCP
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].ports
+          content:
+            containerPort: 9100
+            name: metrics
+            protocol: TCP
+
+  - it: should configure sidecar volume mounts
+    set:
+      extraSidecars:
+        - name: file-processor
+          image: busybox:1.36
+          volumeMounts:
+            - name: workspace
+              mountPath: /shared-data
+              readOnly: true
+      persistence:
+        enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          content:
+            name: workspace
+            mountPath: /shared-data
+            readOnly: true
+
+  - it: should support sidecar environment variables
+    set:
+      extraSidecars:
+        - name: env-sidecar
+          image: busybox:1.36
+          env:
+            - name: SIDECAR_MODE
+              value: "production"
+            - name: LOG_LEVEL
+              value: "info"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: SIDECAR_MODE
+            value: "production"
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: LOG_LEVEL
+            value: "info"
+
+  # Combined scenarios with git sync
+  - it: should work with git sync and extra containers
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      extraSidecars:
+        - name: monitoring-agent
+          image: datadog/agent:7
+    asserts:
+      - equal:
+          path: spec.template.spec.containers | length
+          value: 3
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: RELEASE-NAME
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: git-sync
+      - equal:
+          path: spec.template.spec.containers[2].name
+          value: "monitoring-agent"
+
+  - it: should work with git sync and init containers
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      extraInitContainers:
+        - name: git-setup
+          image: busybox:1.36
+          command: ["sh", "-c", "mkdir -p /workspace/git"]
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers | length
+          value: 1
+      - equal:
+          path: spec.template.spec.containers | length
+          value: 2
+
+  # Resource sharing between containers
+  - it: should share workspace volume between all containers
+    set:
+      extraSidecars:
+        - name: data-processor
+          image: busybox:1.36
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+      extraInitContainers:
+        - name: data-init
+          image: busybox:1.36
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+      persistence:
+        enabled: true
+    asserts:
+      # Main container
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: workspace
+            mountPath: /workspace
+      # Sidecar container
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          content:
+            name: workspace
+            mountPath: /workspace
+      # Init container
+      - contains:
+          path: spec.template.spec.initContainers[0].volumeMounts
+          content:
+            name: workspace
+            mountPath: /workspace
+
+  # Security context inheritance
+  - it: should apply pod security context to all containers
+    set:
+      securityContext:
+        fsGroup: 2000
+        runAsUser: 1500
+        runAsNonRoot: true
+      extraSidecars:
+        - name: security-test
+          image: busybox:1.36
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 2000
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 1500
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+
+  # Service account access
+  - it: should use same service account for all containers
+    set:
+      serviceAccount:
+        name: "custom-service-account"
+      extraSidecars:
+        - name: k8s-client
+          image: bitnami/kubectl:1.28
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: "custom-service-account"
+
+  # Complex sidecar with all features
+  - it: should configure complex sidecar with all features
+    set:
+      extraSidecars:
+        - name: full-featured-sidecar
+          image: "custom/sidecar:v1.0.0"
+          imagePullPolicy: "Always"
+          command: ["/app/sidecar"]
+          args: ["--config", "/etc/sidecar/config.yaml"]
+          ports:
+            - containerPort: 8080
+              name: http
+            - containerPort: 9090
+              name: metrics
+          env:
+            - name: SIDECAR_CONFIG
+              value: "production"
+          volumeMounts:
+            - name: workspace
+              mountPath: /data
+            - name: config-volume
+              mountPath: /etc/sidecar
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 10
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].image
+          value: "custom/sidecar:v1.0.0"
+      - equal:
+          path: spec.template.spec.containers[1].imagePullPolicy
+          value: "Always"
+      - contains:
+          path: spec.template.spec.containers[1].command
+          content: "/app/sidecar"
+      - contains:
+          path: spec.template.spec.containers[1].args
+          content: "--config"
+      - equal:
+          path: spec.template.spec.containers[1].resources.requests.cpu
+          value: "100m"
+      - equal:
+          path: spec.template.spec.containers[1].livenessProbe.httpGet.path
+          value: "/health"
+
+  # Error conditions
+  - it: should handle empty init containers list
+    set:
+      extraInitContainers: []
+    asserts:
+      - notExists:
+          path: spec.template.spec.initContainers
+
+  - it: should handle empty sidecars list
+    set:
+      extraSidecars: []
+    asserts:
+      - equal:
+          path: spec.template.spec.containers | length
+          value: 1
