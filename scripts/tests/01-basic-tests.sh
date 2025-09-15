@@ -61,7 +61,7 @@ test_persistence_deployment() {
     # Install chart
     helm_install_with_retry "$release_name" "$CHART_PATH" "$values_file" "10m"
 
-    # Wait for StatefulSet
+    # Wait for StatefulSet (default timeout should handle PVC creation)
     wait_for_statefulset "oxy-test-persist" 1
 
     # Verify StatefulSet exists

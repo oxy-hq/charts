@@ -128,7 +128,7 @@ livenessProbe:
         value: "http"
       - name: "X-Forwarded-For"
         value: "127.0.0.1"
-  initialDelaySeconds: 30
+  initialDelaySeconds: 15
   periodSeconds: 10
   timeoutSeconds: 5
   failureThreshold: 3

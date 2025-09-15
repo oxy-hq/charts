@@ -132,7 +132,7 @@ livenessProbe:
     httpHeaders:
       - name: "X-Health-Check"
         value: "liveness"
-  initialDelaySeconds: 30
+  initialDelaySeconds: 15
   periodSeconds: 10
   timeoutSeconds: 5
   failureThreshold: 3

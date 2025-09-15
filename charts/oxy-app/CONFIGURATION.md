@@ -1,6 +1,6 @@
 # oxy-app
 
-![Version: 0.1.11](https://img.shields.io/badge/Version-0.1.11-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.2.28](https://img.shields.io/badge/AppVersion-0.2.28-informational?style=flat-square)
+![Version: 0.1.14](https://img.shields.io/badge/Version-0.1.14-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.2.28](https://img.shields.io/badge/AppVersion-0.2.28-informational?style=flat-square)
 
 A Helm chart for Oxy application deployment on kubernetes
 
@@ -80,7 +80,7 @@ A Helm chart for Oxy application deployment on kubernetes
 | livenessProbe.failureThreshold | int | `3` |  |
 | livenessProbe.httpGet.path | string | `"/"` |  |
 | livenessProbe.httpGet.port | int | `3000` |  |
-| livenessProbe.initialDelaySeconds | int | `60` |  |
+| livenessProbe.initialDelaySeconds | int | `15` |  |
 | livenessProbe.periodSeconds | int | `30` |  |
 | livenessProbe.timeoutSeconds | int | `10` |  |
 | name | string | `"oxy-app"` |  |
@@ -93,12 +93,12 @@ A Helm chart for Oxy application deployment on kubernetes
 | persistence.mountPath | string | `"/workspace"` |  |
 | persistence.selector | object | `{}` |  |
 | persistence.size | string | `"20Gi"` |  |
-| persistence.storageClassName | string | `"gp3"` |  |
+| persistence.storageClassName | string | `""` |  |
 | persistence.volumeMode | string | `"Filesystem"` |  |
 | readinessProbe.failureThreshold | int | `3` |  |
 | readinessProbe.httpGet.path | string | `"/"` |  |
 | readinessProbe.httpGet.port | int | `3000` |  |
-| readinessProbe.initialDelaySeconds | int | `30` |  |
+| readinessProbe.initialDelaySeconds | int | `15` |  |
 | readinessProbe.periodSeconds | int | `10` |  |
 | readinessProbe.timeoutSeconds | int | `5` |  |
 | resources.limits.cpu | string | `"1000m"` |  |

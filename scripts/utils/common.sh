@@ -37,21 +37,21 @@ is_ci() {
     [[ "${CI:-false}" == "true" ]]
 }
 
-# Wait for deployment to be ready
+# Wait for deployment to be ready (fast timeout for CI)
 wait_for_deployment() {
     local instance_name="$1"
-    local timeout="${2:-300s}"
+    local timeout="${2:-60s}"  # Default: 1 minute (reduced from 5 minutes)
     local namespace="${3:-default}"
 
     log_info "Waiting for deployment $instance_name to be ready (timeout: $timeout)"
     kubectl wait --for=condition=ready pod -l "app.kubernetes.io/instance=$instance_name" -n "$namespace" --timeout="$timeout"
 }
 
-# Wait for statefulset to be ready
+# Wait for statefulset to be ready (allows time for PVC creation and binding)
 wait_for_statefulset() {
     local statefulset_name="$1"
     local expected_replicas="${2:-1}"
-    local timeout="${3:-600}"
+    local timeout="${3:-180}"  # Default: 3 minutes (PVC creation ~60s + pod startup ~60s + buffer)
     local namespace="${4:-default}"
 
     log_info "Waiting for StatefulSet $statefulset_name to have $expected_replicas ready replicas"
@@ -88,9 +88,9 @@ test_service_connectivity() {
 
     # Cleanup function
     cleanup_port_forward() {
-        if kill -0 $pf_pid 2>/dev/null; then
-            kill $pf_pid
-            wait $pf_pid 2>/dev/null || true
+        if [[ -n "${pf_pid:-}" ]] && kill -0 "$pf_pid" 2>/dev/null; then
+            kill "$pf_pid"
+            wait "$pf_pid" 2>/dev/null || true
         fi
     }
 
@@ -125,12 +125,12 @@ test_service_connectivity() {
     fi
 }
 
-# Install helm chart with retry
+# Install helm chart with retry (fast timeout for CI)
 helm_install_with_retry() {
     local release_name="$1"
     local chart_path="$2"
     local values_file="$3"
-    local timeout="${4:-5m}"
+    local timeout="${4:-2m}"  # Default: 2 minutes (reduced from 5 minutes)
     local retries="${5:-3}"
     local namespace="${6:-default}"
 
@@ -153,10 +153,10 @@ helm_install_with_retry() {
     return 1
 }
 
-# Uninstall helm chart with cleanup
+# Uninstall helm chart with cleanup (fast timeout for CI)
 helm_uninstall_with_cleanup() {
     local release_name="$1"
-    local timeout="${2:-5m}"
+    local timeout="${2:-2m}"  # Default: 2 minutes (reduced from 5 minutes)
     local namespace="${3:-default}"
 
     log_info "Uninstalling Helm release: $release_name"
