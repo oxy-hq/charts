@@ -306,9 +306,10 @@ setup_test_environment() {
 
 # Update test values to use correct storage class for kind
 update_test_values_for_kind() {
+    local chart_path="${1:-${CHART_PATH:-./charts/oxy-app}}"
     log_info "Updating test values to use correct storage class for kind"
 
-    local values_dir="${CHART_PATH}/test-values"
+    local values_dir="${chart_path}/test-values"
     local storage_class="standard"  # kind's default storage class
 
     # Find all values files that might use persistence
