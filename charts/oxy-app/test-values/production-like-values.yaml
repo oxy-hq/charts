@@ -25,7 +25,6 @@ service:
 # Environment variables for testing
 env:
   OXY_STATE_DIR: "/workspace/oxy_data"
-  OXY_DATABASE_URL: "postgresql://testuser:testpass@test-postgres:5432/testdb"
 
 # Resource configuration similar to production but smaller for CI
 resources:

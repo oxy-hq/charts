@@ -87,17 +87,18 @@ setup_test_environment() {
 
 test_default_deployment() {
     log_info "Testing default deployment..."
-    
+    local test_start=$SECONDS
+
     helm install test-default "$CHART_PATH" \
         -f "$CHART_PATH/test-values/default-values.yaml" \
         --namespace "$NAMESPACE" \
-        --wait --timeout=5m
+        --wait --timeout=3m
     
-    # Wait for pods to be ready
+    # Wait for pods to be ready (60s readiness + 30s buffer)
     kubectl wait --for=condition=ready pod \
         -l app.kubernetes.io/instance=test-default \
         -n "$NAMESPACE" \
-        --timeout=300s
+        --timeout=90s
     
     # Test service connectivity
     log_info "Testing service connectivity..."
@@ -117,8 +118,9 @@ test_default_deployment() {
     
     # Cleanup this test
     helm uninstall test-default -n "$NAMESPACE" --wait
-    
-    log_info "Default deployment test passed!"
+
+    local test_duration=$((SECONDS - test_start))
+    log_info "Default deployment test passed in ${test_duration}s!"
 }
 
 test_ingress_deployment() {
@@ -127,13 +129,13 @@ test_ingress_deployment() {
     helm install test-ingress "$CHART_PATH" \
         -f "$CHART_PATH/test-values/with-ingress-values.yaml" \
         --namespace "$NAMESPACE" \
-        --wait --timeout=5m
+        --wait --timeout=3m
     
-    # Wait for pods to be ready
+    # Wait for pods to be ready (60s readiness + 30s buffer)
     kubectl wait --for=condition=ready pod \
         -l app.kubernetes.io/instance=test-ingress \
         -n "$NAMESPACE" \
-        --timeout=300s
+        --timeout=90s
     
     # Verify ingress is created
     if kubectl get ingress oxy-test-ingress -n "$NAMESPACE" -o jsonpath='{.spec.rules[0].host}' | grep -q "test-oxy-app.local"; then
@@ -155,18 +157,19 @@ test_postgres_deployment() {
     helm install test-postgres "$CHART_PATH" \
         -f "$CHART_PATH/test-values/with-postgres-values.yaml" \
         --namespace "$NAMESPACE" \
-        --wait --timeout=10m
+        --wait --timeout=5m
     
     # Wait for all pods to be ready (app + postgres)
+    # PostgreSQL: ~90s startup + app: 60s readiness + 60s buffer = 210s
     kubectl wait --for=condition=ready pod \
         -l app.kubernetes.io/instance=test-postgres \
         -n "$NAMESPACE" \
-        --timeout=600s
-    
+        --timeout=210s
+
     kubectl wait --for=condition=ready pod \
         -l app.kubernetes.io/name=postgresql \
         -n "$NAMESPACE" \
-        --timeout=300s
+        --timeout=120s
     
     # Test database connectivity
     log_info "Testing database connectivity..."
@@ -191,19 +194,19 @@ test_upgrade_scenarios() {
     helm install upgrade-test "$CHART_PATH" \
         -f "$CHART_PATH/test-values/default-values.yaml" \
         --namespace "$NAMESPACE" \
-        --wait --timeout=5m
-    
+        --wait --timeout=3m
+
     # Upgrade with ingress enabled
     helm upgrade upgrade-test "$CHART_PATH" \
         -f "$CHART_PATH/test-values/with-ingress-values.yaml" \
         --namespace "$NAMESPACE" \
-        --wait --timeout=5m
+        --wait --timeout=3m
     
     # Verify upgrade worked
     kubectl wait --for=condition=ready pod \
         -l app.kubernetes.io/instance=upgrade-test \
         -n "$NAMESPACE" \
-        --timeout=300s
+        --timeout=90s
     
     kubectl get ingress -l app.kubernetes.io/instance=upgrade-test -n "$NAMESPACE"
     
@@ -213,7 +216,7 @@ test_upgrade_scenarios() {
     kubectl wait --for=condition=ready pod \
         -l app.kubernetes.io/instance=upgrade-test \
         -n "$NAMESPACE" \
-        --timeout=300s
+        --timeout=90s
     
     # Verify ingress is removed after rollback
     if kubectl get ingress oxy-test-ingress -n "$NAMESPACE" >/dev/null 2>&1; then
@@ -233,13 +236,13 @@ test_production_like_deployment() {
     helm install test-production "$CHART_PATH" \
         -f "$CHART_PATH/test-values/production-like-values.yaml" \
         --namespace "$NAMESPACE" \
-        --wait --timeout=10m
+        --wait --timeout=3m
     
-    # Wait for pods to be ready
+    # Wait for pods to be ready (60s readiness + 30s buffer)
     kubectl wait --for=condition=ready pod \
         -l app.kubernetes.io/instance=test-production \
         -n "$NAMESPACE" \
-        --timeout=600s
+        --timeout=90s
     
     # Verify service account and annotations
     if kubectl get serviceaccount oxy-test-sa -n "$NAMESPACE" -o jsonpath='{.metadata.annotations.prometheus\.io/scrape}' | grep -q "true"; then
@@ -249,11 +252,11 @@ test_production_like_deployment() {
         return 1
     fi
     
-    # Verify PVC is created and bound
+    # Verify PVC is created and bound (PVC binding is usually fast ~30s)
     kubectl wait --for=condition=bound pvc \
         -l app.kubernetes.io/instance=test-production \
         -n "$NAMESPACE" \
-        --timeout=300s
+        --timeout=60s
     
     # Verify ingress configuration
     if kubectl get ingress oxy-test-prod -n "$NAMESPACE" -o jsonpath='{.spec.rules[0].host}' | grep -q "oxy-test-prod.local"; then
@@ -275,13 +278,13 @@ test_persistence_deployment() {
     helm install test-persist "$CHART_PATH" \
         -f "$CHART_PATH/test-values/with-persistence-values.yaml" \
         --namespace "$NAMESPACE" \
-        --wait --timeout=10m
+        --wait --timeout=3m
     
-    # Wait for StatefulSet to be ready
+    # Wait for StatefulSet to be ready (60s readiness + 30s buffer)
     kubectl wait --for=condition=ready pod \
         -l app.kubernetes.io/instance=test-persist \
         -n "$NAMESPACE" \
-        --timeout=600s
+        --timeout=90s
     
     # Verify StatefulSet is used
     if kubectl get statefulset oxy-test-persist -n "$NAMESPACE" >/dev/null 2>&1; then
@@ -313,13 +316,13 @@ test_gitsync_deployment() {
     helm install test-gitsync "$CHART_PATH" \
         -f "$CHART_PATH/test-values/with-gitsync-values.yaml" \
         --namespace "$NAMESPACE" \
-        --wait --timeout=10m
+        --wait --timeout=3m
     
-    # Wait for StatefulSet to be ready
+    # Wait for StatefulSet to be ready (60s readiness + 30s buffer)
     kubectl wait --for=condition=ready pod \
         -l app.kubernetes.io/instance=test-gitsync \
         -n "$NAMESPACE" \
-        --timeout=600s
+        --timeout=90s
     
     # Verify git sync sidecar is running
     if kubectl get pod oxy-test-gitsync-0 -n "$NAMESPACE" -o jsonpath='{.spec.containers[*].name}' | grep -q "git-sync"; then
@@ -347,10 +350,14 @@ test_gitsync_deployment() {
 
 main() {
     log_info "Starting Helm chart integration tests..."
-    
+
+    # Set global timeout for entire test suite (25 minutes)
+    SECONDS=0
+    GLOBAL_TIMEOUT=1500 # 25 minutes
+
     check_prerequisites
     setup_test_environment
-    
+
     # Run all tests
     test_default_deployment
     test_ingress_deployment
@@ -359,8 +366,13 @@ main() {
     test_persistence_deployment
     test_gitsync_deployment
     test_upgrade_scenarios
-    
-    log_info "All integration tests passed successfully! 🎉"
+
+    local elapsed=$SECONDS
+    log_info "All integration tests passed successfully in ${elapsed}s! 🎉"
+
+    if [ $elapsed -gt $GLOBAL_TIMEOUT ]; then
+        log_warn "Tests took longer than expected (${elapsed}s > ${GLOBAL_TIMEOUT}s)"
+    fi
 }
 
 # Show usage if help is requested
