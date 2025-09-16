@@ -267,8 +267,14 @@ test_default_deployment() {
     log_info "Testing service connectivity..."
     kubectl port-forward service/oxy-test-default 8080:80 -n "$NAMESPACE" &
     PORT_FORWARD_PID=$!
-    sleep 5
 
+    # Wait for port-forward to be ready (max 15s)
+    for i in {1..30}; do
+        if curl -fs http://localhost:8080/ >/dev/null 2>&1; then
+            break
+        fi
+        sleep 0.5
+    done
     if curl -f http://localhost:8080/ >/dev/null 2>&1; then
         log_info "Default deployment health check passed!"
     else
