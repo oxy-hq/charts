@@ -76,6 +76,7 @@ The chart includes comprehensive unit tests covering all core functionality:
 - **Ingress tests** - Routing, TLS, annotations, multiple hosts
 - **ServiceAccount tests** - RBAC, cloud provider annotations (AWS IRSA, GCP Workload Identity, Azure)
 - **ConfigMap tests** - Configuration management and multiple file formats
+- **Consistency tests** - Cross-template validation ensuring naming consistency, label alignment, and service references
 
 **Running unit tests:**
 ```bash

@@ -1,0 +1,216 @@
+suite: cross-template consistency tests
+templates:
+  - service.yaml
+  - ingress.yaml
+  - statefulset.yaml
+  - serviceaccount.yaml
+
+tests:
+  # ==========================
+  # Service and Ingress Consistency
+  # ==========================
+
+  # Test default naming consistency
+  - it: should have matching service names between service and ingress (default)
+    set:
+      ingress:
+        enabled: true
+        hosts:
+          - host: test.example.com
+    asserts:
+      # Service should use fullname
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: RELEASE-NAME-oxy-app
+        template: ingress.yaml
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-oxy-app
+        template: service.yaml
+
+  # Test custom service name override consistency
+  - it: should have matching service names when service.name is overridden
+    set:
+      service:
+        name: custom-service-name
+      ingress:
+        enabled: true
+        hosts:
+          - host: test.example.com
+    asserts:
+      # Both should use the custom name
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: custom-service-name
+        template: ingress.yaml
+      - equal:
+          path: metadata.name
+          value: custom-service-name
+        template: service.yaml
+
+  # Test fullnameOverride consistency
+  - it: should have matching service names with fullnameOverride
+    set:
+      fullnameOverride: totally-custom
+      ingress:
+        enabled: true
+        hosts:
+          - host: test.example.com
+    asserts:
+      # Both should use the override
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: totally-custom
+        template: ingress.yaml
+      - equal:
+          path: metadata.name
+          value: totally-custom
+        template: service.yaml
+
+  # Test port consistency between service and ingress
+  - it: should use consistent ports between service and ingress
+    set:
+      service:
+        port: 8080
+      ingress:
+        enabled: true
+        hosts:
+          - host: test.example.com
+    asserts:
+      - equal:
+          path: spec.ports[0].port
+          value: 8080
+        template: service.yaml
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.number
+          value: 8080
+        template: ingress.yaml
+
+  # ==========================
+  # StatefulSet and Service Consistency
+  # ==========================
+
+  # Test service account name consistency
+  - it: should have matching service account names between statefulset and serviceaccount
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: RELEASE-NAME-oxy-app
+        template: statefulset.yaml
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-oxy-app
+        template: serviceaccount.yaml
+
+  # Test custom service account name consistency
+  - it: should have matching custom service account names
+    set:
+      serviceAccount:
+        create: true
+        name: custom-sa
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: custom-sa
+        template: statefulset.yaml
+      - equal:
+          path: metadata.name
+          value: custom-sa
+        template: serviceaccount.yaml
+
+  # Test selector labels consistency between service and statefulset
+  - it: should have matching selector labels
+    asserts:
+      - equal:
+          path: spec.selector["app.kubernetes.io/name"]
+          value: oxy-app
+        template: service.yaml
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          value: oxy-app
+        template: statefulset.yaml
+      - equal:
+          path: spec.selector["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+        template: service.yaml
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+        template: statefulset.yaml
+
+  # ==========================
+  # Naming Convention Consistency
+  # ==========================
+
+  # Test that all resources follow consistent naming
+  - it: should use consistent fullname across all resources
+    set:
+      fullnameOverride: my-custom-app
+    asserts:
+      - equal:
+          path: metadata.name
+          value: my-custom-app
+        template: service.yaml
+      - equal:
+          path: metadata.name
+          value: my-custom-app
+        template: statefulset.yaml
+      - equal:
+          path: metadata.name
+          value: my-custom-app
+        template: serviceaccount.yaml
+
+  # Test nameOverride consistency
+  - it: should use consistent nameOverride pattern
+    set:
+      nameOverride: custom-name
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-custom-name
+        template: service.yaml
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-custom-name
+        template: statefulset.yaml
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-custom-name
+        template: serviceaccount.yaml
+
+  # ==========================
+  # Label Consistency Tests
+  # ==========================
+
+  # Test standard labels are consistent across resources
+  - it: should have consistent standard labels
+    asserts:
+      # Check service labels
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: oxy-app
+        template: service.yaml
+      - equal:
+          path: metadata.labels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+        template: service.yaml
+
+      # Check statefulset labels
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: oxy-app
+        template: statefulset.yaml
+      - equal:
+          path: metadata.labels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+        template: statefulset.yaml
+
+      # Check serviceaccount labels
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: oxy-app
+        template: serviceaccount.yaml
+      - equal:
+          path: metadata.labels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+        template: serviceaccount.yaml
