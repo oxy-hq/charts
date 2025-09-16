@@ -523,13 +523,13 @@ tests:
         httpGet:
           path: /health
           port: 3000
-        initialDelaySeconds: 90
-        periodSeconds: 45
+        initialDelaySeconds: 10
+        periodSeconds: 30
       readinessProbe:
         httpGet:
           path: /ready
           port: 3000
-        initialDelaySeconds: 15
+        initialDelaySeconds: 10
         periodSeconds: 5
     asserts:
       - equal:
