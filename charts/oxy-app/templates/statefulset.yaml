@@ -45,7 +45,10 @@ spec:
           args:
             - |
               echo "Waiting for PostgreSQL to be ready..."
-              until pg_isready -h {{ .Release.Name }}-postgresql.{{ .Release.Namespace }}.svc.cluster.local -p 5432 -U {{ default .Values.database.postgres.postgresqlUsername .Values.postgresql.auth.username }}; do
+              until pg_isready \
+                -h {{ .Release.Name }}-postgresql.{{ .Release.Namespace }}.svc.cluster.local \
+                -p 5432 \
+                -U {{ default .Values.database.postgres.postgresqlUsername .Values.postgresql.auth.username }}; do
                 echo "PostgreSQL is not ready yet. Waiting 5 seconds..."
                 sleep 5
               done
