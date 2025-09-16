@@ -1,6 +1,6 @@
 # Integration test with production-like configuration
-nameOverride: "oxy-test-prod"
-fullnameOverride: "oxy-test-prod"
+nameOverride: "test-production"
+fullnameOverride: "test-production"
 
 app:
   image: "ghcr.io/oxy-hq/oxy"  # Use nginx for testing instead of real app
@@ -11,7 +11,7 @@ app:
 # Service account configuration
 serviceAccount:
   create: true
-  name: "oxy-test-sa"
+  name: "test-production-sa"
   annotations:
     "prometheus.io/scrape": "true"
     "prometheus.io/port": "8080"
@@ -63,7 +63,7 @@ ingress:
   annotations:
     "nginx.ingress.kubernetes.io/rewrite-target": "/"
   hosts:
-    - host: "oxy-test-prod.local"
+    - host: "test-production.local"
       paths:
         - path: "/"
           pathType: "Prefix"

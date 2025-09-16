@@ -138,6 +138,20 @@ debug_kind_storage() {
             if kubectl get storageclass standard >/dev/null 2>&1; then
                 log_info "Setting 'standard' StorageClass as default for Kind cluster"
                 kubectl patch storageclass standard -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}' || log_warn "Failed to set default StorageClass"
+            else
+                # Create a simple local-path StorageClass if none exists
+                log_warn "No StorageClass found, creating basic local-path StorageClass for Kind"
+                cat <<EOF | kubectl apply -f - || log_warn "Failed to create StorageClass"
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: standard
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: rancher.io/local-path
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Delete
+EOF
             fi
         fi
 
@@ -472,7 +486,7 @@ test_production_like_deployment() {
         --timeout=90s
 
     # Verify service account and annotations
-    if kubectl get serviceaccount oxy-test-sa -n "$NAMESPACE" -o jsonpath='{.metadata.annotations.prometheus\.io/scrape}' | grep -q "true"; then
+    if kubectl get serviceaccount test-production-sa -n "$NAMESPACE" -o jsonpath='{.metadata.annotations.prometheus\.io/scrape}' | grep -q "true"; then
         log_info "Service account annotations verified!"
     else
         log_error "Service account annotations verification failed!"
@@ -486,7 +500,7 @@ test_production_like_deployment() {
         --timeout=60s
 
     # Verify ingress configuration
-    if kubectl get ingress oxy-test-prod -n "$NAMESPACE" -o jsonpath='{.spec.rules[0].host}' | grep -q "oxy-test-prod.local"; then
+    if kubectl get ingress test-production -n "$NAMESPACE" -o jsonpath='{.spec.rules[0].host}' | grep -q "test-production.local"; then
         log_info "Ingress configuration verified!"
     else
         log_error "Ingress configuration failed!"
