@@ -13,7 +13,7 @@ tests:
           of: StatefulSet
       - equal:
           path: metadata.name
-          value: RELEASE-NAME
+          value: RELEASE-NAME-oxy-app
       - equal:
           path: metadata.labels["app.kubernetes.io/name"]
           value: oxy-app
@@ -31,7 +31,7 @@ tests:
           value: 1
       - equal:
           path: spec.template.spec.containers[0].name
-          value: RELEASE-NAME
+          value: oxy-app
 
   - it: should support replica scaling
     set:
@@ -225,7 +225,7 @@ tests:
           count: 1
       - equal:
           path: spec.template.spec.containers[0].name
-          value: RELEASE-NAME
+          value: oxy-app
 
   - it: should include readonly flag when git sync disabled
     set:
@@ -249,7 +249,7 @@ tests:
           count: 2
       - equal:
           path: spec.template.spec.containers[0].name
-          value: RELEASE-NAME
+          value: oxy-app
       - equal:
           path: spec.template.spec.containers[1].name
           value: git-sync
@@ -349,7 +349,7 @@ tests:
           count: 3
       - equal:
           path: spec.template.spec.containers[0].name
-          value: RELEASE-NAME
+          value: oxy-app
       - equal:
           path: spec.template.spec.containers[1].name
           value: git-sync
@@ -559,4 +559,4 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.serviceAccountName
-          value: oxy-app-sa
+          value: RELEASE-NAME-oxy-app

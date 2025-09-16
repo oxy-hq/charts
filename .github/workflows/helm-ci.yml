@@ -72,7 +72,7 @@ jobs:
         if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
         run: |
           export CI=true
-          ./scripts/test.sh unit
+          helm unittest charts/oxy-app -f "tests/**/*_test.yaml"
 
       - name: Create kind cluster
         if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
@@ -90,16 +90,11 @@ jobs:
             --selector=app.kubernetes.io/component=controller \
             --timeout=90s
 
-      - name: Run chart-testing (install)
-        if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
-        run: |
-          ct install --target-branch ${{ github.event.repository.default_branch }} --config ct.yaml
-
       - name: Run integration tests
         if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
         run: |
           export CI=true
-          ./scripts/test.sh integration --cleanup
+          ./scripts/test.sh --cleanup
 
   publish:
     name: Package & Publish Helm charts

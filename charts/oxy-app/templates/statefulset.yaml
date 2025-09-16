@@ -28,10 +28,9 @@ spec:
         {{- include "oxy-app.selectorLabels" . | nindent 8 }}
         version: v1
     spec:
-      {{- if .Values.serviceAccount.create }}
-      serviceAccountName: {{ .Values.serviceAccount.name | default (include "oxy-app.fullname" .) }}
-      {{- else if .Values.serviceAccount.name }}
-      serviceAccountName: {{ .Values.serviceAccount.name }}
+      {{- $sa := include "oxy-app.serviceAccountName" . }}
+      {{- if ne $sa "" }}
+      serviceAccountName: {{ $sa | quote }}
       {{- end }}
       securityContext:
         fsGroup: {{ .Values.securityContext.fsGroup }}

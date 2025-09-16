@@ -14,7 +14,8 @@
       "Bash(kubectl get all:*)",
       "Bash(kubectl get pods:*)",
       "Bash(helm :*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(./scripts/test.sh:*)"
     ],
     "deny": [],
     "ask": []

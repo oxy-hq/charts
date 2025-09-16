@@ -30,9 +30,12 @@ tests:
           of: ConfigMap
       - equal:
           path: metadata.name
-          value: RELEASE-NAME-config
+          value: RELEASE-NAME-oxy-app-config
       - equal:
-          path: metadata.labels.app
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: oxy-app
+      - equal:
+          path: metadata.labels["app.kubernetes.io/instance"]
           value: RELEASE-NAME
       - equal:
           path: data["config.yaml"]

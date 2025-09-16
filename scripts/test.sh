@@ -1,11 +1,22 @@
 #!/bin/bash
 set -e
 
-# Comprehensive Helm Chart Test Script
-# Single entry point for all testing needs
+# Integration Test Script for Oxy-App Helm Chart
+# Runs comprehensive integration tests against a Kubernetes cluster
 
 CHART_PATH="./charts/oxy-app"
 NAMESPACE="helm-integration-test"
+
+# List of test release names used by cleanup routines. Keep in sync with test_* functions.
+TEST_RELEASES=(
+    "test-default"
+    "test-ingress"
+    "test-postgres"
+    "test-production"
+    "test-persist"
+    "upgrade-test"
+    "resource-test"
+)
 
 # Colors for output
 RED='\033[0;31m'
@@ -32,26 +43,18 @@ log_section() {
 
 show_usage() {
     cat <<EOF
-Usage: $0 [COMMAND] [OPTIONS]
+Usage: $0 [OPTIONS]
 
-Comprehensive test runner for oxy-app Helm chart
-
-COMMANDS:
-    unit                 Run only unit tests (helm unittest)
-    integration         Run only integration tests (requires k8s cluster)
-    all                 Run both unit and integration tests (default)
-    help                Show this help message
+Integration test runner for oxy-app Helm chart
 
 OPTIONS:
     --verbose           Enable verbose output
     --cleanup           Clean up test resources after completion
-    --keep-cluster      Keep kind cluster after tests (local only)
 
 EXAMPLES:
-    $0                  # Run all tests
-    $0 unit             # Run only unit tests
-    $0 integration      # Run only integration tests
-    $0 all --cleanup    # Run all tests and cleanup afterwards
+    $0                  # Run integration tests
+    $0 --cleanup        # Run integration tests and cleanup afterwards
+    $0 --verbose        # Run with verbose output
 
 ENVIRONMENT VARIABLES:
     CI                  Set to 'true' to skip local cluster setup
@@ -63,10 +66,8 @@ EOF
 cleanup() {
     log_info "Cleaning up test resources..."
 
-    # List of test releases to clean up
-    releases=("test-default" "test-ingress" "test-postgres" "test-production" "test-persist" "upgrade-test" "resource-test")
-
-    for release in "${releases[@]}"; do
+    # List of test releases to clean up (maintained in TEST_RELEASES)
+    for release in "${TEST_RELEASES[@]}"; do
         if helm list -q -n "$NAMESPACE" 2>/dev/null | grep -q "^${release}$"; then
             log_info "Uninstalling release: $release"
             helm uninstall "$release" -n "$NAMESPACE" --wait --timeout=300s || true
@@ -132,8 +133,8 @@ check_prerequisites() {
         missing_tools+=("helm")
     fi
 
-    # Check if kubectl is installed (for integration tests)
-    if ! command -v kubectl &> /dev/null && [[ "${1:-all}" != "unit" ]]; then
+    # Check if kubectl is installed (required for integration tests)
+    if ! command -v kubectl &> /dev/null; then
         missing_tools+=("kubectl")
     fi
 
@@ -213,36 +214,6 @@ setup_test_environment() {
     log_info "Test environment setup complete!"
 }
 
-run_unit_tests() {
-    log_section "Running Unit Tests"
-
-    # Check if helm-unittest plugin is installed
-    if ! helm plugin list | grep -q unittest; then
-        log_error "helm-unittest plugin is not installed."
-        log_info "Install it with: helm plugin install https://github.com/quintush/helm-unittest"
-        return 1
-    fi
-
-    # Run the working unit tests
-    helm unittest "$CHART_PATH" \
-        -f "tests/values/command_override_test.yaml" \
-        -f "tests/values/configmap_test.yaml" \
-        -f "tests/values/externalsecret_*_test.yaml" \
-        -f "tests/values/headless_service_test.yaml" \
-        -f "tests/values/ingress_test.yaml" \
-        -f "tests/values/initcontainers_yes_test.yaml" \
-        -f "tests/values/service_test.yaml" \
-        -f "tests/values/serviceaccount_test.yaml" \
-        -f "tests/values/sidecar_yes_test.yaml" \
-        -f "tests/values/statefulset_test.yaml"
-
-    if [ $? -eq 0 ]; then
-        log_info "✅ All unit tests passed!"
-    else
-        log_error "❌ Some unit tests failed!"
-        return 1
-    fi
-}
 
 test_simple_pvc() {
     log_info "Testing simple PVC creation before StatefulSet..."
@@ -678,17 +649,12 @@ run_integration_tests() {
 }
 
 main() {
-    local command="${1:-all}"
     local cleanup_after=false
     local verbose=false
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
         case $1 in
-            unit|integration|all)
-                command="$1"
-                shift
-                ;;
             --cleanup)
                 cleanup_after=true
                 shift
@@ -696,10 +662,6 @@ main() {
             --verbose)
                 verbose=true
                 set -x
-                shift
-                ;;
-            --keep-cluster)
-                # For compatibility - no-op since we don't manage clusters here
                 shift
                 ;;
             help|--help|-h)
@@ -719,31 +681,17 @@ main() {
         trap cleanup EXIT
     fi
 
-    log_section "Oxy-App Helm Chart Testing"
-    log_info "Command: $command"
+    # Quietly reference verbose to satisfy linters if unused later
+    if [[ "$verbose" == "true" ]]; then :; fi
+
+    log_section "Oxy-App Helm Chart Integration Testing"
     log_info "Cleanup after: $cleanup_after"
 
-    check_prerequisites "$command"
+    check_prerequisites
 
-    case "$command" in
-        unit)
-            run_unit_tests
-            ;;
-        integration)
-            run_integration_tests
-            ;;
-        all)
-            run_unit_tests
-            run_integration_tests
-            ;;
-        *)
-            log_error "Unknown command: $command"
-            show_usage
-            exit 1
-            ;;
-    esac
+    run_integration_tests
 
-    log_info "🎉 Testing completed successfully!"
+    log_info "🎉 Integration tests completed successfully!"
 }
 
 # Run main function with all arguments

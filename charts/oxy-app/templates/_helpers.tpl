@@ -47,3 +47,20 @@ Selector labels
 app.kubernetes.io/name: {{ include "oxy-app.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+
+{{/*
+Compute the effective ServiceAccount name.
+Behavior:
+ - If .Values.serviceAccount.name is set, use it.
+ - Else if .Values.serviceAccount.create is true, use the chart fullname.
+ - Otherwise return empty string.
+*/}}
+{{- define "oxy-app.serviceAccountName" -}}
+{{- if .Values.serviceAccount.name }}
+{{- .Values.serviceAccount.name }}
+{{- else if .Values.serviceAccount.create }}
+{{- include "oxy-app.fullname" . }}
+{{- else }}
+{{- "" }}
+{{- end }}
+{{- end }}
