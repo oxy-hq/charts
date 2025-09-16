@@ -91,7 +91,7 @@ service:
   type: ClusterIP
   port: 80
   targetPort: 3000
-  # Optionally override the service resource name. If empty, defaults to '<release-name>-service'
+  # Optionally override the service resource name. If empty, uses the chart fullname
   name: ""
 
 # Headless service for StatefulSet
