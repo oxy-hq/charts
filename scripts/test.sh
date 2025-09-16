@@ -73,14 +73,53 @@ cleanup() {
         fi
     done
 
-    # Delete namespace if it exists
+    # Aggressive PVC cleanup - delete any PVCs that might be stuck
+    log_info "Cleaning up any remaining PVCs..."
+    kubectl get pvc -n "$NAMESPACE" -o name 2>/dev/null | while read pvc; do
+        if [ -n "$pvc" ]; then
+            log_info "Force deleting PVC: $pvc"
+            kubectl delete "$pvc" -n "$NAMESPACE" --force --grace-period=0 || true
+        fi
+    done
+
+    # Clean up any stuck pods that might be holding PVCs
+    log_info "Cleaning up any stuck pods..."
+    kubectl get pods -n "$NAMESPACE" -o name 2>/dev/null | while read pod; do
+        if [ -n "$pod" ]; then
+            log_info "Force deleting pod: $pod"
+            kubectl delete "$pod" -n "$NAMESPACE" --force --grace-period=0 || true
+        fi
+    done
+
+    # Delete namespace if it exists (this should clean up everything)
     if kubectl get namespace "$NAMESPACE" >/dev/null 2>&1; then
         log_info "Deleting namespace: $NAMESPACE"
-        kubectl delete namespace "$NAMESPACE" --wait=true || true
+        kubectl delete namespace "$NAMESPACE" --wait=true --timeout=60s || true
     fi
 
-    # Delete test PVC if it exists
-    kubectl delete pvc test-pvc-simple -n "$NAMESPACE" --ignore-not-found=true || true
+    # Wait a moment for cleanup to complete
+    sleep 2
+}
+
+aggressive_pre_cleanup() {
+    log_info "Performing aggressive pre-test cleanup..."
+
+    # If namespace exists, check for any existing resources
+    if kubectl get namespace "$NAMESPACE" >/dev/null 2>&1; then
+        log_info "Found existing test namespace, cleaning up..."
+
+        # List what we're about to clean
+        log_info "Existing resources in namespace:"
+        kubectl get all,pvc,secrets,configmaps -n "$NAMESPACE" || true
+
+        # Force cleanup everything
+        cleanup
+
+        # Recreate clean namespace
+        log_info "Recreating clean namespace..."
+        kubectl delete namespace "$NAMESPACE" --ignore-not-found=true --wait=true --timeout=60s || true
+        sleep 3
+    fi
 }
 
 check_prerequisites() {
@@ -138,20 +177,6 @@ debug_kind_storage() {
             if kubectl get storageclass standard >/dev/null 2>&1; then
                 log_info "Setting 'standard' StorageClass as default for Kind cluster"
                 kubectl patch storageclass standard -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}' || log_warn "Failed to set default StorageClass"
-            else
-                # Create a simple local-path StorageClass if none exists
-                log_warn "No StorageClass found, creating basic local-path StorageClass for Kind"
-                cat <<EOF | kubectl apply -f - || log_warn "Failed to create StorageClass"
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: standard
-  annotations:
-    storageclass.kubernetes.io/is-default-class: "true"
-provisioner: rancher.io/local-path
-volumeBindingMode: WaitForFirstConsumer
-reclaimPolicy: Delete
-EOF
             fi
         fi
 
@@ -172,7 +197,10 @@ EOF
 setup_test_environment() {
     log_info "Setting up test environment..."
 
-    # Create namespace
+    # Aggressive cleanup of any existing resources first
+    aggressive_pre_cleanup
+
+    # Create fresh namespace
     kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
     # Debug storage configuration
@@ -421,13 +449,42 @@ test_persistence_deployment() {
     log_info "Recent events in namespace:"
     kubectl get events -n "$NAMESPACE" --sort-by='.lastTimestamp' --field-selector reason!=Pulled,reason!=Created,reason!=Started | tail -10 || true
 
-    # Wait for StatefulSet to be ready with enhanced timeout and debugging
-    log_info "Waiting for StatefulSet oxy-test-persist to have 1 ready replicas"
+    # Check StatefulSet pod status before waiting
+    log_info "Checking StatefulSet pod status..."
+    kubectl get statefulset oxy-test-persist -n "$NAMESPACE" -o wide || true
+    kubectl get pods -l app.kubernetes.io/instance=test-persist -n "$NAMESPACE" -o wide || true
+
+    # Check if pod is stuck in Pending due to PVC issues
+    pod_name="oxy-test-persist-0"
+    if kubectl get pod "$pod_name" -n "$NAMESPACE" >/dev/null 2>&1; then
+        pod_phase=$(kubectl get pod "$pod_name" -n "$NAMESPACE" -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
+        log_info "StatefulSet pod $pod_name is in phase: $pod_phase"
+
+        if [ "$pod_phase" = "Pending" ]; then
+            log_info "Pod is Pending, checking for scheduling issues:"
+            kubectl describe pod "$pod_name" -n "$NAMESPACE" || true
+            kubectl get events -n "$NAMESPACE" --field-selector involvedObject.name="$pod_name" --sort-by='.lastTimestamp' || true
+        fi
+    fi
+
+    # Wait for StatefulSet to be ready (PVC should bind during pod startup)
+    log_info "Waiting for StatefulSet pod to become ready (PVC should bind automatically)..."
     if kubectl wait --for=condition=ready pod \
         -l app.kubernetes.io/instance=test-persist \
         -n "$NAMESPACE" \
         --timeout=180s; then
-        log_info "StatefulSet pods are ready"
+        log_info "StatefulSet pod is ready!"
+
+        # Verify PVC bound after pod is ready
+        log_info "Verifying PVC status after pod is ready:"
+        kubectl get pvc -l app.kubernetes.io/instance=test-persist -n "$NAMESPACE" -o wide || true
+
+        pvc_status=$(kubectl get pvc -l app.kubernetes.io/instance=test-persist -n "$NAMESPACE" -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "Unknown")
+        if [ "$pvc_status" != "Bound" ]; then
+            log_error "PVC is not bound even though pod is ready. PVC status: $pvc_status"
+            kubectl describe pvc -l app.kubernetes.io/instance=test-persist -n "$NAMESPACE" || true
+            return 1
+        fi
     else
         log_error "Timeout waiting for StatefulSet oxy-test-persist"
 
@@ -479,11 +536,53 @@ test_production_like_deployment() {
         -n "$NAMESPACE" \
         --wait --timeout=3m
 
-    # Wait for pods to be ready
-    kubectl wait --for=condition=ready pod \
+    # Debug: Check pod and PVC status immediately after install
+    log_info "Checking pod and PVC status after install..."
+    kubectl get pods -l app.kubernetes.io/instance=test-production -n "$NAMESPACE" -o wide || true
+    kubectl get pvc -l app.kubernetes.io/instance=test-production -n "$NAMESPACE" -o wide || true
+
+    # Check if pod is stuck and why
+    pod_name=$(kubectl get pods -l app.kubernetes.io/instance=test-production -n "$NAMESPACE" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+    if [ -n "$pod_name" ]; then
+        pod_phase=$(kubectl get pod "$pod_name" -n "$NAMESPACE" -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
+        log_info "Pod $pod_name is in phase: $pod_phase"
+
+        if [ "$pod_phase" != "Running" ]; then
+            log_info "Pod not running, describing it:"
+            kubectl describe pod "$pod_name" -n "$NAMESPACE" || true
+
+            log_info "Recent events for pod:"
+            kubectl get events -n "$NAMESPACE" --field-selector involvedObject.name="$pod_name" --sort-by='.lastTimestamp' || true
+        fi
+    fi
+
+    # Wait for pods to be ready (PVC should bind during this process)
+    log_info "Waiting for pod to become ready (this should trigger PVC binding)..."
+    if kubectl wait --for=condition=ready pod \
         -l app.kubernetes.io/instance=test-production \
         -n "$NAMESPACE" \
-        --timeout=90s
+        --timeout=180s; then
+        log_info "Pod is ready!"
+
+        # Check PVC status after pod is ready
+        log_info "Checking PVC status after pod is ready:"
+        kubectl get pvc -l app.kubernetes.io/instance=test-production -n "$NAMESPACE" -o wide || true
+
+        # If PVC is still not bound, there's a problem
+        pvc_status=$(kubectl get pvc -l app.kubernetes.io/instance=test-production -n "$NAMESPACE" -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "Unknown")
+        if [ "$pvc_status" != "Bound" ]; then
+            log_error "PVC is not bound even though pod is ready. PVC status: $pvc_status"
+            kubectl describe pvc -l app.kubernetes.io/instance=test-production -n "$NAMESPACE" || true
+            return 1
+        fi
+    else
+        log_error "Pod failed to become ready"
+        # Enhanced debugging for failed pod
+        kubectl get pods -l app.kubernetes.io/instance=test-production -n "$NAMESPACE" -o yaml || true
+        kubectl get pvc -l app.kubernetes.io/instance=test-production -n "$NAMESPACE" -o yaml || true
+        kubectl get events -n "$NAMESPACE" --sort-by='.lastTimestamp' | tail -20 || true
+        return 1
+    fi
 
     # Verify service account and annotations
     if kubectl get serviceaccount test-production-sa -n "$NAMESPACE" -o jsonpath='{.metadata.annotations.prometheus\.io/scrape}' | grep -q "true"; then
@@ -492,12 +591,6 @@ test_production_like_deployment() {
         log_error "Service account annotations verification failed!"
         return 1
     fi
-
-    # Verify PVC is created and bound
-    kubectl wait --for=condition=bound pvc \
-        -l app.kubernetes.io/instance=test-production \
-        -n "$NAMESPACE" \
-        --timeout=60s
 
     # Verify ingress configuration
     if kubectl get ingress test-production -n "$NAMESPACE" -o jsonpath='{.spec.rules[0].host}' | grep -q "test-production.local"; then
