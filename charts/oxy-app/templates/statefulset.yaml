@@ -7,7 +7,7 @@ Define git sync paths
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ .Release.Name }}
+  name: {{ include "oxy-app.fullname" . }}
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "oxy-app.labels" . | nindent 4 }}
@@ -29,7 +29,7 @@ spec:
         version: v1
     spec:
       {{- if .Values.serviceAccount.create }}
-      serviceAccountName: {{ .Values.serviceAccount.name }}
+      serviceAccountName: {{ .Values.serviceAccount.name | default (include "oxy-app.fullname" .) }}
       {{- end }}
       securityContext:
         fsGroup: {{ .Values.securityContext.fsGroup }}
@@ -87,7 +87,7 @@ spec:
 
       containers:
         # Main Application Container
-        - name: {{ .Release.Name }}
+        - name: {{ include "oxy-app.name" . }}
           image: "{{ .Values.app.image }}:{{ default .Chart.AppVersion .Values.app.imageTag }}"
           {{- if and .Values.app.command (gt (len .Values.app.command) 0) }}
           command:
@@ -155,7 +155,7 @@ spec:
           envFrom:
             {{- if .Values.configMap.enabled }}
             - configMapRef:
-                name: {{ .Release.Name }}-config
+                name: {{ include "oxy-app.fullname" . }}-config
             {{- end }}
             {{- range .Values.externalSecrets.envSecretNames }}
             - secretRef:

@@ -59,7 +59,7 @@ configMap:
 # Service Account for IRSA
 serviceAccount:
   create: true
-  name: oxy-app-sa
+  name: ""  # If empty, will auto-generate using chart name
   annotations: {}
   # Example: eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/oxy-app-role
 
