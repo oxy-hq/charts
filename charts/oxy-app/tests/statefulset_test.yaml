@@ -537,7 +537,7 @@ tests:
           value: "/health"
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.initialDelaySeconds
-          value: 90
+          value: 10
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.httpGet.path
           value: "/ready"
