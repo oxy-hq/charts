@@ -7,15 +7,13 @@ Define git sync paths
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ .Release.Name }}
+  name: {{ include "oxy-app.fullname" . }}
   namespace: {{ .Release.Namespace }}
   labels:
-    app: {{ .Release.Name }}
-    chart: {{ include "oxy-app.chart" . }}
-    release: {{ .Release.Name }}
+    {{- include "oxy-app.labels" . | nindent 4 }}
     version: v1
 spec:
-  serviceName: {{ .Release.Name }}-headless
+  serviceName: {{ include "oxy-app.fullname" . }}-headless
   replicas: {{ .Values.app.replicaCount }}
   updateStrategy:
     type: RollingUpdate
@@ -23,21 +21,39 @@ spec:
       partition: 0
   selector:
     matchLabels:
-      app: {{ .Release.Name }}
+      {{- include "oxy-app.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        app: {{ .Release.Name }}
+        {{- include "oxy-app.selectorLabels" . | nindent 8 }}
         version: v1
     spec:
-      {{- if .Values.serviceAccount.create }}
-      serviceAccountName: {{ .Values.serviceAccount.name }}
+      {{- $sa := include "oxy-app.serviceAccountName" . }}
+      {{- if ne $sa "" }}
+      serviceAccountName: {{ $sa | quote }}
       {{- end }}
       securityContext:
         fsGroup: {{ .Values.securityContext.fsGroup }}
 
-      {{- if or .Values.gitSync.enabled .Values.extraInitContainers }}
+      {{- if or .Values.gitSync.enabled .Values.database.postgres.enabled .Values.extraInitContainers }}
       initContainers:
+        {{- if .Values.database.postgres.enabled }}
+        # Wait for PostgreSQL to be ready
+        - name: wait-for-postgres
+          image: postgres:16-alpine
+          command: ['sh', '-c']
+          args:
+            - |
+              echo "Waiting for PostgreSQL to be ready..."
+              until pg_isready \
+                -h {{ .Release.Name }}-postgresql.{{ .Release.Namespace }}.svc.cluster.local \
+                -p 5432 \
+                -U {{ default .Values.database.postgres.postgresqlUsername .Values.postgresql.auth.username }}; do
+                echo "PostgreSQL is not ready yet. Waiting 5 seconds..."
+                sleep 5
+              done
+              echo "PostgreSQL is ready and accepting connections!"
+        {{- end }}
         {{- if .Values.gitSync.enabled }}
         # Git Clone Init Container
         # One-time secure clone using kubernetes/git-sync. This creates a
@@ -75,7 +91,7 @@ spec:
 
       containers:
         # Main Application Container
-        - name: {{ .Release.Name }}
+        - name: {{ include "oxy-app.name" . }}
           image: "{{ .Values.app.image }}:{{ default .Chart.AppVersion .Values.app.imageTag }}"
           {{- if and .Values.app.command (gt (len .Values.app.command) 0) }}
           command:
@@ -130,12 +146,12 @@ spec:
                 .Values.database.external.database | quote }}
             {{- else if .Values.database.postgres.enabled }}
             - name: OXY_DATABASE_URL
-              value: {{ printf "postgresql://%s:%s@%s-postgresql.%s.svc.cluster.local:5432/%s" 
-                .Values.database.postgres.postgresqlUsername 
-                .Values.database.postgres.postgresqlPassword 
-                (include "oxy-app.fullname" .) 
-                .Release.Namespace 
-                .Values.database.postgres.postgresqlDatabase | quote }}
+              value: {{ printf "postgresql://%s:%s@%s-postgresql.%s.svc.cluster.local:5432/%s"
+                (default .Values.database.postgres.postgresqlUsername .Values.postgresql.auth.username)
+                (default .Values.database.postgres.postgresqlPassword .Values.postgresql.auth.password)
+                .Release.Name
+                .Release.Namespace
+                (default .Values.database.postgres.postgresqlDatabase .Values.postgresql.auth.database) | quote }}
             {{- end }}
 
           # ConfigMap / Secret Environment Variables
@@ -143,7 +159,7 @@ spec:
           envFrom:
             {{- if .Values.configMap.enabled }}
             - configMapRef:
-                name: {{ .Release.Name }}-config
+                name: {{ include "oxy-app.fullname" . }}-config
             {{- end }}
             {{- range .Values.externalSecrets.envSecretNames }}
             - secretRef:

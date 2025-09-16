@@ -1,17 +1,30 @@
 name: Helm tests and release
 
+# This workflow runs comprehensive tests on all chart changes (both PRs and pushes to main)
+# but only publishes/releases charts when pushing to the main branch.
+# Uses modular scripts for better maintainability and local development support.
+
 on:
   push:
     branches:
       - main
     paths:
       - "charts/**"
+      - "scripts/**"
   pull_request:
+    branches:
+      - main
     paths:
       - "charts/**"
+      - "scripts/**"
 
 jobs:
   test:
+    concurrency:
+      group: "test-${{ github.ref }}"
+      cancel-in-progress: true
+
+    name: Test charts
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -33,6 +46,10 @@ jobs:
       - name: Set up chart-testing
         uses: helm/chart-testing-action@v2.7.0
 
+      - name: Install helm-unittest plugin
+        run: |
+          helm plugin install https://github.com/quintush/helm-unittest
+
       - name: Run chart-testing (list-changed)
         id: list-changed
         if: github.event_name == 'pull_request'
@@ -42,40 +59,65 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Make scripts executable
+        run: |
+          chmod +x scripts/test.sh
+
       - name: Run chart-testing (lint)
         if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
         run: |
           ct lint --target-branch ${{ github.event.repository.default_branch }} --config ct.yaml
 
-      - name: Install helm-unittest plugin
+      - name: Run unit tests
         if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
         run: |
-          helm plugin install https://github.com/quintush/helm-unittest
-
-      - name: Run helm unittest for oxy-app
-        if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
-        run: |
-          # run unit tests located under charts/oxy-app/tests
-          helm unittest ./charts/oxy-app
+          export CI=true
+          helm unittest charts/oxy-app -f "tests/**/*_test.yaml"
 
       - name: Create kind cluster
         if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
         uses: helm/kind-action@v1.12.0
+        with:
+          cluster_name: helm-integration-test
+          config: ./kind-config.yaml
 
-      - name: Run chart-testing (install)
+      - name: Install NGINX Ingress Controller
         if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
         run: |
-          ct install --target-branch ${{ github.event.repository.default_branch }} --config ct.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.1/deploy/static/provider/kind/deploy.yaml
+          kubectl wait --namespace ingress-nginx \
+            --for=condition=ready pod \
+            --selector=app.kubernetes.io/component=controller \
+            --timeout=90s
+
+      - name: Run integration tests
+        if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
+        run: |
+          export CI=true
+          ./scripts/test.sh --cleanup
 
   publish:
     name: Package & Publish Helm charts
     runs-on: ubuntu-latest
     needs: test
+    # Only run on pushes to main branch, never on pull requests
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: write # to push chart release and create a release (helm/chart-releaser-action)
       packages: write # needed for ghcr access
     steps:
+      - name: Verify this is a main branch push (not a PR)
+        run: |
+          if [[ "${{ github.event_name }}" != "push" ]]; then
+            echo "❌ ERROR: Publish job should only run on push events, not ${{ github.event_name }}"
+            exit 1
+          fi
+          if [[ "${{ github.ref }}" != "refs/heads/main" ]]; then
+            echo "❌ ERROR: Publish job should only run on main branch, not ${{ github.ref }}"
+            exit 1
+          fi
+          echo "✅ Verified: This is a push to main branch - proceeding with publish"
+
       - name: Checkout
         uses: actions/checkout@v4
         with:

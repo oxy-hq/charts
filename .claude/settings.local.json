@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Bash(helm unittest:*)",
+      "Bash(helm plugin:*)",
+      "Bash(helm template:*)",
+      "Bash(ct lint:*)",
+      "Bash(cat:*)",
+      "Bash(chmod:*)",
+      "Bash(find:*)",
+      "Bash(xargs:*)",
+      "Bash(export CI=true)",
+      "Bash(kubectl get all:*)",
+      "Bash(kubectl get pods:*)",
+      "Bash(helm :*)",
+      "Bash(grep:*)",
+      "Bash(./scripts/test.sh:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

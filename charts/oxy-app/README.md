@@ -66,8 +66,42 @@ This doc tries to focus only on chart-specific, differential behavior you won't 
   - `externalSecrets.envSecretNames` copies secret keys & values as env vars
   - `externalSecrets.fileSecrets` copies secret keys as files into the workspace.
 
-Validation & testing
+## Validation & Testing
 
-- Use `helm lint` and `helm template` to validate value changes. The chart contains lightweight tests under `charts/oxy-app/tests`.
-- To run unit test, install helm unittest plugin: `helm plugin install https://github.com/quintush/helm-unittest` and run `helm unittest charts/oxy-app`.
-- To run integration tests, install `kind` and `kubectl`, then run `ct install --config ct.yaml` from repo root
+### Unit Tests
+The chart includes comprehensive unit tests covering all core functionality:
+
+- **StatefulSet tests** - Container configuration, resources, probes, persistence
+- **Services tests** - Main service and headless service configuration
+- **Ingress tests** - Routing, TLS, annotations, multiple hosts
+- **ServiceAccount tests** - RBAC, cloud provider annotations (AWS IRSA, GCP Workload Identity, Azure)
+- **ConfigMap tests** - Configuration management and multiple file formats
+
+**Running unit tests:**
+```bash
+# Install helm unittest plugin (one-time setup)
+helm plugin install https://github.com/quintush/helm-unittest
+
+# Run all unit tests
+helm unittest charts/oxy-app
+
+# Run specific test suite
+helm unittest -f tests/statefulset_test.yaml charts/oxy-app
+```
+
+### Integration Tests
+The repository includes comprehensive integration tests that validate real deployments:
+
+```bash
+# Requires kind and kubectl
+ct install --config ct.yaml
+```
+
+### Validation
+Use standard Helm validation commands:
+```bash
+helm lint charts/oxy-app
+helm template charts/oxy-app --debug
+```
+
+The test suite ensures chart reliability across different configuration scenarios including production deployments, high availability setups, and security-hardened configurations.

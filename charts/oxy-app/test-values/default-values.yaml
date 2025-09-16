@@ -1,0 +1,29 @@
+# Integration test with default minimal configuration
+nameOverride: "oxy-test-default"
+fullnameOverride: "oxy-test-default"
+
+app:
+  image: "ghcr.io/oxy-hq/oxy"
+  imageTag: "0.2.28"
+  imagePullPolicy: "IfNotPresent"
+
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3000
+
+# Disable external dependencies for testing
+database:
+  postgres:
+    enabled: false
+
+# Use minimal resources for CI
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi

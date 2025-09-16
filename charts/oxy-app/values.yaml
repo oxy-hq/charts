@@ -59,14 +59,14 @@ configMap:
 # Service Account for IRSA
 serviceAccount:
   create: true
-  name: oxy-app-sa
+  name: ""  # If empty, will auto-generate using chart name
   annotations: {}
   # Example: eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/oxy-app-role
 
 # Persistent storage
 persistence:
   enabled: true
-  storageClassName: gp3
+  storageClassName: ""
   size: 20Gi
   accessMode: ReadWriteOnce
   # Mount path inside the container where the PVC will be mounted
@@ -103,7 +103,7 @@ livenessProbe:
   httpGet:
     path: /
     port: 3000
-  initialDelaySeconds: 60
+  initialDelaySeconds: 10
   periodSeconds: 30
   timeoutSeconds: 10
   failureThreshold: 3
@@ -112,7 +112,7 @@ readinessProbe:
   httpGet:
     path: /
     port: 3000
-  initialDelaySeconds: 30
+  initialDelaySeconds: 10
   periodSeconds: 10
   timeoutSeconds: 5
   failureThreshold: 3
@@ -195,7 +195,7 @@ database:
     # declare and mount any required secrets into the pod.
     storeRef:
       name: ""
-      kind: SecretStore # or ClusterSecretStore
+      kind: SecretStore
 
     envSecret:
       backend: ""

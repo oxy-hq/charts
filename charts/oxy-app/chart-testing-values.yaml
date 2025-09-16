@@ -1,0 +1,42 @@
+app:
+  image: ghcr.io/oxy-hq/oxy
+  imageTag: "0.2.28"
+  port: 80
+
+# Use standard storage class for kind clusters
+persistence:
+  enabled: true
+  size: "1Gi"
+
+# Disable external dependencies
+database:
+  postgres:
+    enabled: false
+
+gitSync:
+  enabled: false
+
+# Use minimal resources for fast testing
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+# Disable ingress for basic testing
+ingress:
+  enabled: false
+
+# Basic service configuration
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 80
+
+# Disable external secrets for testing
+externalSecrets:
+  create: false
+  envSecretNames: []
+  fileSecrets: []

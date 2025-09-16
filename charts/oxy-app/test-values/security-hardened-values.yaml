@@ -1,0 +1,101 @@
+# Security-hardened integration test
+nameOverride: "oxy-test-secure"
+fullnameOverride: "oxy-test-secure"
+
+app:
+  image: "ghcr.io/oxy-hq/oxy"
+  imageTag: "0.2.28"
+  imagePullPolicy: "Always"  # Always pull for security
+  replicaCount: 1
+  port: 3000
+
+# Minimal resources for security testing
+resources:
+  requests:
+    cpu: "50m"
+    memory: "64Mi"
+  limits:
+    cpu: "100m"
+    memory: "128Mi"
+
+# Secure environment
+env:
+  OXY_STATE_DIR: "/workspace/oxy_data"
+  SECURITY_MODE: "strict"
+  TLS_ENABLED: "true"
+
+# Service account with minimal permissions
+serviceAccount:
+  create: true
+  name: "oxy-secure-sa"
+  annotations:
+    "security.test/mode": "strict"
+
+# Secure persistence settings
+persistence:
+  enabled: true
+  size: "1Gi"
+  accessMode: "ReadWriteOnce"
+  mountPath: "/workspace"
+  folder: "oxy_data"
+  volumeMode: "Filesystem"
+  annotations:
+    "security.test/encrypted": "true"
+
+# Strict node selection
+nodeSelector:
+  "security.test/approved": "true"
+
+# Security tolerations
+tolerations:
+  - key: "security-zone"
+    operator: "Equal"
+    value: "restricted"
+    effect: "NoSchedule"
+
+# Enhanced security context
+securityContext:
+  fsGroup: 2000
+  runAsNonRoot: true
+  runAsUser: 2000
+  runAsGroup: 2000
+
+# Strict probes for security validation
+livenessProbe:
+  httpGet:
+    path: "/"
+    port: 3000
+    scheme: "HTTP"
+  initialDelaySeconds: 10
+  periodSeconds: 30
+  timeoutSeconds: 10
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: "/"
+    port: 3000
+    scheme: "HTTP"
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# Disable features for security baseline
+gitSync:
+  enabled: false
+
+database:
+  postgres:
+    enabled: false
+
+externalSecrets:
+  create: false
+  envSecretNames: []
+  fileSecrets: []
+
+extraInitContainers: []
+extraSidecars: []
+
+ingress:
+  enabled: false
