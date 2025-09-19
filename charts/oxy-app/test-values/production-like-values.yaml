@@ -73,3 +73,9 @@ ingress:
 database:
   postgres:
     enabled: false
+
+# Enable PodDisruptionBudget in this production-like test values
+pdb:
+  enabled: true
+  # Keep default behaviour: use minAvailable when set
+  minAvailable: 1
