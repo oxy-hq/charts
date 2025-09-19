@@ -1,0 +1,26 @@
+{{- if .Values.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "oxy-app.fullname" . }}-pdb
+  labels:
+    {{- include "oxy-app.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- if .Values.pdb.selector }}
+      {{- range $k, $v := .Values.pdb.selector }}
+      {{ $k }}: {{ $v | quote }}
+      {{- end }}
+      {{- else }}
+      {{- include "oxy-app.selectorLabels" . | nindent 6 }}
+      {{- end }}
+  {{- if .Values.pdb.minAvailable }}
+  minAvailable: {{ .Values.pdb.minAvailable }}
+  {{- else if .Values.pdb.maxUnavailable }}
+  maxUnavailable: {{ .Values.pdb.maxUnavailable }}
+  {{- else }}
+  # Default to minAvailable: 1 when neither is set
+  minAvailable: 1
+  {{- end }}
+{{- end }}

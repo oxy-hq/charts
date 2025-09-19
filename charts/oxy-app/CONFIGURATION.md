@@ -1,6 +1,6 @@
 # oxy-app
 
-![Version: 0.1.14](https://img.shields.io/badge/Version-0.1.14-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.2.28](https://img.shields.io/badge/AppVersion-0.2.28-informational?style=flat-square)
+![Version: 0.1.15](https://img.shields.io/badge/Version-0.1.15-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.2.28](https://img.shields.io/badge/AppVersion-0.2.28-informational?style=flat-square)
 
 A Helm chart for Oxy application deployment on kubernetes
 
@@ -80,11 +80,15 @@ A Helm chart for Oxy application deployment on kubernetes
 | livenessProbe.failureThreshold | int | `3` |  |
 | livenessProbe.httpGet.path | string | `"/"` |  |
 | livenessProbe.httpGet.port | int | `3000` |  |
-| livenessProbe.initialDelaySeconds | int | `15` |  |
+| livenessProbe.initialDelaySeconds | int | `10` |  |
 | livenessProbe.periodSeconds | int | `30` |  |
 | livenessProbe.timeoutSeconds | int | `10` |  |
 | name | string | `"oxy-app"` |  |
 | nodeSelector | string | `nil` |  |
+| pdb.enabled | bool | `false` |  |
+| pdb.maxUnavailable | string | `""` |  |
+| pdb.minAvailable | string | `""` |  |
+| pdb.selector | object | `{}` |  |
 | persistence.accessMode | string | `"ReadWriteOnce"` |  |
 | persistence.annotations | object | `{}` |  |
 | persistence.enabled | bool | `true` |  |
@@ -98,7 +102,7 @@ A Helm chart for Oxy application deployment on kubernetes
 | readinessProbe.failureThreshold | int | `3` |  |
 | readinessProbe.httpGet.path | string | `"/"` |  |
 | readinessProbe.httpGet.port | int | `3000` |  |
-| readinessProbe.initialDelaySeconds | int | `15` |  |
+| readinessProbe.initialDelaySeconds | int | `10` |  |
 | readinessProbe.periodSeconds | int | `10` |  |
 | readinessProbe.timeoutSeconds | int | `5` |  |
 | resources.limits.cpu | string | `"1000m"` |  |
@@ -112,7 +116,7 @@ A Helm chart for Oxy application deployment on kubernetes
 | service.type | string | `"ClusterIP"` |  |
 | serviceAccount.annotations | object | `{}` |  |
 | serviceAccount.create | bool | `true` |  |
-| serviceAccount.name | string | `"oxy-app-sa"` |  |
+| serviceAccount.name | string | `""` |  |
 | sshKey.privateKey | string | `""` |  |
 | sshKey.publicKey | string | `""` |  |
 | tolerations | string | `nil` |  |

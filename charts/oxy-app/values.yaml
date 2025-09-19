@@ -234,3 +234,14 @@ extraInitContainers: []
 #       - name: workspace
 #         mountPath: /workspace
 extraSidecars: []
+
+# PodDisruptionBudget configuration
+pdb:
+  enabled: false
+  # Either set minAvailable or maxUnavailable. When both are set, minAvailable takes precedence.
+  # Examples: 1, "50%"
+  minAvailable: ""
+  # Examples: 1, "25%". Leave empty to not set.
+  maxUnavailable: ""
+  # Optional selector labels to narrow the PDB selector. Merges with chart selectorLabels when provided.
+  selector: {}
