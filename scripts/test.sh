@@ -330,13 +330,11 @@ test_ingress_deployment() {
 test_postgres_deployment() {
     log_info "Testing deployment with PostgreSQL..."
 
-    # Increase timeout to 10 minutes for PostgreSQL deployment
     helm install test-postgres "$CHART_PATH" \
         -f "$CHART_PATH/test-values/with-postgres-values.yaml" \
         -n "$NAMESPACE" \
-        --wait --timeout=10m
+        --wait --timeout=3m
 
-    # Wait for PostgreSQL pod first (it needs to be ready before the app)
     log_info "Waiting for PostgreSQL pod to be ready..."
     if ! kubectl wait --for=condition=ready pod \
         -l app.kubernetes.io/name=postgresql \
