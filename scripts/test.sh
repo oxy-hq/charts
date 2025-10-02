@@ -339,7 +339,7 @@ test_postgres_deployment() {
     if ! helm install test-postgres "$CHART_PATH" \
         -f "$CHART_PATH/test-values/with-postgres-values.yaml" \
         -n "$NAMESPACE" \
-        --wait --timeout=10m; then
+        --wait --timeout=3m; then
         log_error "Helm install failed"
         log_info "Getting pod status:"
         kubectl get pods -n "$NAMESPACE" -o wide || true
