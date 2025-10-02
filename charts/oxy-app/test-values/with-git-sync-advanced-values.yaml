@@ -1,0 +1,61 @@
+# Example values for advanced git-sync configuration with multiple secrets and custom args
+app:
+  image: ghcr.io/oxy-hq/oxy
+  imageTag: latest
+  replicaCount: 1
+
+# Enable git-sync with advanced features
+gitSync:
+  enabled: true
+  repository: git@github.com:example/repo.git
+  branch: main
+  period: 30s
+  
+  # Multiple SSH keys for different Git hosts
+  # The first key is used as the primary key with --ssh-key-file
+  # All keys are mounted and available for SSH to try automatically
+  sshKeys:
+    - secretName: github-ssh-key
+      mountPath: /etc/git-secret/github
+    - secretName: gitlab-ssh-key
+      mountPath: /etc/git-secret/gitlab
+  
+  # For backward compatibility, single sshSecretName still works:
+  # sshSecretName: oxy-git-ssh
+  
+  # Mount additional secrets for git-clone and git-sync containers
+  # Useful for:
+  # - Additional authentication credentials
+  # - Custom git configurations
+  # - Certificate files
+  # - Token files for private registries
+  secrets:
+    - name: git-additional-credentials
+      mountPath: /etc/git-credentials
+    - name: custom-git-config
+      mountPath: /etc/git-custom
+  
+  # Add custom arguments to git-sync
+  # These will be appended to the default arguments and can override defaults
+  customArgs:
+    - --git-gc=always
+    - --submodules=recursive
+    - --webhook-url=http://webhook-service:8080/sync
+    - --webhook-method=POST
+    - --depth=10  # Override default --depth=1
+
+persistence:
+  enabled: true
+  size: 20Gi
+  mountPath: /workspace
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+
+env:
+  OXY_STATE_DIR: /workspace/oxy_data

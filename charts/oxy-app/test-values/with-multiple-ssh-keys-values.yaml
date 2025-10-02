@@ -1,0 +1,81 @@
+# Example: Using multiple SSH keys for different Git hosts
+# This configuration demonstrates accessing repositories from multiple Git providers
+# using separate SSH keys for each host.
+
+app:
+  image: ghcr.io/oxy-hq/oxy
+  imageTag: latest
+  replicaCount: 1
+
+# Enable git-sync with multiple SSH keys
+gitSync:
+  enabled: true
+  repository: git@github.com:example/main-repo.git
+  branch: main
+  period: 30s
+  
+  # Configure multiple SSH keys for different Git hosts
+  # The first key becomes the primary key used with --ssh-key-file
+  # All keys are mounted and available for SSH to try automatically
+  sshKeys:
+    # Primary key for GitHub (main repository)
+    - secretName: github-ssh-key
+      mountPath: /etc/git-secret/github
+    
+    # Secondary key for GitLab (used by submodules or other operations)
+    - secretName: gitlab-ssh-key
+      mountPath: /etc/git-secret/gitlab
+    
+    # Additional key for Bitbucket
+    - secretName: bitbucket-ssh-key
+      mountPath: /etc/git-secret/bitbucket
+  
+  # Optional: Mount custom SSH config to map hosts to specific keys
+  # This gives you explicit control over which key is used for which host
+  secrets:
+    - name: custom-ssh-config
+      mountPath: /root/.ssh/config
+  
+  # Enable submodules if your repo uses them
+  customArgs:
+    - --submodules=recursive
+    - --git-gc=always
+
+persistence:
+  enabled: true
+  size: 20Gi
+  mountPath: /workspace
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+
+env:
+  OXY_STATE_DIR: /workspace/oxy_data
+
+---
+# Example SSH config secret (create separately)
+# kubectl create secret generic custom-ssh-config --from-file=config=./ssh-config
+
+# Content of ssh-config file:
+# Host github.com
+#   HostName github.com
+#   User git
+#   IdentityFile /etc/git-secret/github/ssh
+#   StrictHostKeyChecking no
+# 
+# Host gitlab.com
+#   HostName gitlab.com
+#   User git
+#   IdentityFile /etc/git-secret/gitlab/ssh
+#   StrictHostKeyChecking no
+# 
+# Host bitbucket.org
+#   HostName bitbucket.org
+#   User git
+#   IdentityFile /etc/git-secret/bitbucket/ssh
+#   StrictHostKeyChecking no
