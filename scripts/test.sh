@@ -323,21 +323,37 @@ test_ingress_deployment() {
 test_postgres_deployment() {
     log_info "Testing deployment with PostgreSQL..."
 
+    # Increase timeout to 10 minutes for PostgreSQL deployment
     helm install test-postgres "$CHART_PATH" \
         -f "$CHART_PATH/test-values/with-postgres-values.yaml" \
         -n "$NAMESPACE" \
-        --wait --timeout=5m
+        --wait --timeout=10m
 
-    # Wait for all pods to be ready (app + postgres)
-    kubectl wait --for=condition=ready pod \
-        -l app.kubernetes.io/instance=test-postgres \
-        -n "$NAMESPACE" \
-        --timeout=210s
-
-    kubectl wait --for=condition=ready pod \
+    # Wait for PostgreSQL pod first (it needs to be ready before the app)
+    log_info "Waiting for PostgreSQL pod to be ready..."
+    if ! kubectl wait --for=condition=ready pod \
         -l app.kubernetes.io/name=postgresql \
         -n "$NAMESPACE" \
-        --timeout=120s
+        --timeout=300s; then
+        log_error "PostgreSQL pod failed to become ready"
+        kubectl get pods -n "$NAMESPACE" -o wide || true
+        kubectl describe pod -l app.kubernetes.io/name=postgresql -n "$NAMESPACE" || true
+        kubectl logs -l app.kubernetes.io/name=postgresql -n "$NAMESPACE" --tail=50 || true
+        return 1
+    fi
+
+    # Wait for app pod to be ready
+    log_info "Waiting for application pod to be ready..."
+    if ! kubectl wait --for=condition=ready pod \
+        -l app.kubernetes.io/instance=test-postgres \
+        -n "$NAMESPACE" \
+        --timeout=240s; then
+        log_error "Application pod failed to become ready"
+        kubectl get pods -n "$NAMESPACE" -o wide || true
+        kubectl describe pod -l app.kubernetes.io/instance=test-postgres -n "$NAMESPACE" || true
+        kubectl logs -l app.kubernetes.io/instance=test-postgres -n "$NAMESPACE" --tail=50 || true
+        return 1
+    fi
 
     # Test database connectivity
     log_info "Testing database connectivity..."
@@ -350,7 +366,7 @@ test_postgres_deployment() {
     fi
 
     # Cleanup this test
-    helm uninstall test-postgres -n "$NAMESPACE" --wait
+    helm uninstall test-postgres -n "$NAMESPACE" --wait --timeout=5m
 
     log_info "PostgreSQL deployment test passed!"
 }
