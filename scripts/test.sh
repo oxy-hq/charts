@@ -207,9 +207,10 @@ setup_test_environment() {
     # Debug storage configuration
     debug_kind_storage
 
-    # Update helm dependencies
-    log_info "Updating Helm dependencies..."
-    helm dependency update "$CHART_PATH"
+    # Build helm dependencies using Chart.lock (not update)
+    # This ensures we use the exact versions locked in Chart.lock
+    log_info "Building Helm dependencies from Chart.lock..."
+    helm dependency build "$CHART_PATH"
 
     log_info "Test environment setup complete!"
 }
