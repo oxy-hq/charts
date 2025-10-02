@@ -23,7 +23,7 @@ database:
 postgresql:
   image:
     registry: docker.io
-    repository: bitnami/postgresql
+    repository: bitnamilegacy/postgresql
     tag: 16.4.0-debian-12-r13  # Lock to stable PostgreSQL 16.x version
   auth:
     username: testuser
