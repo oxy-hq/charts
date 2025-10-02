@@ -207,6 +207,12 @@ setup_test_environment() {
     # Debug storage configuration
     debug_kind_storage
 
+    # Add required Helm repositories for dependencies
+    log_info "Adding Helm repositories..."
+    # Add bitnami repo (ignore error if already exists)
+    helm repo add bitnami https://charts.bitnami.com/bitnami 2>/dev/null || true
+    helm repo update
+
     # Build helm dependencies using Chart.lock (not update)
     # This ensures we use the exact versions locked in Chart.lock
     log_info "Building Helm dependencies from Chart.lock..."
