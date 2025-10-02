@@ -234,7 +234,8 @@ spec:
         {{- if .Values.gitSync.enabled }}
         - name: git-ssh
           secret:
-            secretName: {{ .Values.gitSync.sshSecretName }}
+            secretName: {{ default .Values.gitSync.sshSecretName .Values.sshKey.secretName }}
+            defaultMode: 0400
             optional: false
         {{- end }}
         {{- /* Environment secret volumes */}}

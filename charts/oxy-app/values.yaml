@@ -155,21 +155,27 @@ externalSecrets:
     name: ""
     kind: ""
 
-# SSH key for git operations (base64 encoded)
+# SSH key for git operations
 # In production, this should be managed through external secrets
 sshKey:
-  # Keep keys out of chart values in production. Use `gitSync.sshSecretName`
-  # and create the secret in-cluster or via external secrets operator.
+  # Optional: specify a secret name where SSH keys will be stored.
+  # If not specified, defaults to gitSync.sshSecretName.
+  # When privateKey/publicKey are provided below, a Secret with this name will be created.
+  secretName: ""
+  # Keep keys out of chart values in production. Use external secrets operator
+  # or create the secret manually in-cluster.
+  # If provided, these will be used to create a Kubernetes Secret.
   privateKey: ""
   publicKey: ""
+  # known_hosts file content for SSH host verification (optional)
+  # If empty, the chart will create a minimal known_hosts that accepts GitHub, GitLab, and Bitbucket
+  knownHosts: ""
 
 # Git sync sidecar configuration
 gitSync:
   period: 15s
   repository: ""
   branch: main
-  userName: ""
-  userEmail: ""
   sshSecretName: oxy-git-ssh
   enabled: false
   # Root directory where git-sync stores repo data (defaults to <persistence.mountPath>/git)

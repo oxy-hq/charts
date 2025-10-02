@@ -1,6 +1,6 @@
 # oxy-app
 
-![Version: 0.1.15](https://img.shields.io/badge/Version-0.1.15-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.2.28](https://img.shields.io/badge/AppVersion-0.2.28-informational?style=flat-square)
+![Version: 0.1.17](https://img.shields.io/badge/Version-0.1.17-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.2.28](https://img.shields.io/badge/AppVersion-0.2.28-informational?style=flat-square)
 
 A Helm chart for Oxy application deployment on kubernetes
 
@@ -66,8 +66,6 @@ A Helm chart for Oxy application deployment on kubernetes
 | gitSync.repository | string | `""` |  |
 | gitSync.root | string | `""` |  |
 | gitSync.sshSecretName | string | `"oxy-git-ssh"` |  |
-| gitSync.userEmail | string | `""` |  |
-| gitSync.userName | string | `""` |  |
 | headlessService.enabled | bool | `true` |  |
 | ingress.annotations | object | `{}` |  |
 | ingress.enabled | bool | `false` |  |
@@ -117,8 +115,10 @@ A Helm chart for Oxy application deployment on kubernetes
 | serviceAccount.annotations | object | `{}` |  |
 | serviceAccount.create | bool | `true` |  |
 | serviceAccount.name | string | `""` |  |
-| sshKey.privateKey | string | `""` |  |
-| sshKey.publicKey | string | `""` |  |
+| sshKey.knownHosts | string | `""` | known_hosts file content for SSH host verification (optional). If empty, the chart will create a minimal known_hosts that accepts GitHub, GitLab, and Bitbucket |
+| sshKey.privateKey | string | `""` | SSH private key for git operations. If provided, a Kubernetes Secret will be created. For production, use external secrets instead. |
+| sshKey.publicKey | string | `""` | SSH public key for git operations. Optional, used for documentation purposes. |
+| sshKey.secretName | string | `""` | Optional: specify a secret name where SSH keys will be stored. If not specified, defaults to gitSync.sshSecretName. |
 | tolerations | string | `nil` |  |
 
 ----------------------------------------------

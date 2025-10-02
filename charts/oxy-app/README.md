@@ -57,7 +57,10 @@ This doc tries to focus only on chart-specific, differential behavior you won't 
   - By default, gitSync is disabled. We start oxy with `--readonly` mode and no git repo. Git setup will be handled by the app UI
   - Controlled by `gitSync.enabled` (default: `false`). When enabled, init containers clone and prepare `/workspace/current`. The chart no longer builds an `.env` in an init container; environment variables should be provided via `env`, `configMap`, or mounted secrets.
   - When disabled, init containers and git-ssh mounts are omitted and the app uses `--readonly` mode.
-  - Provide SSH key material via an in-cluster Secret and set `gitSync.sshSecretName` (do not commit keys in `values.yaml`)
+  - **SSH Key Management**:
+    - For development/testing: You can provide SSH keys directly in `values.yaml` via `sshKey.privateKey` and optionally `sshKey.knownHosts`. The chart will create a Kubernetes Secret automatically.
+    - For production: Create the SSH secret externally (manually or via External Secrets Operator) and reference it via `gitSync.sshSecretName` or `sshKey.secretName`. **Never commit SSH keys to version control.**
+    - Secret naming: Use `sshKey.secretName` to specify where keys should be stored. If not set, defaults to `gitSync.sshSecretName` (which defaults to `oxy-git-ssh`).
 - Extra containers
   - The chart supports user-supplied init containers and sidecars via `extraInitContainers` and `extraSidecars` in `values.yaml`.
   - Each entry should be a valid Kubernetes container spec (name, image, command, volumeMounts, etc.). These are rendered into the Pod `initContainers` and `containers` lists respectively.

@@ -444,6 +444,44 @@ tests:
               secretName: "my-git-ssh"
               optional: false
 
+  - it: should use custom SSH secret name when sshKey.secretName is set
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+        sshSecretName: "default-ssh-secret"
+      sshKey:
+        secretName: "custom-ssh-secret"
+      persistence:
+        enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: git-ssh
+            secret:
+              secretName: "custom-ssh-secret"
+              optional: false
+
+  - it: should fall back to gitSync.sshSecretName when sshKey.secretName is empty
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+        sshSecretName: "my-git-ssh"
+      sshKey:
+        secretName: ""
+      persistence:
+        enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: git-ssh
+            secret:
+              secretName: "my-git-ssh"
+              optional: false
+
   # =======================
   # External Secrets
   # =======================

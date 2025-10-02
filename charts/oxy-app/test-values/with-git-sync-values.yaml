@@ -1,0 +1,39 @@
+# Example configuration for Git sync with SSH keys
+# This demonstrates how to enable git synchronization with SSH authentication
+
+# Enable Git sync
+gitSync:
+  enabled: true
+  repository: "git@github.com:example/repo.git"  # Replace with your repository
+  branch: main
+  period: 30s
+  # The secret name where SSH keys are stored (defaults to oxy-git-ssh if not specified)
+  sshSecretName: oxy-git-ssh
+
+# SSH Key configuration
+# IMPORTANT: For production, DO NOT store SSH keys in values.yaml!
+# Instead, create the secret manually or use External Secrets Operator.
+# This example is for development/testing only.
+sshKey:
+  # Optional: Override the secret name (defaults to gitSync.sshSecretName)
+  # secretName: "my-custom-ssh-secret"
+  
+  # For development only: provide SSH private key directly
+  # In production, leave these empty and create the secret externally
+  privateKey: ""  # Base64 encoded SSH private key
+  publicKey: ""   # Optional: Base64 encoded SSH public key
+  knownHosts: ""  # Optional: Custom known_hosts content. If empty, uses default for GitHub/GitLab/Bitbucket
+
+# Persistence is required for git sync
+persistence:
+  enabled: true
+  size: 20Gi
+
+# Example: Production-ready approach
+# 1. Create the SSH secret externally:
+#    kubectl create secret generic oxy-git-ssh \
+#      --from-file=ssh=/path/to/private/key \
+#      --from-file=known_hosts=/path/to/known_hosts
+#
+# 2. Reference the secret name in gitSync.sshSecretName (above)
+# 3. Keep sshKey.privateKey and sshKey.publicKey empty (as shown above)
