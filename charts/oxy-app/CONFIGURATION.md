@@ -1,6 +1,6 @@
 # oxy-app
 
-![Version: 0.1.18](https://img.shields.io/badge/Version-0.1.18-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.2.28](https://img.shields.io/badge/AppVersion-0.2.28-informational?style=flat-square)
+![Version: 0.1.15](https://img.shields.io/badge/Version-0.1.15-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.2.28](https://img.shields.io/badge/AppVersion-0.2.28-informational?style=flat-square)
 
 A Helm chart for Oxy application deployment on kubernetes
 
@@ -59,15 +59,12 @@ A Helm chart for Oxy application deployment on kubernetes
 | extraInitContainers | list | `[]` |  |
 | extraSidecars | list | `[]` |  |
 | gitSync.branch | string | `"main"` |  |
-| gitSync.customArgs | list | `[]` |  |
 | gitSync.enabled | bool | `false` |  |
 | gitSync.imagePullPolicy | string | `"IfNotPresent"` |  |
 | gitSync.link | string | `""` |  |
 | gitSync.period | string | `"15s"` |  |
 | gitSync.repository | string | `""` |  |
 | gitSync.root | string | `""` |  |
-| gitSync.secrets | list | `[]` |  |
-| gitSync.sshKeys | list | `[]` |  |
 | gitSync.sshSecretName | string | `"oxy-git-ssh"` |  |
 | gitSync.userEmail | string | `""` |  |
 | gitSync.userName | string | `""` |  |

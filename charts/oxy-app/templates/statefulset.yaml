@@ -69,41 +69,18 @@ spec:
             - --link={{ $gitLink }}
             - --one-time=true
             - --depth=1
-            {{- if gt (len .Values.gitSync.sshKeys) 0 }}
-            - --ssh-key-file={{ (index .Values.gitSync.sshKeys 0).mountPath }}/ssh
-            {{- else }}
             - --ssh-key-file=/etc/git-secret/ssh
-            {{- end }}
             - --ssh-known-hosts-file=/etc/git-secret/known_hosts
             - --max-failures=5
             - --verbose=1
             - --one-time
             - --git-gc=off
-            {{- /* Custom args are placed last so they can override any default args above */}}
-            {{- range .Values.gitSync.customArgs }}
-            - {{ . | quote }}
-            {{- end }}
           volumeMounts:
             - name: workspace
               mountPath: {{ .Values.persistence.mountPath }}
-            {{- if gt (len .Values.gitSync.sshKeys) 0 }}
-            {{- /* Mount all SSH key secrets */}}
-            {{- range $idx, $sshKey := .Values.gitSync.sshKeys }}
-            - name: git-ssh-{{ $idx }}
-              mountPath: {{ default (printf "/etc/git-secret/keys/%d" $idx) $sshKey.mountPath }}
-              readOnly: true
-            {{- end }}
-            {{- else }}
-            {{- /* Backward compatibility: mount single SSH secret */}}
             - name: git-ssh
               mountPath: /etc/git-secret
               readOnly: true
-            {{- end }}
-            {{- range $idx, $secret := .Values.gitSync.secrets }}
-            - name: git-sync-secret-{{ $idx }}
-              mountPath: {{ $secret.mountPath }}
-              readOnly: true
-            {{- end }}
         {{- end }}
 
         {{- /* Render any user-supplied init containers */}}
@@ -235,39 +212,16 @@ spec:
             - --link={{ $gitLink }}
             - --period={{ .Values.gitSync.period }}
             - --depth=1
-            {{- if gt (len .Values.gitSync.sshKeys) 0 }}
-            - --ssh-key-file={{ (index .Values.gitSync.sshKeys 0).mountPath }}/ssh
-            {{- else }}
             - --ssh-key-file=/etc/git-secret/ssh
-            {{- end }}
             - --ssh-known-hosts-file=/etc/git-secret/known_hosts
             - --max-failures=5
             - --verbose=1
-            {{- /* Custom args are placed last so they can override any default args above */}}
-            {{- range .Values.gitSync.customArgs }}
-            - {{ . | quote }}
-            {{- end }}
           volumeMounts:
             - name: workspace
               mountPath: {{ .Values.persistence.mountPath }}
-            {{- if gt (len .Values.gitSync.sshKeys) 0 }}
-            {{- /* Mount all SSH key secrets */}}
-            {{- range $idx, $sshKey := .Values.gitSync.sshKeys }}
-            - name: git-ssh-{{ $idx }}
-              mountPath: {{ default (printf "/etc/git-secret/keys/%d" $idx) $sshKey.mountPath }}
-              readOnly: true
-            {{- end }}
-            {{- else }}
-            {{- /* Backward compatibility: mount single SSH secret */}}
             - name: git-ssh
               mountPath: /etc/git-secret
               readOnly: true
-            {{- end }}
-            {{- range $idx, $secret := .Values.gitSync.secrets }}
-            - name: git-sync-secret-{{ $idx }}
-              mountPath: {{ $secret.mountPath }}
-              readOnly: true
-            {{- end }}
         {{- end }}
 
         {{- /* Render user-supplied sidecars after built-in sidecars */}}
@@ -278,27 +232,10 @@ spec:
       # Volume Definitions
       volumes:
         {{- if .Values.gitSync.enabled }}
-        {{- if gt (len .Values.gitSync.sshKeys) 0 }}
-        {{- /* Mount all SSH key secrets */}}
-        {{- range $idx, $sshKey := .Values.gitSync.sshKeys }}
-        - name: git-ssh-{{ $idx }}
-          secret:
-            secretName: {{ $sshKey.secretName }}
-            optional: false
-        {{- end }}
-        {{- else }}
-        {{- /* Backward compatibility: single SSH secret */}}
         - name: git-ssh
           secret:
             secretName: {{ .Values.gitSync.sshSecretName }}
             optional: false
-        {{- end }}
-        {{- range $idx, $secret := .Values.gitSync.secrets }}
-        - name: git-sync-secret-{{ $idx }}
-          secret:
-            secretName: {{ $secret.name }}
-            optional: false
-        {{- end }}
         {{- end }}
         {{- /* Environment secret volumes */}}
         {{- range $idx, $secretName := .Values.externalSecrets.envSecretNames }}

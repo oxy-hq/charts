@@ -170,23 +170,7 @@ gitSync:
   branch: main
   userName: ""
   userEmail: ""
-  # DEPRECATED: Use sshKeys array for single or multiple SSH keys
-  # Kept for backward compatibility. If sshKeys is empty, this will be used.
   sshSecretName: oxy-git-ssh
-  # SSH keys for git authentication. Supports multiple keys for different hosts/repos.
-  # Each entry should contain:
-  #   - secretName: Name of the Kubernetes secret containing SSH key(s)
-  #   - mountPath: Where to mount the secret (default: /etc/git-secret/keys/<index>)
-  # The primary SSH key (first entry or sshSecretName) will be used with --ssh-key-file
-  # Additional keys will be mounted and available for SSH to try automatically.
-  # Example:
-  # sshKeys:
-  #   - secretName: github-ssh-key
-  #     mountPath: /etc/git-secret/github
-  #   - secretName: gitlab-ssh-key
-  #     mountPath: /etc/git-secret/gitlab
-  # For SSH config approach, use the 'secrets' field to mount a custom SSH config.
-  sshKeys: []
   enabled: false
   # Root directory where git-sync stores repo data (defaults to <persistence.mountPath>/git)
   root: ""
@@ -194,24 +178,6 @@ gitSync:
   link: ""
   # Image pull policy for the git-sync init container. Valid values: Always, IfNotPresent, Never
   imagePullPolicy: IfNotPresent
-  # Additional secrets to mount in git-clone and git-sync containers.
-  # Each entry should contain 'name' (secret name) and 'mountPath' (where to mount).
-  # Example:
-  # secrets:
-  #   - name: my-git-credentials
-  #     mountPath: /etc/git-credentials
-  #   - name: another-secret
-  #     mountPath: /etc/another
-  secrets: []
-  # Custom arguments to pass to git-sync/git-clone containers.
-  # These will be appended to the default args and can override default behavior.
-  # Note: Some flags like --verbose, --depth, etc. will override the chart's defaults.
-  # Example:
-  # customArgs:
-  #   - --git-gc=always
-  #   - --submodules=recursive
-  #   - --depth=10  # Override default --depth=1
-  customArgs: []
 
 database:
   # Subchart Postgres settings (optional; not selected automatically)
