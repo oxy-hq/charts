@@ -442,6 +442,7 @@ tests:
             name: git-ssh
             secret:
               secretName: "my-git-ssh"
+              defaultMode: 0400
               optional: false
 
   - it: should use custom SSH secret name when sshKey.secretName is set
@@ -461,6 +462,7 @@ tests:
             name: git-ssh
             secret:
               secretName: "custom-ssh-secret"
+              defaultMode: 0400
               optional: false
 
   - it: should fall back to gitSync.sshSecretName when sshKey.secretName is empty
@@ -480,6 +482,7 @@ tests:
             name: git-ssh
             secret:
               secretName: "my-git-ssh"
+              defaultMode: 0400
               optional: false
 
   # =======================

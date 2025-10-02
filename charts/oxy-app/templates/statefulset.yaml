@@ -69,7 +69,15 @@ spec:
             - --link={{ $gitLink }}
             - --one-time=true
             - --depth=1
+            {{- if gt (len .Values.sshKeys) 0 }}
+            {{- /* Multiple SSH keys: mount each to its own path */}}
+            {{- range $idx, $sshKey := .Values.sshKeys }}
+            - --ssh-key-file=/etc/git-secret/keys/{{ $sshKey.name }}
+            {{- end }}
+            {{- else }}
+            {{- /* DEPRECATED: Legacy single SSH key */}}
             - --ssh-key-file=/etc/git-secret/ssh
+            {{- end }}
             - --ssh-known-hosts-file=/etc/git-secret/known_hosts
             - --max-failures=5
             - --verbose=1
@@ -78,9 +86,29 @@ spec:
           volumeMounts:
             - name: workspace
               mountPath: {{ .Values.persistence.mountPath }}
+            {{- if gt (len .Values.sshKeys) 0 }}
+            {{- /* Mount each SSH key secret */}}
+            {{- range $idx, $sshKey := .Values.sshKeys }}
+            - name: git-ssh-{{ $idx }}
+              mountPath: /etc/git-secret/keys/{{ $sshKey.name }}
+              {{- if or $sshKey.key (not $sshKey.privateKey) }}
+              subPath: {{ default "ssh" $sshKey.key }}
+              {{- else }}
+              subPath: ssh
+              {{- end }}
+              readOnly: true
+            {{- end }}
+            {{- /* Mount known_hosts from the first secret */}}
+            - name: git-ssh-known-hosts
+              mountPath: /etc/git-secret/known_hosts
+              subPath: known_hosts
+              readOnly: true
+            {{- else }}
+            {{- /* DEPRECATED: Legacy single SSH key mount */}}
             - name: git-ssh
               mountPath: /etc/git-secret
               readOnly: true
+            {{- end }}
         {{- end }}
 
         {{- /* Render any user-supplied init containers */}}
@@ -212,16 +240,44 @@ spec:
             - --link={{ $gitLink }}
             - --period={{ .Values.gitSync.period }}
             - --depth=1
+            {{- if gt (len .Values.sshKeys) 0 }}
+            {{- /* Multiple SSH keys: mount each to its own path */}}
+            {{- range $idx, $sshKey := .Values.sshKeys }}
+            - --ssh-key-file=/etc/git-secret/keys/{{ $sshKey.name }}
+            {{- end }}
+            {{- else }}
+            {{- /* DEPRECATED: Legacy single SSH key */}}
             - --ssh-key-file=/etc/git-secret/ssh
+            {{- end }}
             - --ssh-known-hosts-file=/etc/git-secret/known_hosts
             - --max-failures=5
             - --verbose=1
           volumeMounts:
             - name: workspace
               mountPath: {{ .Values.persistence.mountPath }}
+            {{- if gt (len .Values.sshKeys) 0 }}
+            {{- /* Mount each SSH key secret */}}
+            {{- range $idx, $sshKey := .Values.sshKeys }}
+            - name: git-ssh-{{ $idx }}
+              mountPath: /etc/git-secret/keys/{{ $sshKey.name }}
+              {{- if or $sshKey.key (not $sshKey.privateKey) }}
+              subPath: {{ default "ssh" $sshKey.key }}
+              {{- else }}
+              subPath: ssh
+              {{- end }}
+              readOnly: true
+            {{- end }}
+            {{- /* Mount known_hosts from the first secret */}}
+            - name: git-ssh-known-hosts
+              mountPath: /etc/git-secret/known_hosts
+              subPath: known_hosts
+              readOnly: true
+            {{- else }}
+            {{- /* DEPRECATED: Legacy single SSH key mount */}}
             - name: git-ssh
               mountPath: /etc/git-secret
               readOnly: true
+            {{- end }}
         {{- end }}
 
         {{- /* Render user-supplied sidecars after built-in sidecars */}}
@@ -232,11 +288,42 @@ spec:
       # Volume Definitions
       volumes:
         {{- if .Values.gitSync.enabled }}
+        {{- if gt (len .Values.sshKeys) 0 }}
+        {{- /* Mount multiple SSH key secrets */}}
+        {{- range $idx, $sshKey := .Values.sshKeys }}
+        {{- $secretName := "" }}
+        {{- if $sshKey.secretName }}
+          {{- $secretName = $sshKey.secretName }}
+        {{- else if $sshKey.privateKey }}
+          {{- $secretName = printf "%s-%s" (include "oxy-app.fullname" $) $sshKey.name }}
+        {{- end }}
+        - name: git-ssh-{{ $idx }}
+          secret:
+            secretName: {{ $secretName }}
+            defaultMode: 0400
+            optional: false
+        {{- end }}
+        {{- /* Mount known_hosts from the first SSH key secret */}}
+        {{- $firstSSHKey := index .Values.sshKeys 0 }}
+        {{- $knownHostsSecretName := "" }}
+        {{- if $firstSSHKey.secretName }}
+          {{- $knownHostsSecretName = $firstSSHKey.secretName }}
+        {{- else if $firstSSHKey.privateKey }}
+          {{- $knownHostsSecretName = printf "%s-%s" (include "oxy-app.fullname" $) $firstSSHKey.name }}
+        {{- end }}
+        - name: git-ssh-known-hosts
+          secret:
+            secretName: {{ $knownHostsSecretName }}
+            defaultMode: 0400
+            optional: false
+        {{- else }}
+        {{- /* DEPRECATED: Legacy single SSH key secret */}}
         - name: git-ssh
           secret:
             secretName: {{ default .Values.gitSync.sshSecretName .Values.sshKey.secretName }}
             defaultMode: 0400
             optional: false
+        {{- end }}
         {{- end }}
         {{- /* Environment secret volumes */}}
         {{- range $idx, $secretName := .Values.externalSecrets.envSecretNames }}
