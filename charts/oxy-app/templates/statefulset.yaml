@@ -69,16 +69,21 @@ spec:
             - --link={{ $gitLink }}
             - --one-time=true
             - --depth=1
-            {{- if gt (len .Values.sshKeys) 0 }}
+            {{- if .Values.httpAuth.username }}
+            {{- /* HTTP authentication */}}
+            - --username={{ .Values.httpAuth.username }}
+            - --password-file=/etc/git-auth/password
+            {{- else if gt (len .Values.sshKeys) 0 }}
             {{- /* Multiple SSH keys: mount each to its own path */}}
             {{- range $idx, $sshKey := .Values.sshKeys }}
             - --ssh-key-file=/etc/git-secret/keys/{{ $sshKey.name }}
             {{- end }}
+            - --ssh-known-hosts-file=/etc/git-secret/known_hosts
             {{- else }}
             {{- /* DEPRECATED: Legacy single SSH key */}}
             - --ssh-key-file=/etc/git-secret/ssh
-            {{- end }}
             - --ssh-known-hosts-file=/etc/git-secret/known_hosts
+            {{- end }}
             - --max-failures=5
             - --verbose=1
             - --one-time
@@ -86,7 +91,12 @@ spec:
           volumeMounts:
             - name: workspace
               mountPath: {{ .Values.persistence.mountPath }}
-            {{- if gt (len .Values.sshKeys) 0 }}
+            {{- if .Values.httpAuth.username }}
+            {{- /* HTTP authentication */}}
+            - name: git-http-auth
+              mountPath: /etc/git-auth
+              readOnly: true
+            {{- else if gt (len .Values.sshKeys) 0 }}
             {{- /* Mount each SSH key secret */}}
             {{- range $idx, $sshKey := .Values.sshKeys }}
             - name: git-ssh-{{ $idx }}
@@ -240,22 +250,32 @@ spec:
             - --link={{ $gitLink }}
             - --period={{ .Values.gitSync.period }}
             - --depth=1
-            {{- if gt (len .Values.sshKeys) 0 }}
+            {{- if .Values.httpAuth.username }}
+            {{- /* HTTP authentication */}}
+            - --username={{ .Values.httpAuth.username }}
+            - --password-file=/etc/git-auth/password
+            {{- else if gt (len .Values.sshKeys) 0 }}
             {{- /* Multiple SSH keys: mount each to its own path */}}
             {{- range $idx, $sshKey := .Values.sshKeys }}
             - --ssh-key-file=/etc/git-secret/keys/{{ $sshKey.name }}
             {{- end }}
+            - --ssh-known-hosts-file=/etc/git-secret/known_hosts
             {{- else }}
             {{- /* DEPRECATED: Legacy single SSH key */}}
             - --ssh-key-file=/etc/git-secret/ssh
-            {{- end }}
             - --ssh-known-hosts-file=/etc/git-secret/known_hosts
+            {{- end }}
             - --max-failures=5
             - --verbose=1
           volumeMounts:
             - name: workspace
               mountPath: {{ .Values.persistence.mountPath }}
-            {{- if gt (len .Values.sshKeys) 0 }}
+            {{- if .Values.httpAuth.username }}
+            {{- /* HTTP authentication */}}
+            - name: git-http-auth
+              mountPath: /etc/git-auth
+              readOnly: true
+            {{- else if gt (len .Values.sshKeys) 0 }}
             {{- /* Mount each SSH key secret */}}
             {{- range $idx, $sshKey := .Values.sshKeys }}
             - name: git-ssh-{{ $idx }}
@@ -288,7 +308,23 @@ spec:
       # Volume Definitions
       volumes:
         {{- if .Values.gitSync.enabled }}
-        {{- if gt (len .Values.sshKeys) 0 }}
+        {{- if .Values.httpAuth.username }}
+        {{- /* HTTP authentication secret */}}
+        {{- $httpAuthSecretName := "" }}
+        {{- if .Values.httpAuth.secretName }}
+          {{- $httpAuthSecretName = .Values.httpAuth.secretName }}
+        {{- else if .Values.httpAuth.password }}
+          {{- $httpAuthSecretName = printf "%s-http-auth" (include "oxy-app.fullname" $) }}
+        {{- end }}
+        - name: git-http-auth
+          secret:
+            secretName: {{ $httpAuthSecretName }}
+            defaultMode: 0400
+            optional: false
+            items:
+              - key: {{ .Values.httpAuth.passwordKey }}
+                path: password
+        {{- else if gt (len .Values.sshKeys) 0 }}
         {{- /* Mount multiple SSH key secrets */}}
         {{- range $idx, $sshKey := .Values.sshKeys }}
         {{- $secretName := "" }}

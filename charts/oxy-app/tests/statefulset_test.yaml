@@ -601,3 +601,125 @@ tests:
       - equal:
           path: spec.template.spec.serviceAccountName
           value: RELEASE-NAME-oxy-app
+
+  # =======================
+  # HTTP Auth Tests
+  # =======================
+
+  - it: should add HTTP auth arguments when username and password provided
+    set:
+      gitSync:
+        enabled: true
+        repository: "https://github.com/example/repo.git"
+      httpAuth:
+        username: "myuser"
+        password: "mypass"
+      persistence:
+        enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[?(@.name == "git-clone")].args
+          content: "--username=myuser"
+      - contains:
+          path: spec.template.spec.initContainers[?(@.name == "git-clone")].args
+          content: "--password-file=/etc/git-auth/password"
+      - contains:
+          path: spec.template.spec.containers[?(@.name == "git-sync")].args
+          content: "--username=myuser"
+      - contains:
+          path: spec.template.spec.containers[?(@.name == "git-sync")].args
+          content: "--password-file=/etc/git-auth/password"
+
+  - it: should mount HTTP auth secret when username provided
+    set:
+      gitSync:
+        enabled: true
+        repository: "https://github.com/example/repo.git"
+      httpAuth:
+        username: "myuser"
+        password: "mypass"
+      persistence:
+        enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[?(@.name == "git-clone")].volumeMounts
+          content:
+            name: git-http-auth
+            mountPath: /etc/git-auth
+            readOnly: true
+      - contains:
+          path: spec.template.spec.containers[?(@.name == "git-sync")].volumeMounts
+          content:
+            name: git-http-auth
+            mountPath: /etc/git-auth
+            readOnly: true
+
+  - it: should create HTTP auth volume with inline password
+    set:
+      gitSync:
+        enabled: true
+        repository: "https://github.com/example/repo.git"
+      httpAuth:
+        username: "myuser"
+        password: "mypass"
+      persistence:
+        enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: git-http-auth
+            secret:
+              secretName: RELEASE-NAME-oxy-app-http-auth
+              defaultMode: 0400
+              optional: false
+              items:
+                - key: password
+                  path: password
+
+  - it: should use custom secret name when httpAuth.secretName is provided
+    set:
+      gitSync:
+        enabled: true
+        repository: "https://github.com/example/repo.git"
+      httpAuth:
+        username: "myuser"
+        secretName: "my-custom-secret"
+        passwordKey: "myPasswordKey"
+      persistence:
+        enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: git-http-auth
+            secret:
+              secretName: my-custom-secret
+              defaultMode: 0400
+              optional: false
+              items:
+                - key: myPasswordKey
+                  path: password
+
+  - it: should not use SSH keys when HTTP auth is enabled
+    set:
+      gitSync:
+        enabled: true
+        repository: "https://github.com/example/repo.git"
+      httpAuth:
+        username: "myuser"
+        password: "mypass"
+      sshKeys:
+        - name: github-key
+          privateKey: "fake-key"
+      persistence:
+        enabled: true
+    asserts:
+      - notContains:
+          path: spec.template.spec.initContainers[?(@.name == "git-clone")].args
+          content: "--ssh-key-file=/etc/git-secret/keys/github-key"
+      - notContains:
+          path: spec.template.spec.initContainers[?(@.name == "git-clone")].volumeMounts
+          any: true
+          content:
+            name: git-ssh-0

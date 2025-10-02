@@ -211,6 +211,20 @@ gitSync:
   # List of SSH key file paths is now auto-generated from sshKeys
   sshKeyFiles: []
 
+# HTTP authentication for git-sync (for HTTPS git repositories)
+# Use this when cloning from HTTPS URLs that require username/password authentication
+httpAuth:
+  # Username for HTTP authentication
+  username: ""
+  # Inline password (for development/testing only - NOT RECOMMENDED for production)
+  # For production, use secretName to reference an existing secret
+  password: ""
+  # Reference to an existing Kubernetes secret containing the password
+  # The secret should have a key named 'password' (or specify passwordKey)
+  secretName: ""
+  # Key name in the secret that contains the password (defaults to 'password')
+  passwordKey: "password"
+
 database:
   # Subchart Postgres settings (optional; not selected automatically)
   postgres:
