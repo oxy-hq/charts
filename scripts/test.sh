@@ -330,20 +330,27 @@ test_ingress_deployment() {
 test_postgres_deployment() {
     log_info "Testing deployment with PostgreSQL..."
 
-    helm install test-postgres "$CHART_PATH" \
+    # Debug: Show what we're about to install
+    log_info "Chart dependencies:"
+    helm dependency list "$CHART_PATH" || true
+
+    # Install with longer timeout for PostgreSQL startup
+    log_info "Installing with PostgreSQL enabled..."
+    if ! helm install test-postgres "$CHART_PATH" \
         -f "$CHART_PATH/test-values/with-postgres-values.yaml" \
         -n "$NAMESPACE" \
-        --wait --timeout=3m
-
-    log_info "Waiting for PostgreSQL pod to be ready..."
-    if ! kubectl wait --for=condition=ready pod \
-        -l app.kubernetes.io/name=postgresql \
-        -n "$NAMESPACE" \
-        --timeout=300s; then
-        log_error "PostgreSQL pod failed to become ready"
+        --wait --timeout=10m; then
+        log_error "Helm install failed"
+        log_info "Getting pod status:"
         kubectl get pods -n "$NAMESPACE" -o wide || true
+        log_info "Describing PostgreSQL pod:"
         kubectl describe pod -l app.kubernetes.io/name=postgresql -n "$NAMESPACE" || true
-        kubectl logs -l app.kubernetes.io/name=postgresql -n "$NAMESPACE" --tail=50 || true
+        log_info "PostgreSQL pod logs:"
+        kubectl logs -l app.kubernetes.io/name=postgresql -n "$NAMESPACE" --tail=100 || true
+        log_info "Describing app pod:"
+        kubectl describe pod -l app.kubernetes.io/instance=test-postgres -n "$NAMESPACE" || true
+        log_info "App pod logs:"
+        kubectl logs -l app.kubernetes.io/instance=test-postgres -n "$NAMESPACE" --tail=100 || true
         return 1
     fi
 

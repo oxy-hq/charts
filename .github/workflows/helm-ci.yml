@@ -74,27 +74,27 @@ jobs:
           export CI=true
           helm unittest charts/oxy-app -f "tests/**/*_test.yaml"
 
-      # - name: Create kind cluster
-      #   if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
-      #   uses: helm/kind-action@v1.12.0
-      #   with:
-      #     cluster_name: helm-integration-test
-      #     config: ./kind-config.yaml
+      - name: Create kind cluster
+        if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
+        uses: helm/kind-action@v1.12.0
+        with:
+          cluster_name: helm-integration-test
+          config: ./kind-config.yaml
 
-      # - name: Install NGINX Ingress Controller
-      #   if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
-      #   run: |
-      #     kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.1/deploy/static/provider/kind/deploy.yaml
-      #     kubectl wait --namespace ingress-nginx \
-      #       --for=condition=ready pod \
-      #       --selector=app.kubernetes.io/component=controller \
-      #       --timeout=90s
+      - name: Install NGINX Ingress Controller
+        if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
+        run: |
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.1/deploy/static/provider/kind/deploy.yaml
+          kubectl wait --namespace ingress-nginx \
+            --for=condition=ready pod \
+            --selector=app.kubernetes.io/component=controller \
+            --timeout=90s
 
-      # - name: Run integration tests
-      #   if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
-      #   run: |
-      #     export CI=true
-      #     ./scripts/test.sh --cleanup
+      - name: Run integration tests
+        if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
+        run: |
+          export CI=true
+          ./scripts/test.sh --cleanup
 
   publish:
     name: Package & Publish Helm charts

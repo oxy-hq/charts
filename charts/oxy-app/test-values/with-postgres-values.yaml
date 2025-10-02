@@ -21,6 +21,10 @@ database:
 
 # Configure PostgreSQL for testing
 postgresql:
+  image:
+    registry: docker.io
+    repository: bitnami/postgresql
+    tag: 16.4.0-debian-12-r13  # Lock to stable PostgreSQL 16.x version
   auth:
     username: testuser
     password: testpass
@@ -28,13 +32,7 @@ postgresql:
   primary:
     persistence:
       enabled: false  # Disable persistence for CI
-    resources:
-      limits:
-        cpu: 200m
-        memory: 256Mi
-      requests:
-        cpu: 100m
-        memory: 128Mi
+
 
 resources:
   limits:
