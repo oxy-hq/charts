@@ -1,6 +1,6 @@
 # oxy-app
 
-![Version: 0.1.17](https://img.shields.io/badge/Version-0.1.17-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.2.28](https://img.shields.io/badge/AppVersion-0.2.28-informational?style=flat-square)
+![Version: 0.1.20](https://img.shields.io/badge/Version-0.1.20-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.2.28](https://img.shields.io/badge/AppVersion-0.2.28-informational?style=flat-square)
 
 A Helm chart for Oxy application deployment on kubernetes
 
@@ -15,7 +15,7 @@ A Helm chart for Oxy application deployment on kubernetes
 
 | Repository | Name | Version |
 |------------|------|---------|
-| https://charts.bitnami.com/bitnami | postgresql | 15.2.2 |
+| https://charts.bitnami.com/bitnami | postgresql | 16.7.27 |
 
 ## Values
 
@@ -44,6 +44,9 @@ A Helm chart for Oxy application deployment on kubernetes
 | database.external.storeRef.kind | string | `"SecretStore"` |  |
 | database.external.storeRef.name | string | `""` |  |
 | database.external.user | string | `""` |  |
+| database.postgres.auth.database | string | `"oxydb"` |  |
+| database.postgres.auth.password | string | `"postgres"` |  |
+| database.postgres.auth.username | string | `"oxy"` |  |
 | database.postgres.enabled | bool | `false` |  |
 | database.postgres.postgresqlDatabase | string | `"oxydb"` |  |
 | database.postgres.postgresqlPassword | string | `"postgres"` |  |
@@ -60,6 +63,19 @@ A Helm chart for Oxy application deployment on kubernetes
 | extraSidecars | list | `[]` |  |
 | gitSync.branch | string | `"main"` |  |
 | gitSync.enabled | bool | `false` |  |
+| gitSync.githubApp.applicationId | string | `""` |  |
+| gitSync.githubApp.applicationIdKey | string | `"github_app_application_id"` |  |
+| gitSync.githubApp.baseUrl | string | `"https://api.github.com"` |  |
+| gitSync.githubApp.baseUrlKey | string | `"github_app_base_url"` |  |
+| gitSync.githubApp.clientId | string | `""` |  |
+| gitSync.githubApp.clientIdKey | string | `"github_app_client_id"` |  |
+| gitSync.githubApp.installationId | string | `""` |  |
+| gitSync.githubApp.installationIdKey | string | `"github_app_installation_id"` |  |
+| gitSync.githubApp.privateKey | string | `""` |  |
+| gitSync.githubApp.privateKeyKey | string | `"github_app_private_key"` |  |
+| gitSync.githubApp.publicKey | string | `""` |  |
+| gitSync.githubApp.publicKeyKey | string | `"github_app_public_key"` |  |
+| gitSync.githubApp.secretName | string | `""` |  |
 | gitSync.imagePullPolicy | string | `"IfNotPresent"` |  |
 | gitSync.link | string | `""` |  |
 | gitSync.period | string | `"15s"` |  |
@@ -67,6 +83,10 @@ A Helm chart for Oxy application deployment on kubernetes
 | gitSync.root | string | `""` |  |
 | gitSync.sshSecretName | string | `"oxy-git-ssh"` |  |
 | headlessService.enabled | bool | `true` |  |
+| httpAuth.password | string | `""` |  |
+| httpAuth.passwordKey | string | `"password"` |  |
+| httpAuth.secretName | string | `""` |  |
+| httpAuth.username | string | `""` |  |
 | ingress.annotations | object | `{}` |  |
 | ingress.enabled | bool | `false` |  |
 | ingress.hosts[0].host | string | `"chart-example.local"` |  |
@@ -115,10 +135,10 @@ A Helm chart for Oxy application deployment on kubernetes
 | serviceAccount.annotations | object | `{}` |  |
 | serviceAccount.create | bool | `true` |  |
 | serviceAccount.name | string | `""` |  |
-| sshKey.knownHosts | string | `""` | known_hosts file content for SSH host verification (optional). If empty, the chart will create a minimal known_hosts that accepts GitHub, GitLab, and Bitbucket |
-| sshKey.privateKey | string | `""` | SSH private key for git operations. If provided, a Kubernetes Secret will be created. For production, use external secrets instead. |
-| sshKey.publicKey | string | `""` | SSH public key for git operations. Optional, used for documentation purposes. |
-| sshKey.secretName | string | `""` | Optional: specify a secret name where SSH keys will be stored. If not specified, defaults to gitSync.sshSecretName. |
+| sshKey.knownHosts | string | `""` |  |
+| sshKey.privateKey | string | `""` |  |
+| sshKey.publicKey | string | `""` |  |
+| sshKey.secretName | string | `""` |  |
 | tolerations | string | `nil` |  |
 
 ----------------------------------------------

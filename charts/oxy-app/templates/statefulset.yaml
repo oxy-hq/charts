@@ -73,21 +73,66 @@ spec:
             {{- /* HTTP authentication */}}
             - --username={{ .Values.httpAuth.username }}
             - --password-file=/etc/git-auth/password
-            {{- else if gt (len .Values.sshKeys) 0 }}
-            {{- /* Multiple SSH keys: mount each to its own path */}}
-            {{- range $idx, $sshKey := .Values.sshKeys }}
-            - --ssh-key-file=/etc/git-secret/keys/{{ $sshKey.name }}
+            {{- else if or .Values.gitSync.githubApp.applicationId .Values.gitSync.githubApp.privateKey .Values.gitSync.githubApp.secretName }}
+            {{- /* GitHub App authentication: pass private key file and allow IDs via env */}}
+            - --github-app-private-key-file=/etc/github-app/{{ .Values.gitSync.githubApp.privateKeyKey }}
+            {{- if .Values.gitSync.githubApp.clientId }}
+            - --github-app-client-id={{ .Values.gitSync.githubApp.clientId }}
             {{- end }}
-            - --ssh-known-hosts-file=/etc/git-secret/known_hosts
-            {{- else }}
-            {{- /* DEPRECATED: Legacy single SSH key */}}
+            {{- if .Values.gitSync.githubApp.baseUrl }}
+            - --github-base-url={{ .Values.gitSync.githubApp.baseUrl }}
+            {{- end }}
+            {{- else if .Values.sshKey.privateKey }}
+            {{- /* Single SSH key (legacy/simple) */}}
             - --ssh-key-file=/etc/git-secret/ssh
             - --ssh-known-hosts-file=/etc/git-secret/known_hosts
+            {{- else }}
+            {{- /* No auth provided; rely on externally managed secrets or disabled gitSync */}}
             {{- end }}
             - --max-failures=5
             - --verbose=1
             - --one-time
             - --git-gc=off
+          env:
+            {{- if .Values.gitSync.githubApp.secretName }}
+            - name: GITSYNC_GITHUB_APP_APPLICATION_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.gitSync.githubApp.secretName }}
+                  key: {{ .Values.gitSync.githubApp.applicationIdKey }}
+            - name: GITSYNC_GITHUB_APP_INSTALLATION_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.gitSync.githubApp.secretName }}
+                  key: {{ .Values.gitSync.githubApp.installationIdKey }}
+            - name: GITSYNC_GITHUB_APP_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.gitSync.githubApp.secretName }}
+                  key: {{ .Values.gitSync.githubApp.clientIdKey }}
+            - name: GITSYNC_GITHUB_BASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.gitSync.githubApp.secretName }}
+                  key: {{ .Values.gitSync.githubApp.baseUrlKey }}
+            {{- else }}
+            {{- if .Values.gitSync.githubApp.applicationId }}
+            - name: GITSYNC_GITHUB_APP_APPLICATION_ID
+              value: {{ .Values.gitSync.githubApp.applicationId | quote }}
+            {{- end }}
+            {{- if .Values.gitSync.githubApp.installationId }}
+            - name: GITSYNC_GITHUB_APP_INSTALLATION_ID
+              value: {{ .Values.gitSync.githubApp.installationId | quote }}
+            {{- end }}
+            {{- if .Values.gitSync.githubApp.clientId }}
+            - name: GITSYNC_GITHUB_APP_CLIENT_ID
+              value: {{ .Values.gitSync.githubApp.clientId | quote }}
+            {{- end }}
+            {{- if .Values.gitSync.githubApp.baseUrl }}
+            - name: GITSYNC_GITHUB_BASE_URL
+              value: {{ .Values.gitSync.githubApp.baseUrl | quote }}
+            {{- end }}
+            {{- end }}
           volumeMounts:
             - name: workspace
               mountPath: {{ .Values.persistence.mountPath }}
@@ -96,25 +141,13 @@ spec:
             - name: git-http-auth
               mountPath: /etc/git-auth
               readOnly: true
-            {{- else if gt (len .Values.sshKeys) 0 }}
-            {{- /* Mount each SSH key secret */}}
-            {{- range $idx, $sshKey := .Values.sshKeys }}
-            - name: git-ssh-{{ $idx }}
-              mountPath: /etc/git-secret/keys/{{ $sshKey.name }}
-              {{- if or $sshKey.key (not $sshKey.privateKey) }}
-              subPath: {{ default "ssh" $sshKey.key }}
-              {{- else }}
-              subPath: ssh
-              {{- end }}
+            {{- else if or .Values.gitSync.githubApp.applicationId .Values.gitSync.githubApp.privateKey .Values.gitSync.githubApp.secretName }}
+            {{- /* Mount GitHub App secret (either user-provided or chart-created) */}}
+            - name: github-app-secret
+              mountPath: /etc/github-app
               readOnly: true
-            {{- end }}
-            {{- /* Mount known_hosts from the first secret */}}
-            - name: git-ssh-known-hosts
-              mountPath: /etc/git-secret/known_hosts
-              subPath: known_hosts
-              readOnly: true
-            {{- else }}
-            {{- /* DEPRECATED: Legacy single SSH key mount */}}
+            {{- else if .Values.sshKey.privateKey }}
+            {{- /* Single SSH key mount */}}
             - name: git-ssh
               mountPath: /etc/git-secret
               readOnly: true
@@ -254,19 +287,64 @@ spec:
             {{- /* HTTP authentication */}}
             - --username={{ .Values.httpAuth.username }}
             - --password-file=/etc/git-auth/password
-            {{- else if gt (len .Values.sshKeys) 0 }}
-            {{- /* Multiple SSH keys: mount each to its own path */}}
-            {{- range $idx, $sshKey := .Values.sshKeys }}
-            - --ssh-key-file=/etc/git-secret/keys/{{ $sshKey.name }}
+            {{- else if or .Values.gitSync.githubApp.applicationId .Values.gitSync.githubApp.privateKey .Values.gitSync.githubApp.secretName }}
+            {{- /* GitHub App authentication: pass private key file and allow IDs via env */}}
+            - --github-app-private-key-file=/etc/github-app/{{ .Values.gitSync.githubApp.privateKeyKey }}
+            {{- if .Values.gitSync.githubApp.clientId }}
+            - --github-app-client-id={{ .Values.gitSync.githubApp.clientId }}
             {{- end }}
-            - --ssh-known-hosts-file=/etc/git-secret/known_hosts
-            {{- else }}
-            {{- /* DEPRECATED: Legacy single SSH key */}}
+            {{- if .Values.gitSync.githubApp.baseUrl }}
+            - --github-base-url={{ .Values.gitSync.githubApp.baseUrl }}
+            {{- end }}
+            {{- else if .Values.sshKey.privateKey }}
+            {{- /* Single SSH key file (legacy/simple) */}}
             - --ssh-key-file=/etc/git-secret/ssh
             - --ssh-known-hosts-file=/etc/git-secret/known_hosts
+            {{- else }}
+            {{- /* No auth provided; rely on externally managed secrets or disabled gitSync */}}
             {{- end }}
             - --max-failures=5
             - --verbose=1
+          env:
+            {{- if .Values.gitSync.githubApp.secretName }}
+            - name: GITSYNC_GITHUB_APP_APPLICATION_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.gitSync.githubApp.secretName }}
+                  key: {{ .Values.gitSync.githubApp.applicationIdKey }}
+            - name: GITSYNC_GITHUB_APP_INSTALLATION_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.gitSync.githubApp.secretName }}
+                  key: {{ .Values.gitSync.githubApp.installationIdKey }}
+            - name: GITSYNC_GITHUB_APP_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.gitSync.githubApp.secretName }}
+                  key: {{ .Values.gitSync.githubApp.clientIdKey }}
+            - name: GITSYNC_GITHUB_BASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.gitSync.githubApp.secretName }}
+                  key: {{ .Values.gitSync.githubApp.baseUrlKey }}
+            {{- else }}
+            {{- if .Values.gitSync.githubApp.applicationId }}
+            - name: GITSYNC_GITHUB_APP_APPLICATION_ID
+              value: {{ .Values.gitSync.githubApp.applicationId | quote }}
+            {{- end }}
+            {{- if .Values.gitSync.githubApp.installationId }}
+            - name: GITSYNC_GITHUB_APP_INSTALLATION_ID
+              value: {{ .Values.gitSync.githubApp.installationId | quote }}
+            {{- end }}
+            {{- if .Values.gitSync.githubApp.clientId }}
+            - name: GITSYNC_GITHUB_APP_CLIENT_ID
+              value: {{ .Values.gitSync.githubApp.clientId | quote }}
+            {{- end }}
+            {{- if .Values.gitSync.githubApp.baseUrl }}
+            - name: GITSYNC_GITHUB_BASE_URL
+              value: {{ .Values.gitSync.githubApp.baseUrl | quote }}
+            {{- end }}
+            {{- end }}
           volumeMounts:
             - name: workspace
               mountPath: {{ .Values.persistence.mountPath }}
@@ -275,22 +353,10 @@ spec:
             - name: git-http-auth
               mountPath: /etc/git-auth
               readOnly: true
-            {{- else if gt (len .Values.sshKeys) 0 }}
-            {{- /* Mount each SSH key secret */}}
-            {{- range $idx, $sshKey := .Values.sshKeys }}
-            - name: git-ssh-{{ $idx }}
-              mountPath: /etc/git-secret/keys/{{ $sshKey.name }}
-              {{- if or $sshKey.key (not $sshKey.privateKey) }}
-              subPath: {{ default "ssh" $sshKey.key }}
-              {{- else }}
-              subPath: ssh
-              {{- end }}
-              readOnly: true
-            {{- end }}
-            {{- /* Mount known_hosts from the first secret */}}
-            - name: git-ssh-known-hosts
-              mountPath: /etc/git-secret/known_hosts
-              subPath: known_hosts
+            {{- else if or .Values.gitSync.githubApp.applicationId .Values.gitSync.githubApp.privateKey .Values.gitSync.githubApp.secretName }}
+            {{- /* Mount GitHub App secret */}}
+            - name: github-app-secret
+              mountPath: /etc/github-app
               readOnly: true
             {{- else }}
             {{- /* DEPRECATED: Legacy single SSH key mount */}}
@@ -324,34 +390,24 @@ spec:
             items:
               - key: {{ .Values.httpAuth.passwordKey }}
                 path: password
-        {{- else if gt (len .Values.sshKeys) 0 }}
-        {{- /* Mount multiple SSH key secrets */}}
-        {{- range $idx, $sshKey := .Values.sshKeys }}
-        {{- $secretName := "" }}
-        {{- if $sshKey.secretName }}
-          {{- $secretName = $sshKey.secretName }}
-        {{- else if $sshKey.privateKey }}
-          {{- $secretName = printf "%s-%s" (include "oxy-app.fullname" $) $sshKey.name }}
-        {{- end }}
-        - name: git-ssh-{{ $idx }}
+        {{- else if or .Values.gitSync.githubApp.applicationId .Values.gitSync.githubApp.privateKey .Values.gitSync.githubApp.secretName }}
+        {{- /* GitHub App secret: if user provided a secretName, mount entire secret; otherwise chart-created secret mounts only the private key file */}}
+        {{- if .Values.gitSync.githubApp.secretName }}
+        - name: github-app-secret
           secret:
-            secretName: {{ $secretName }}
+            secretName: {{ .Values.gitSync.githubApp.secretName }}
             defaultMode: 0400
             optional: false
-        {{- end }}
-        {{- /* Mount known_hosts from the first SSH key secret */}}
-        {{- $firstSSHKey := index .Values.sshKeys 0 }}
-        {{- $knownHostsSecretName := "" }}
-        {{- if $firstSSHKey.secretName }}
-          {{- $knownHostsSecretName = $firstSSHKey.secretName }}
-        {{- else if $firstSSHKey.privateKey }}
-          {{- $knownHostsSecretName = printf "%s-%s" (include "oxy-app.fullname" $) $firstSSHKey.name }}
-        {{- end }}
-        - name: git-ssh-known-hosts
+        {{- else }}
+        - name: github-app-secret
           secret:
-            secretName: {{ $knownHostsSecretName }}
+            secretName: {{ printf "%s-github-app" (include "oxy-app.fullname" $) }}
             defaultMode: 0400
             optional: false
+            items:
+              - key: {{ .Values.gitSync.githubApp.privateKeyKey }}
+                path: {{ .Values.gitSync.githubApp.privateKeyKey }}
+        {{- end }}
         {{- else }}
         {{- /* DEPRECATED: Legacy single SSH key secret */}}
         - name: git-ssh

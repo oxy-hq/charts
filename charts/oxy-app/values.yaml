@@ -155,42 +155,14 @@ externalSecrets:
     name: ""
     kind: ""
 
-# DEPRECATED: Use sshKeys instead (plural)
-# This single SSH key configuration is maintained for backward compatibility only
-# and will be removed in a future version.
+# Single SSH key configuration (preferred for simple setups)
+# Use `sshKey.secretName` to point to an existing Secret in production,
+# or provide `sshKey.privateKey` (inline) for development/testing only.
 sshKey:
-  secretName: ""
-  privateKey: ""
-  publicKey: ""
-  knownHosts: ""
-
-# Multiple SSH keys for git operations
-# Each entry can either reference an existing secret OR provide inline keys (for dev/testing)
-# Example 1: Reference existing secrets (RECOMMENDED for production)
-# sshKeys:
-#   - name: github-key
-#     secretName: github-ssh-secret
-#     key: ssh  # Key name in the secret (defaults to "ssh")
-#
-# Example 2: Inline keys (for development/testing only - DO NOT use in production)
-# sshKeys:
-#   - name: github-key
-#     privateKey: |
-#       -----BEGIN OPENSSH PRIVATE KEY-----
-#       ...
-#       -----END OPENSSH PRIVATE KEY-----
-#     publicKey: "ssh-ed25519 AAAA... user@example.com"  # Optional
-#     knownHosts: |  # Optional, uses defaults if not provided
-#       github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5...
-#
-# Example 3: Mixed approach
-# sshKeys:
-#   - name: github-key
-#     privateKey: "..."  # Inline for testing
-#   - name: gitlab-key
-#     secretName: gitlab-ssh-secret  # Reference existing secret
-#     key: ssh-privatekey
-sshKeys: []
+  secretName: ""    # If empty, defaults to gitSync.sshSecretName
+  privateKey: ""   # Inline private SSH key (DO NOT commit to VCS)
+  publicKey: ""    # Optional public key
+  knownHosts: ""   # Optional known_hosts content (multiline)
 
 # Git sync sidecar configuration
 gitSync:
@@ -207,9 +179,23 @@ gitSync:
   link: ""
   # Image pull policy for the git-sync init container. Valid values: Always, IfNotPresent, Never
   imagePullPolicy: IfNotPresent
-  # DEPRECATED: Specify paths in sshKeys[].name instead
-  # List of SSH key file paths is now auto-generated from sshKeys
-  sshKeyFiles: []
+
+  # GitHub App authentication (optional)
+  # When provided, the chart will create a secret and mount it for git-sync.
+  githubApp:
+    secretName: ""       # Optional: existing secret name containing GitHub App data
+    privateKey: ""      # PEM private key contents for GitHub App (DO NOT commit)
+    privateKeyKey: "github_app_private_key" # key name in secret for private key
+    publicKey: ""       # Optional public key
+    publicKeyKey: "github_app_public_key"
+    applicationId: ""   # GitHub App Application ID (inline)
+    applicationIdKey: "github_app_application_id" # key name in secret for app id
+    clientId: ""        # GitHub App Client ID (inline)
+    clientIdKey: "github_app_client_id"
+    installationId: ""  # Installation ID (inline)
+    installationIdKey: "github_app_installation_id" # key name in secret for installation id
+    baseUrl: "https://api.github.com" # GitHub API base URL (for GHES)
+    baseUrlKey: "github_app_base_url"
 
 # HTTP authentication for git-sync (for HTTPS git repositories)
 # Use this when cloning from HTTPS URLs that require username/password authentication

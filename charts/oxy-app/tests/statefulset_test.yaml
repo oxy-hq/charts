@@ -709,17 +709,81 @@ tests:
       httpAuth:
         username: "myuser"
         password: "mypass"
-      sshKeys:
-        - name: github-key
-          privateKey: "fake-key"
+      sshKey:
+        privateKey: "fake-key"
       persistence:
         enabled: true
     asserts:
       - notContains:
           path: spec.template.spec.initContainers[?(@.name == "git-clone")].args
-          content: "--ssh-key-file=/etc/git-secret/keys/github-key"
+          content: "--ssh-key-file=/etc/git-secret/ssh"
       - notContains:
           path: spec.template.spec.initContainers[?(@.name == "git-clone")].volumeMounts
           any: true
           content:
-            name: git-ssh-0
+            name: git-ssh
+
+  - it: should add github app args/env when githubApp inline values provided
+    set:
+      gitSync:
+        enabled: true
+        repository: "https://github.com/example/repo.git"
+        githubApp:
+          privateKey: "my-pem"
+          applicationId: "123"
+          installationId: "456"
+      persistence:
+        enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[?(@.name == "git-clone")].args
+          content: "--github-app-private-key-file=/etc/github-app/github_app_private_key"
+      - contains:
+          path: spec.template.spec.containers[?(@.name == "git-sync")].args
+          content: "--github-app-private-key-file=/etc/github-app/github_app_private_key"
+      - contains:
+          path: spec.template.spec.initContainers[?(@.name == "git-clone")].env
+          content:
+            name: GITSYNC_GITHUB_APP_APPLICATION_ID
+            value: "123"
+      - contains:
+          path: spec.template.spec.containers[?(@.name == "git-sync")].env
+          content:
+            name: GITSYNC_GITHUB_APP_INSTALLATION_ID
+            value: "456"
+
+  - it: should mount provided github app secret when secretName set
+    set:
+      gitSync:
+        enabled: true
+        repository: "https://github.com/example/repo.git"
+        githubApp:
+          secretName: "my-github-app-secret"
+          privateKeyKey: "my_private_key"
+          applicationIdKey: "my_app_id"
+          installationIdKey: "my_install_id"
+      persistence:
+        enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[?(@.name == "git-sync")].volumeMounts
+          content:
+            name: github-app-secret
+            mountPath: /etc/github-app
+            readOnly: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: github-app-secret
+            secret:
+              secretName: my-github-app-secret
+              defaultMode: 0400
+              optional: false
+      - contains:
+          path: spec.template.spec.containers[?(@.name == "git-sync")].env
+          content:
+            name: GITSYNC_GITHUB_BASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: my-github-app-secret
+                key: github_app_base_url
