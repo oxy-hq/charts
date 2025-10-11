@@ -1,6 +1,6 @@
 # oxy-app
 
-![Version: 0.1.20](https://img.shields.io/badge/Version-0.1.20-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.2.28](https://img.shields.io/badge/AppVersion-0.2.28-informational?style=flat-square)
+![Version: 0.1.21](https://img.shields.io/badge/Version-0.1.21-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.2.28](https://img.shields.io/badge/AppVersion-0.2.28-informational?style=flat-square)
 
 A Helm chart for Oxy application deployment on kubernetes
 
@@ -73,8 +73,6 @@ A Helm chart for Oxy application deployment on kubernetes
 | gitSync.githubApp.installationIdKey | string | `"github_app_installation_id"` |  |
 | gitSync.githubApp.privateKey | string | `""` |  |
 | gitSync.githubApp.privateKeyKey | string | `"github_app_private_key"` |  |
-| gitSync.githubApp.publicKey | string | `""` |  |
-| gitSync.githubApp.publicKeyKey | string | `"github_app_public_key"` |  |
 | gitSync.githubApp.secretName | string | `""` |  |
 | gitSync.imagePullPolicy | string | `"IfNotPresent"` |  |
 | gitSync.link | string | `""` |  |
@@ -137,7 +135,6 @@ A Helm chart for Oxy application deployment on kubernetes
 | serviceAccount.name | string | `""` |  |
 | sshKey.knownHosts | string | `""` |  |
 | sshKey.privateKey | string | `""` |  |
-| sshKey.publicKey | string | `""` |  |
 | sshKey.secretName | string | `""` |  |
 | tolerations | string | `nil` |  |
 

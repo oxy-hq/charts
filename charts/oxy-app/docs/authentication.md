@@ -85,8 +85,6 @@ gitSync:
 
 sshKey:
   privateKey: "|\n-----BEGIN OPENSSH PRIVATE KEY-----\n..." # only for testing
-  publicKey: "ssh-rsa AAAA..."
-  knownHosts: "github.com ssh-rsa AAAA..." # optional
 ```
 
 Secret-backed (recommended):

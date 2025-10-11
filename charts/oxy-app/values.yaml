@@ -161,7 +161,6 @@ externalSecrets:
 sshKey:
   secretName: ""    # If empty, defaults to gitSync.sshSecretName
   privateKey: ""   # Inline private SSH key (DO NOT commit to VCS)
-  publicKey: ""    # Optional public key
   knownHosts: ""   # Optional known_hosts content (multiline)
 
 # Git sync sidecar configuration
@@ -169,8 +168,6 @@ gitSync:
   period: 15s
   repository: ""
   branch: main
-  # DEPRECATED: Use sshKeys[].secretName instead
-  # This is maintained for backward compatibility only
   sshSecretName: oxy-git-ssh
   enabled: false
   # Root directory where git-sync stores repo data (defaults to <persistence.mountPath>/git)
@@ -186,8 +183,6 @@ gitSync:
     secretName: ""       # Optional: existing secret name containing GitHub App data
     privateKey: ""      # PEM private key contents for GitHub App (DO NOT commit)
     privateKeyKey: "github_app_private_key" # key name in secret for private key
-    publicKey: ""       # Optional public key
-    publicKeyKey: "github_app_public_key"
     applicationId: ""   # GitHub App Application ID (inline)
     applicationIdKey: "github_app_application_id" # key name in secret for app id
     clientId: ""        # GitHub App Client ID (inline)

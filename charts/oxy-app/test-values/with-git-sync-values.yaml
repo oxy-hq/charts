@@ -36,4 +36,4 @@ persistence:
 #      --from-file=known_hosts=/path/to/known_hosts
 #
 # 2. Reference the secret name in gitSync.sshSecretName (above)
-# 3. Keep sshKey.privateKey and sshKey.publicKey empty (as shown above)
+# 3. Keep sshKey.privateKey empty (as shown above)

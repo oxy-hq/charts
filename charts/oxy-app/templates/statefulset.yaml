@@ -83,9 +83,11 @@ spec:
             - --github-base-url={{ .Values.gitSync.githubApp.baseUrl }}
             {{- end }}
             {{- else if .Values.sshKey.privateKey }}
-            {{- /* Single SSH key (legacy/simple) */}}
             - --ssh-key-file=/etc/git-secret/ssh
+            - --ssh-key-file=/etc/git-secret/ssh
+            {{- if .Values.sshKey.knownHosts }}
             - --ssh-known-hosts-file=/etc/git-secret/known_hosts
+            {{- end }}
             {{- else }}
             {{- /* No auth provided; rely on externally managed secrets or disabled gitSync */}}
             {{- end }}
@@ -297,9 +299,11 @@ spec:
             - --github-base-url={{ .Values.gitSync.githubApp.baseUrl }}
             {{- end }}
             {{- else if .Values.sshKey.privateKey }}
-            {{- /* Single SSH key file (legacy/simple) */}}
             - --ssh-key-file=/etc/git-secret/ssh
+            - --ssh-key-file=/etc/git-secret/ssh
+            {{- if .Values.sshKey.knownHosts }}
             - --ssh-known-hosts-file=/etc/git-secret/known_hosts
+            {{- end }}
             {{- else }}
             {{- /* No auth provided; rely on externally managed secrets or disabled gitSync */}}
             {{- end }}
@@ -359,7 +363,6 @@ spec:
               mountPath: /etc/github-app
               readOnly: true
             {{- else }}
-            {{- /* DEPRECATED: Legacy single SSH key mount */}}
             - name: git-ssh
               mountPath: /etc/git-secret
               readOnly: true
@@ -409,7 +412,6 @@ spec:
                 path: {{ .Values.gitSync.githubApp.privateKeyKey }}
         {{- end }}
         {{- else }}
-        {{- /* DEPRECATED: Legacy single SSH key secret */}}
         - name: git-ssh
           secret:
             secretName: {{ default .Values.gitSync.sshSecretName .Values.sshKey.secretName }}

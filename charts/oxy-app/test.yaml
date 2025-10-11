@@ -14,7 +14,6 @@ gitSync:
 
 
 sshKey:
-  publicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH/rJ/JYzu3f1ynG3XoZxjnQv3dFYx6nzW2cfft4Jfvd luong@oxy.tech"
   privateKey: |
     -----BEGIN OPENSSH PRIVATE KEY-----
     b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
