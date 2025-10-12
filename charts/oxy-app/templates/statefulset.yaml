@@ -175,7 +175,7 @@ spec:
             - sh
             - -c
             - |
-              exec oxy serve{{- if not .Values.gitSync.enabled }} --readonly{{- end }}
+              exec oxy serve{{- if not .Values.gitSync.enabled }} --cloud{{- end }}
           {{- end }}
           {{- if .Values.gitSync.enabled }}
           workingDir: {{ $gitLink }}

@@ -54,9 +54,9 @@ This doc tries to focus only on chart-specific, differential behavior you won't 
   4. sqlite fallback
 - For production, it is recommended to set `env.OXY_DATABASE_URL` or use an external managed DB.
 - gitSync / init-container
-  - By default, gitSync is disabled. We start oxy with `--readonly` mode and no git repo. Git setup will be handled by the app UI
+  - By default, gitSync is disabled. We start oxy with `--cloud` mode and no git repo. Git setup will be handled by the app UI
   - Controlled by `gitSync.enabled` (default: `false`). When enabled, init containers clone and prepare `/workspace/current`. The chart no longer builds an `.env` in an init container; environment variables should be provided via `env`, `configMap`, or mounted secrets.
-  - When disabled, init containers and git-ssh mounts are omitted and the app uses `--readonly` mode.
+  - When disabled, init containers and git-ssh mounts are omitted and the app uses `--cloud` mode.
   - **SSH Key Management**:
     - For development/testing: You can provide SSH keys directly in `values.yaml` via `sshKey.privateKey` and optionally `sshKey.knownHosts`. The chart will create a Kubernetes Secret automatically.
     - For production: Create the SSH secret externally (manually or via External Secrets Operator) and reference it via `gitSync.sshSecretName` or `sshKey.secretName`. **Never commit SSH keys to version control.**

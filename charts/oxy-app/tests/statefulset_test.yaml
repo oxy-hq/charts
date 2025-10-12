@@ -234,7 +234,7 @@ tests:
     asserts:
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: ".*--readonly.*"
+          pattern: ".*--cloud.*"
 
   - it: should have two containers when git sync enabled
     set:
@@ -264,7 +264,7 @@ tests:
     asserts:
       - notMatchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: ".*--readonly.*"
+          pattern: ".*--cloud.*"
 
   - it: should configure git sync container correctly
     set:
