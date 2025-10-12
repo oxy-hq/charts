@@ -131,7 +131,6 @@ Supported fields (values.yaml):
 - `gitSync.githubApp.secretName` — optional: name of existing Secret containing keys/IDs.
 - `gitSync.githubApp.privateKey` — inline PEM private key (chart-created secret if used).
 - `gitSync.githubApp.privateKeyKey` — key name inside the Secret for the private key (default: `github_app_private_key`).
-- `gitSync.githubApp.publicKey` / `publicKeyKey` — optional public key fields.
 - `gitSync.githubApp.applicationId` / `applicationIdKey` — application ID (numeric) or key name in the secret.
 - `gitSync.githubApp.installationId` / `installationIdKey` — installation ID or key name in secret.
 - `gitSync.githubApp.clientId` / `clientIdKey` — optional App client ID/supporting value.

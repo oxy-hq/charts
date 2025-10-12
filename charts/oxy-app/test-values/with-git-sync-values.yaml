@@ -17,11 +17,9 @@ gitSync:
 sshKey:
   # Optional: Override the secret name (defaults to gitSync.sshSecretName)
   # secretName: "my-custom-ssh-secret"
-  
   # For development only: provide SSH private key directly
   # In production, leave these empty and create the secret externally
   privateKey: ""  # Base64 encoded SSH private key
-  publicKey: ""   # Optional: Base64 encoded SSH public key
   knownHosts: ""  # Optional: Custom known_hosts content. If empty, uses default for GitHub/GitLab/Bitbucket
 
 # Persistence is required for git sync

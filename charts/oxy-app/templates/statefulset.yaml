@@ -84,7 +84,6 @@ spec:
             {{- end }}
             {{- else if .Values.sshKey.privateKey }}
             - --ssh-key-file=/etc/git-secret/ssh
-            - --ssh-key-file=/etc/git-secret/ssh
             {{- if .Values.sshKey.knownHosts }}
             - --ssh-known-hosts-file=/etc/git-secret/known_hosts
             {{- end }}
@@ -299,7 +298,6 @@ spec:
             - --github-base-url={{ .Values.gitSync.githubApp.baseUrl }}
             {{- end }}
             {{- else if .Values.sshKey.privateKey }}
-            - --ssh-key-file=/etc/git-secret/ssh
             - --ssh-key-file=/etc/git-secret/ssh
             {{- if .Values.sshKey.knownHosts }}
             - --ssh-known-hosts-file=/etc/git-secret/known_hosts
