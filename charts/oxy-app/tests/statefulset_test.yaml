@@ -91,6 +91,125 @@ tests:
             name: OXY_DATABASE_URL
             value: "postgresql://user:pass@host:5432/db"
 
+  - it: should support custom environment variables from values.env
+    set:
+      env:
+        OXY_STATE_DIR: /workspace/oxy_data
+        CUSTOM_VAR_1: "value1"
+        CUSTOM_VAR_2: "value2"
+        LOG_LEVEL: "debug"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CUSTOM_VAR_1
+            value: "value1"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CUSTOM_VAR_2
+            value: "value2"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: LOG_LEVEL
+            value: "debug"
+
+  - it: should not set empty environment variables
+    set:
+      env:
+        OXY_STATE_DIR: /workspace/oxy_data
+        EMPTY_VAR: ""
+        VALID_VAR: "value"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: VALID_VAR
+            value: "value"
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: EMPTY_VAR
+
+  - it: should not duplicate OXY_STATE_DIR or OXY_DATABASE_URL in custom env loop
+    set:
+      env:
+        OXY_STATE_DIR: /custom/state
+        OXY_DATABASE_URL: "postgresql://user:pass@host:5432/db"
+        CUSTOM_VAR: "value"
+    asserts:
+      # Ensure OXY_STATE_DIR appears exactly once
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_STATE_DIR
+            value: "/custom/state"
+      # Ensure OXY_DATABASE_URL appears exactly once
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_DATABASE_URL
+            value: "postgresql://user:pass@host:5432/db"
+      # Ensure custom var is present
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CUSTOM_VAR
+            value: "value"
+
+  - it: should support multiple custom environment variables with special characters
+    set:
+      env:
+        API_KEY: "sk-1234567890abcdef"
+        WEBHOOK_URL: "https://example.com/webhook"
+        MAX_WORKERS: "10"
+        ENABLE_FEATURE: "true"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: API_KEY
+            value: "sk-1234567890abcdef"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: WEBHOOK_URL
+            value: "https://example.com/webhook"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MAX_WORKERS
+            value: "10"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ENABLE_FEATURE
+            value: "true"
+
+  - it: should work with only custom environment variables and no special OXY vars
+    set:
+      env:
+        MY_VAR_1: "value1"
+        MY_VAR_2: "value2"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MY_VAR_1
+            value: "value1"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MY_VAR_2
+            value: "value2"
+      # OXY_STATE_DIR should still have default fallback
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_STATE_DIR
+            value: "/workspace/oxy_data"
+
   # =======================
   # Database Configuration
   # =======================

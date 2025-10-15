@@ -226,6 +226,16 @@ spec:
                 (default .Values.database.postgres.postgresqlDatabase .Values.postgresql.auth.database) | quote }}
             {{- end }}
 
+            # Additional environment variables from values.env
+            {{- range $key, $value := .Values.env }}
+            {{- if and (ne $key "OXY_STATE_DIR") (ne $key "OXY_DATABASE_URL") }}
+            {{- if ne $value "" }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- end }}
+            {{- end }}
+
           # ConfigMap / Secret Environment Variables
           {{- if or .Values.configMap.enabled (gt (len .Values.externalSecrets.envSecretNames) 0) }}
           envFrom:
