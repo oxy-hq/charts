@@ -4,7 +4,7 @@ fullnameOverride: "oxy-test-postgres"
 
 app:
   image: "ghcr.io/oxy-hq/oxy"
-  imageTag: "0.2.28"
+  imageTag: "0.3.5"
   imagePullPolicy: "IfNotPresent"
 
 replicaCount: 1
