@@ -236,6 +236,12 @@ spec:
             {{- end }}
             {{- end }}
 
+            # Semantic Engine API URL (when gitSync is enabled)
+            {{- if .Values.gitSync.enabled }}
+            - name: CUBEJS_API_URL
+              value: "http://localhost:4000"
+            {{- end }}
+
           # ConfigMap / Secret Environment Variables
           {{- if or .Values.configMap.enabled (gt (len .Values.externalSecrets.envSecretNames) 0) }}
           envFrom:
@@ -375,6 +381,18 @@ spec:
               mountPath: /etc/git-secret
               readOnly: true
             {{- end }}
+
+        - name: semantic-engine
+          image: "{{ .Values.semanticEngine.image }}:{{ default (default .Chart.AppVersion .Values.app.imageTag) .Values.semanticEngine.imageTag }}"
+          imagePullPolicy: {{ .Values.semanticEngine.imagePullPolicy }}
+          workingDir: {{ $gitLink }}
+          ports:
+            - containerPort: 4000
+              protocol: TCP
+              name: cubejs-port
+          volumeMounts:
+            - name: workspace
+              mountPath: {{ .Values.persistence.mountPath }}
         {{- end }}
 
         {{- /* Render user-supplied sidecars after built-in sidecars */}}

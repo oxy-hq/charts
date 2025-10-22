@@ -15,6 +15,14 @@ app:
   # Example: ["/app/bin/oxy", "serve"]
   command: []
 
+# Semantic Engine configuration (Cube.js sidecar)
+# Only deployed when gitSync.enabled is true
+semanticEngine:
+  image: ghcr.io/oxy-hq/oxy-semantic-engine
+  # imageTag defaults to app.imageTag if not specified
+  imageTag: ""
+  imagePullPolicy: IfNotPresent
+
 # Ingress configuration
 # Enable and configure Kubernetes Ingress for the application.
 ingress:

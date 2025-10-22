@@ -355,7 +355,7 @@ tests:
           path: spec.template.spec.containers[0].command[2]
           pattern: ".*--cloud.*"
 
-  - it: should have two containers when git sync enabled
+  - it: should have three containers when git sync enabled (includes semantic engine)
     set:
       gitSync:
         enabled: true
@@ -365,13 +365,16 @@ tests:
     asserts:
       - lengthEqual:
           path: spec.template.spec.containers
-          count: 2
+          count: 3
       - equal:
           path: spec.template.spec.containers[0].name
           value: oxy-app
       - equal:
           path: spec.template.spec.containers[1].name
           value: git-sync
+      - equal:
+          path: spec.template.spec.containers[2].name
+          value: semantic-engine
 
   - it: should not include readonly flag when git sync enabled
     set:
@@ -452,7 +455,7 @@ tests:
           path: spec.template.spec.containers[1].name
           value: monitoring
 
-  - it: should work with git sync and sidecars together
+  - it: should work with git sync, semantic engine, and sidecars together
     set:
       gitSync:
         enabled: true
@@ -465,7 +468,7 @@ tests:
     asserts:
       - lengthEqual:
           path: spec.template.spec.containers
-          count: 3
+          count: 4
       - equal:
           path: spec.template.spec.containers[0].name
           value: oxy-app
@@ -474,6 +477,9 @@ tests:
           value: git-sync
       - equal:
           path: spec.template.spec.containers[2].name
+          value: semantic-engine
+      - equal:
+          path: spec.template.spec.containers[3].name
           value: monitoring
 
   # =======================
@@ -906,3 +912,432 @@ tests:
               secretKeyRef:
                 name: my-github-app-secret
                 key: github_app_base_url
+
+  # ================================
+  # Semantic Engine Sidecar Tests
+  # ================================
+
+  - it: should not deploy semantic engine when git sync disabled
+    set:
+      gitSync:
+        enabled: false
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 1
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: oxy-app
+
+  - it: should deploy semantic engine when git sync enabled
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      persistence:
+        enabled: true
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 3
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: oxy-app
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: git-sync
+      - equal:
+          path: spec.template.spec.containers[2].name
+          value: semantic-engine
+
+  - it: should use default semantic engine image with app imageTag
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      app:
+        imageTag: "0.3.5"
+      persistence:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[2].image
+          value: "ghcr.io/oxy-hq/oxy-semantic-engine:0.3.5"
+      - equal:
+          path: spec.template.spec.containers[2].imagePullPolicy
+          value: "IfNotPresent"
+
+  - it: should use custom semantic engine image
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      semanticEngine:
+        image: "custom-registry.io/my-semantic-engine"
+        imageTag: "1.0.0"
+      persistence:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[2].image
+          value: "custom-registry.io/my-semantic-engine:1.0.0"
+
+  - it: should use semantic engine imageTag over app imageTag
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      app:
+        imageTag: "0.3.5"
+      semanticEngine:
+        imageTag: "0.4.0"
+      persistence:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[2].image
+          value: "ghcr.io/oxy-hq/oxy-semantic-engine:0.4.0"
+
+  - it: should use custom imagePullPolicy for semantic engine
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      semanticEngine:
+        imagePullPolicy: "Always"
+      persistence:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[2].imagePullPolicy
+          value: "Always"
+
+  - it: should configure semantic engine ports correctly
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      persistence:
+        enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[2].ports
+          content:
+            containerPort: 4000
+            protocol: TCP
+            name: cubejs-port
+
+  - it: should configure semantic engine without custom environment variables
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      persistence:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[2].name
+          value: semantic-engine
+      # Should not have env block - uses container defaults
+      - isNull:
+          path: spec.template.spec.containers[2].env
+
+  - it: should mount workspace volume in semantic engine
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      persistence:
+        enabled: true
+        mountPath: "/data"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[2].volumeMounts
+          content:
+            name: workspace
+            mountPath: "/data"
+
+  - it: should use container default CMD and set working directory
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      persistence:
+        enabled: true
+        mountPath: "/workspace"
+    asserts:
+      # Should not override command - uses container's built-in script
+      - isNull:
+          path: spec.template.spec.containers[2].command
+      # Should set workingDir to git-synced directory
+      - equal:
+          path: spec.template.spec.containers[2].workingDir
+          value: "/workspace/current"
+
+  - it: should work with git sync and semantic engine and extra sidecars together
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      extraSidecars:
+        - name: monitoring
+          image: prom/node-exporter:v1.6.0
+      persistence:
+        enabled: true
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 4
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: oxy-app
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: git-sync
+      - equal:
+          path: spec.template.spec.containers[2].name
+          value: semantic-engine
+      - equal:
+          path: spec.template.spec.containers[3].name
+          value: monitoring
+
+  - it: should add CUBEJS_API_URL to main container when git sync enabled
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      persistence:
+        enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CUBEJS_API_URL
+            value: "http://localhost:4000"
+
+  - it: should not add CUBEJS_API_URL when git sync disabled
+    set:
+      gitSync:
+        enabled: false
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CUBEJS_API_URL
+
+  - it: should set working directory with custom mountPath
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+        link: "/data/repo"
+      persistence:
+        enabled: true
+        mountPath: "/data"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[2].workingDir
+          value: "/data/repo"
+
+  - it: should deploy semantic engine with SSH authentication
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      sshKey:
+        privateKey: "fake-key"
+      persistence:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[2].name
+          value: semantic-engine
+
+  - it: should deploy semantic engine with HTTP authentication
+    set:
+      gitSync:
+        enabled: true
+        repository: "https://github.com/example/repo.git"
+      httpAuth:
+        username: "user"
+        password: "pass"
+      persistence:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[2].name
+          value: semantic-engine
+
+  - it: should deploy semantic engine with GitHub App authentication
+    set:
+      gitSync:
+        enabled: true
+        repository: "https://github.com/example/repo.git"
+        githubApp:
+          privateKey: "pem-key"
+          applicationId: "123"
+          installationId: "456"
+      persistence:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[2].name
+          value: semantic-engine
+
+  - it: should ensure semantic engine has access to workspace with different persistence settings
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      persistence:
+        enabled: true
+        mountPath: "/custom/path"
+        size: "50Gi"
+        storageClassName: "fast-ssd"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[2].name
+          value: semantic-engine
+      - contains:
+          path: spec.template.spec.containers[2].volumeMounts
+          content:
+            name: workspace
+            mountPath: "/custom/path"
+      - equal:
+          path: spec.template.spec.containers[2].workingDir
+          value: "/custom/path/current"
+
+  - it: should deploy semantic engine with PostgreSQL subchart
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      database:
+        postgres:
+          enabled: true
+      persistence:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[2].name
+          value: semantic-engine
+
+  - it: should deploy semantic engine with external database
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      database:
+        external:
+          enabled: true
+          connectionString: "postgresql://user:pass@host:5432/db"
+      persistence:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[2].name
+          value: semantic-engine
+
+  - it: should ensure semantic engine works with resource limits
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      resources:
+        requests:
+          cpu: 500m
+          memory: 1Gi
+        limits:
+          cpu: 2000m
+          memory: 4Gi
+      persistence:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[2].name
+          value: semantic-engine
+      - equal:
+          path: spec.template.spec.containers[2].ports[0].containerPort
+          value: 4000
+
+  - it: should ensure CUBEJS_API_URL is set for main container when semantic engine is deployed
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      persistence:
+        enabled: true
+    asserts:
+      # Verify semantic engine exists
+      - equal:
+          path: spec.template.spec.containers[2].name
+          value: semantic-engine
+      # Verify main container has CUBEJS_API_URL
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CUBEJS_API_URL
+            value: "http://localhost:4000"
+
+  - it: should ensure semantic engine port matches CUBEJS_API_URL port
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      persistence:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[2].ports[0].containerPort
+          value: 4000
+      - equal:
+          path: spec.template.spec.containers[2].ports[0].name
+          value: "cubejs-port"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CUBEJS_API_URL
+            value: "http://localhost:4000"
+
+  - it: should verify semantic engine configuration is complete
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      app:
+        imageTag: "1.0.0"
+      persistence:
+        enabled: true
+        mountPath: "/workspace"
+    asserts:
+      # Container exists
+      - equal:
+          path: spec.template.spec.containers[2].name
+          value: semantic-engine
+      # Image configuration
+      - equal:
+          path: spec.template.spec.containers[2].image
+          value: "ghcr.io/oxy-hq/oxy-semantic-engine:1.0.0"
+      - equal:
+          path: spec.template.spec.containers[2].imagePullPolicy
+          value: "IfNotPresent"
+      # Working directory
+      - equal:
+          path: spec.template.spec.containers[2].workingDir
+          value: "/workspace/current"
+      # Port configuration
+      - contains:
+          path: spec.template.spec.containers[2].ports
+          content:
+            containerPort: 4000
+            protocol: TCP
+            name: cubejs-port
+      # No custom environment variables - uses container defaults
+      - isNull:
+          path: spec.template.spec.containers[2].env
+      # Volume mounts
+      - contains:
+          path: spec.template.spec.containers[2].volumeMounts
+          content:
+            name: workspace
+            mountPath: "/workspace"
