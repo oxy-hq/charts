@@ -1,6 +1,6 @@
 # oxy-app
 
-![Version: 0.2.1](https://img.shields.io/badge/Version-0.2.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.3.5](https://img.shields.io/badge/AppVersion-0.3.5-informational?style=flat-square)
+![Version: 0.3.0](https://img.shields.io/badge/Version-0.3.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.3.8](https://img.shields.io/badge/AppVersion-0.3.8-informational?style=flat-square)
 
 A Helm chart for Oxy application deployment on kubernetes
 
@@ -126,6 +126,10 @@ A Helm chart for Oxy application deployment on kubernetes
 | resources.requests.cpu | string | `"250m"` |  |
 | resources.requests.memory | string | `"512Mi"` |  |
 | securityContext.fsGroup | int | `1000` |  |
+| semanticEngine.enabled | bool | `false` |  |
+| semanticEngine.image | string | `"ghcr.io/oxy-hq/oxy-semantic-engine"` |  |
+| semanticEngine.imagePullPolicy | string | `"IfNotPresent"` |  |
+| semanticEngine.imageTag | string | `""` |  |
 | service.name | string | `""` |  |
 | service.port | int | `80` |  |
 | service.targetPort | int | `3000` |  |

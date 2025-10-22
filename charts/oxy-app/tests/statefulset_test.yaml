@@ -50,7 +50,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: "ghcr.io/oxy-hq/oxy:0.3.5"
+          value: "ghcr.io/oxy-hq/oxy:0.3.8"
       - contains:
           path: spec.template.spec.containers[0].ports
           content:
@@ -285,6 +285,8 @@ tests:
       gitSync:
         enabled: true
         repository: "git@github.com:example/repo.git"
+      semanticEngine:
+        enabled: true
       persistence:
         enabled: true
     asserts:
@@ -303,6 +305,8 @@ tests:
       gitSync:
         enabled: true
         repository: "git@github.com:example/repo.git"
+      semanticEngine:
+        enabled: true
       persistence:
         enabled: true
     asserts:
@@ -360,6 +364,8 @@ tests:
       gitSync:
         enabled: true
         repository: "git@github.com:example/repo.git"
+      semanticEngine:
+        enabled: true
       persistence:
         enabled: true
     asserts:
@@ -381,6 +387,8 @@ tests:
       gitSync:
         enabled: true
         repository: "git@github.com:example/repo.git"
+      semanticEngine:
+        enabled: true
       persistence:
         enabled: true
     asserts:
@@ -421,6 +429,8 @@ tests:
       gitSync:
         enabled: true
         repository: "git@github.com:test/repo.git"
+      semanticEngine:
+        enabled: true
         branch: "main"
       persistence:
         enabled: true
@@ -460,6 +470,8 @@ tests:
       gitSync:
         enabled: true
         repository: "git@github.com:example/repo.git"
+      semanticEngine:
+        enabled: true
       extraSidecars:
         - name: monitoring
           image: prom/node-exporter:v1.6.0
@@ -525,6 +537,8 @@ tests:
       gitSync:
         enabled: true
         repository: "git@github.com:example/repo.git"
+      semanticEngine:
+        enabled: true
       persistence:
         enabled: true
         mountPath: "/data"
@@ -575,6 +589,8 @@ tests:
       gitSync:
         enabled: true
         repository: "git@github.com:example/repo.git"
+      semanticEngine:
+        enabled: true
         sshSecretName: "default-ssh-secret"
       sshKey:
         secretName: "custom-ssh-secret"
@@ -736,6 +752,8 @@ tests:
       gitSync:
         enabled: true
         repository: "https://github.com/example/repo.git"
+      semanticEngine:
+        enabled: true
       httpAuth:
         username: "myuser"
         password: "mypass"
@@ -760,6 +778,8 @@ tests:
       gitSync:
         enabled: true
         repository: "https://github.com/example/repo.git"
+      semanticEngine:
+        enabled: true
       httpAuth:
         username: "myuser"
         password: "mypass"
@@ -784,6 +804,8 @@ tests:
       gitSync:
         enabled: true
         repository: "https://github.com/example/repo.git"
+      semanticEngine:
+        enabled: true
       httpAuth:
         username: "myuser"
         password: "mypass"
@@ -807,6 +829,8 @@ tests:
       gitSync:
         enabled: true
         repository: "https://github.com/example/repo.git"
+      semanticEngine:
+        enabled: true
       httpAuth:
         username: "myuser"
         secretName: "my-custom-secret"
@@ -831,6 +855,8 @@ tests:
       gitSync:
         enabled: true
         repository: "https://github.com/example/repo.git"
+      semanticEngine:
+        enabled: true
       httpAuth:
         username: "myuser"
         password: "mypass"
@@ -934,6 +960,8 @@ tests:
       gitSync:
         enabled: true
         repository: "git@github.com:example/repo.git"
+      semanticEngine:
+        enabled: true
       persistence:
         enabled: true
     asserts:
@@ -955,6 +983,8 @@ tests:
       gitSync:
         enabled: true
         repository: "git@github.com:example/repo.git"
+      semanticEngine:
+        enabled: true
       app:
         imageTag: "0.3.5"
       persistence:
@@ -973,6 +1003,7 @@ tests:
         enabled: true
         repository: "git@github.com:example/repo.git"
       semanticEngine:
+        enabled: true
         image: "custom-registry.io/my-semantic-engine"
         imageTag: "1.0.0"
       persistence:
@@ -990,6 +1021,7 @@ tests:
       app:
         imageTag: "0.3.5"
       semanticEngine:
+        enabled: true
         imageTag: "0.4.0"
       persistence:
         enabled: true
@@ -1004,6 +1036,7 @@ tests:
         enabled: true
         repository: "git@github.com:example/repo.git"
       semanticEngine:
+        enabled: true
         imagePullPolicy: "Always"
       persistence:
         enabled: true
@@ -1017,6 +1050,8 @@ tests:
       gitSync:
         enabled: true
         repository: "git@github.com:example/repo.git"
+      semanticEngine:
+        enabled: true
       persistence:
         enabled: true
     asserts:
@@ -1032,6 +1067,8 @@ tests:
       gitSync:
         enabled: true
         repository: "git@github.com:example/repo.git"
+      semanticEngine:
+        enabled: true
       persistence:
         enabled: true
     asserts:
@@ -1047,6 +1084,8 @@ tests:
       gitSync:
         enabled: true
         repository: "git@github.com:example/repo.git"
+      semanticEngine:
+        enabled: true
       persistence:
         enabled: true
         mountPath: "/data"
@@ -1062,6 +1101,8 @@ tests:
       gitSync:
         enabled: true
         repository: "git@github.com:example/repo.git"
+      semanticEngine:
+        enabled: true
       persistence:
         enabled: true
         mountPath: "/workspace"
@@ -1079,6 +1120,8 @@ tests:
       gitSync:
         enabled: true
         repository: "git@github.com:example/repo.git"
+      semanticEngine:
+        enabled: true
       extraSidecars:
         - name: monitoring
           image: prom/node-exporter:v1.6.0
@@ -1106,6 +1149,8 @@ tests:
       gitSync:
         enabled: true
         repository: "git@github.com:example/repo.git"
+      semanticEngine:
+        enabled: true
       persistence:
         enabled: true
     asserts:
@@ -1131,6 +1176,8 @@ tests:
         enabled: true
         repository: "git@github.com:example/repo.git"
         link: "/data/repo"
+      semanticEngine:
+        enabled: true
       persistence:
         enabled: true
         mountPath: "/data"
@@ -1144,6 +1191,8 @@ tests:
       gitSync:
         enabled: true
         repository: "git@github.com:example/repo.git"
+      semanticEngine:
+        enabled: true
       sshKey:
         privateKey: "fake-key"
       persistence:
@@ -1158,6 +1207,8 @@ tests:
       gitSync:
         enabled: true
         repository: "https://github.com/example/repo.git"
+      semanticEngine:
+        enabled: true
       httpAuth:
         username: "user"
         password: "pass"
@@ -1173,6 +1224,8 @@ tests:
       gitSync:
         enabled: true
         repository: "https://github.com/example/repo.git"
+      semanticEngine:
+        enabled: true
         githubApp:
           privateKey: "pem-key"
           applicationId: "123"
@@ -1189,6 +1242,8 @@ tests:
       gitSync:
         enabled: true
         repository: "git@github.com:example/repo.git"
+      semanticEngine:
+        enabled: true
       persistence:
         enabled: true
         mountPath: "/custom/path"
@@ -1212,6 +1267,8 @@ tests:
       gitSync:
         enabled: true
         repository: "git@github.com:example/repo.git"
+      semanticEngine:
+        enabled: true
       database:
         postgres:
           enabled: true
@@ -1227,6 +1284,8 @@ tests:
       gitSync:
         enabled: true
         repository: "git@github.com:example/repo.git"
+      semanticEngine:
+        enabled: true
       database:
         external:
           enabled: true
@@ -1243,6 +1302,8 @@ tests:
       gitSync:
         enabled: true
         repository: "git@github.com:example/repo.git"
+      semanticEngine:
+        enabled: true
       resources:
         requests:
           cpu: 500m
@@ -1265,6 +1326,8 @@ tests:
       gitSync:
         enabled: true
         repository: "git@github.com:example/repo.git"
+      semanticEngine:
+        enabled: true
       persistence:
         enabled: true
     asserts:
@@ -1284,6 +1347,8 @@ tests:
       gitSync:
         enabled: true
         repository: "git@github.com:example/repo.git"
+      semanticEngine:
+        enabled: true
       persistence:
         enabled: true
     asserts:
@@ -1304,6 +1369,8 @@ tests:
       gitSync:
         enabled: true
         repository: "git@github.com:example/repo.git"
+      semanticEngine:
+        enabled: true
       app:
         imageTag: "1.0.0"
       persistence:

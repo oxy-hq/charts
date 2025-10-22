@@ -15,9 +15,9 @@ app:
   # Example: ["/app/bin/oxy", "serve"]
   command: []
 
-# Semantic Engine configuration (Cube.js sidecar)
-# Only deployed when gitSync.enabled is true
+# Semantic Engine configuration
 semanticEngine:
+  enabled: false
   image: ghcr.io/oxy-hq/oxy-semantic-engine
   # imageTag defaults to app.imageTag if not specified
   imageTag: ""

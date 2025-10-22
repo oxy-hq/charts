@@ -1,6 +1,6 @@
 app:
   image: ghcr.io/oxy-hq/oxy
-  imageTag: "0.3.5"
+  imageTag: "0.3.8"
   port: 80
 
 # Use standard storage class for kind clusters

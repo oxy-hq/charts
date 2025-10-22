@@ -236,8 +236,8 @@ spec:
             {{- end }}
             {{- end }}
 
-            # Semantic Engine API URL (when gitSync is enabled)
-            {{- if .Values.gitSync.enabled }}
+            # Semantic Engine API URL (when gitSync and semanticEngine are enabled)
+            {{- if and .Values.gitSync.enabled .Values.semanticEngine.enabled }}
             - name: CUBEJS_API_URL
               value: "http://localhost:4000"
             {{- end }}
@@ -382,6 +382,7 @@ spec:
               readOnly: true
             {{- end }}
 
+        {{- if and .Values.gitSync.enabled .Values.semanticEngine.enabled }}
         - name: semantic-engine
           image: "{{ .Values.semanticEngine.image }}:{{ default (default .Chart.AppVersion .Values.app.imageTag) .Values.semanticEngine.imageTag }}"
           imagePullPolicy: {{ .Values.semanticEngine.imagePullPolicy }}
@@ -393,6 +394,7 @@ spec:
           volumeMounts:
             - name: workspace
               mountPath: {{ .Values.persistence.mountPath }}
+        {{- end }}
         {{- end }}
 
         {{- /* Render user-supplied sidecars after built-in sidecars */}}
