@@ -209,8 +209,8 @@ setup_test_environment() {
 
     # Add required Helm repositories for dependencies
     log_info "Adding Helm repositories..."
-    # Add bitnami repo (ignore error if already exists)
-    helm repo add bitnami https://charts.bitnami.com/bitnami 2>/dev/null || true
+    # Add cloudnative-pg repo (ignore error if already exists)
+    helm repo add cloudnative-pg https://cloudnative-pg.github.io/charts 2>/dev/null || true
     helm repo update
 
     # Build helm dependencies using Chart.lock (not update)

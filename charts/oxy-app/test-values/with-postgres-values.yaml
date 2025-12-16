@@ -19,19 +19,26 @@ database:
   postgres:
     enabled: true
 
-# Configure PostgreSQL for testing
+# Configure PostgreSQL for testing (CloudNativePG)
 postgresql:
-  image:
-    registry: docker.io
-    repository: bitnamilegacy/postgresql # Use bitnamilegacy for older versions
-    tag: 16.4.0-debian-12-r13
-  auth:
+  type: postgresql
+  imageName: ghcr.io/cloudnative-pg/postgresql:17.2
+  instances: 1
+  bootstrap:
+    initdb:
+      database: testdb
+      owner: testuser
+      secret:
+        name: "" # Will be auto-generated
+  storage:
+    size: 1Gi
+    storageClass: standard
+  superuserSecret:
+    name: ""
+  # Credentials for application user
+  credentials:
     username: testuser
     password: testpass
-    database: testdb
-  primary:
-    persistence:
-      enabled: false  # Disable persistence for CI
 
 
 resources:

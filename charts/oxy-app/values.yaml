@@ -218,13 +218,12 @@ database:
   # Subchart Postgres settings (optional; not selected automatically)
   postgres:
     enabled: false
-    # PostgreSQL auth configuration (for chart version 16.x+)
+    # CloudNativePG cluster configuration
     auth:
       username: oxy
       password: postgres
       database: oxydb
-    # Legacy configuration (deprecated in chart version 16.x+)
-    # Keep for backward compatibility references
+    # Legacy configuration (for backward compatibility references)
     postgresqlUsername: oxy
     postgresqlPassword: postgres
     postgresqlDatabase: oxydb
