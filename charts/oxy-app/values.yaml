@@ -67,7 +67,7 @@ configMap:
 # Service Account for IRSA
 serviceAccount:
   create: true
-  name: ""  # If empty, will auto-generate using chart name
+  name: "" # If empty, will auto-generate using chart name
   annotations: {}
   # Example: eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/oxy-app-role
 
@@ -167,9 +167,9 @@ externalSecrets:
 # Use `sshKey.secretName` to point to an existing Secret in production,
 # or provide `sshKey.privateKey` (inline) for development/testing only.
 sshKey:
-  secretName: ""    # If empty, defaults to gitSync.sshSecretName
-  privateKey: ""   # Inline private SSH key (DO NOT commit to VCS)
-  knownHosts: ""   # Optional known_hosts content (multiline)
+  secretName: "" # If empty, defaults to gitSync.sshSecretName
+  privateKey: "" # Inline private SSH key (DO NOT commit to VCS)
+  knownHosts: "" # Optional known_hosts content (multiline)
 
 # Git sync sidecar configuration
 gitSync:
@@ -188,14 +188,14 @@ gitSync:
   # GitHub App authentication (optional)
   # When provided, the chart will create a secret and mount it for git-sync.
   githubApp:
-    secretName: ""       # Optional: existing secret name containing GitHub App data
-    privateKey: ""      # PEM private key contents for GitHub App (DO NOT commit)
-    privateKeyKey: "github_app_private_key" # key name in secret for private key
-    applicationId: ""   # GitHub App Application ID (inline)
+    secretName: "" # Optional: existing secret name containing GitHub App data
+    privateKey: "" # PEM private key contents for GitHub App (DO NOT commit)
+    privateKeyKey: "github_app_private_key" # key name in secret for private keyy
+    applicationId: "" # GitHub App Application ID (inline)
     applicationIdKey: "github_app_application_id" # key name in secret for app id
-    clientId: ""        # GitHub App Client ID (inline)
+    clientId: "" # GitHub App Client ID (inline)
     clientIdKey: "github_app_client_id"
-    installationId: ""  # Installation ID (inline)
+    installationId: "" # Installation ID (inline)
     installationIdKey: "github_app_installation_id" # key name in secret for installation id
     baseUrl: "https://api.github.com" # GitHub API base URL (for GHES)
     baseUrlKey: "github_app_base_url"
