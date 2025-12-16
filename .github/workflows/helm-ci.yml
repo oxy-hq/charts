@@ -48,7 +48,7 @@ jobs:
 
       - name: Install helm-unittest plugin
         run: |
-          helm plugin install https://github.com/helm-unittest/helm-unittest --version v1.0.3
+          helm plugin install https://github.com/helm-unittest/helm-unittest --version v1.0.3 --verify=false
 
       - name: Run chart-testing (list-changed)
         id: list-changed
