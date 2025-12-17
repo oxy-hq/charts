@@ -219,13 +219,14 @@ tests:
       database:
         postgres:
           enabled: true
-          userDatabase:
-            name:
-              value: "testdb"
-            user:
-              value: "testuser"
-            password:
-              value: "testpass"
+      postgres:
+        userDatabase:
+          name:
+            value: "testdb"
+          user:
+            value: "testuser"
+          password:
+            value: "testpass"
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
@@ -238,13 +239,14 @@ tests:
       database:
         postgres:
           enabled: true
-          userDatabase:
-            name:
-              value: "custom-db"
-            user:
-              value: "custom-user"
-            password:
-              value: "custom-pass"
+      postgres:
+        userDatabase:
+          name:
+            value: "custom-db"
+          user:
+            value: "custom-user"
+          password:
+            value: "custom-pass"
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
@@ -272,9 +274,10 @@ tests:
       database:
         postgres:
           enabled: true
-          userDatabase:
-            user:
-              value: "testuser"
+      postgres:
+        userDatabase:
+          user:
+            value: "testuser"
     asserts:
       - lengthEqual:
           path: spec.template.spec.initContainers
@@ -308,9 +311,10 @@ tests:
       database:
         postgres:
           enabled: true
-          userDatabase:
-            user:
-              value: "testuser"
+      postgres:
+        userDatabase:
+          user:
+            value: "testuser"
       gitSync:
         enabled: true
         repository: "git@github.com:example/repo.git"
@@ -1281,9 +1285,10 @@ tests:
       database:
         postgres:
           enabled: true
-          userDatabase:
-            user:
-              value: "testuser"
+      postgres:
+        userDatabase:
+          user:
+            value: "testuser"
       persistence:
         enabled: true
     asserts:

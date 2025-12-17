@@ -218,15 +218,8 @@ database:
   # Enable or disable the postgres subchart
   postgres:
     enabled: false
-    # Configuration values for connecting to the postgres subchart
-    # These are used by the oxy-app to construct the DATABASE_URL
-    userDatabase:
-      name:
-        value: oxydb
-      user:
-        value: oxy
-      password:
-        value: postgres
+    # Note: Connection details are inferred from the postgres.* configuration below
+    # No need to duplicate userDatabase configuration here
 
   # External DB settings (optional)
   external:
@@ -259,7 +252,8 @@ database:
     database: ""
 
 # Configuration for the postgres subchart (groundhog2k/postgres)
-# When database.postgres.enabled is true, configure the subchart here
+# When database.postgres.enabled is true, these values configure the postgres subchart
+# Make sure userDatabase values match database.postgres.userDatabase above
 postgres:
   settings:
     superuserPassword:
