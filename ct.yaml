@@ -3,7 +3,7 @@ chart-dirs:
 exclude:
   - charts/**/tests/**
 chart-repos:
-  - cloudnative-pg=https://cloudnative-pg.github.io/charts
+  - groundhog2k=https://groundhog2k.github.io/helm-charts/
 remote: origin
 target-branch: main
 github-groups: true

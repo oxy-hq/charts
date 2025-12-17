@@ -46,9 +46,9 @@ spec:
             - |
               echo "Waiting for PostgreSQL to be ready..."
               until pg_isready \
-                -h {{ .Release.Name }}-postgresql-rw.{{ .Release.Namespace }}.svc.cluster.local \
+                -h {{ .Release.Name }}-postgres.{{ .Release.Namespace }}.svc.cluster.local \
                 -p 5432 \
-                -U {{ default .Values.database.postgres.postgresqlUsername (default "" ((.Values.postgresql).credentials).username) }}; do
+                -U {{ .Values.database.postgres.userDatabase.user.value }}; do
                 echo "PostgreSQL is not ready yet. Waiting 5 seconds..."
                 sleep 5
               done
@@ -218,12 +218,12 @@ spec:
                 .Values.database.external.database | quote }}
             {{- else if .Values.database.postgres.enabled }}
             - name: OXY_DATABASE_URL
-              value: {{ printf "postgresql://%s:%s@%s-postgresql-rw.%s.svc.cluster.local:5432/%s"
-                (default .Values.database.postgres.postgresqlUsername (default "" ((.Values.postgresql).credentials).username))
-                (default .Values.database.postgres.postgresqlPassword (default "" ((.Values.postgresql).credentials).password))
+              value: {{ printf "postgresql://%s:%s@%s-postgres.%s.svc.cluster.local:5432/%s"
+                .Values.database.postgres.userDatabase.user.value
+                .Values.database.postgres.userDatabase.password.value
                 .Release.Name
                 .Release.Namespace
-                (default .Values.database.postgres.postgresqlDatabase (default "" (((.Values.postgresql).bootstrap).initdb).database)) | quote }}
+                .Values.database.postgres.userDatabase.name.value | quote }}
             {{- end }}
 
             # Additional environment variables from values.env

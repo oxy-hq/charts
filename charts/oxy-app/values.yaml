@@ -218,15 +218,20 @@ database:
   # Subchart Postgres settings (optional; not selected automatically)
   postgres:
     enabled: false
-    # CloudNativePG cluster configuration
-    auth:
-      username: oxy
-      password: postgres
-      database: oxydb
-    # Legacy configuration (for backward compatibility references)
-    postgresqlUsername: oxy
-    postgresqlPassword: postgres
-    postgresqlDatabase: oxydb
+    # groundhog2k postgres chart configuration
+    settings:
+      superuserPassword:
+        value: postgres
+    userDatabase:
+      name:
+        value: oxydb
+      user:
+        value: oxy
+      password:
+        value: postgres
+    storage:
+      requestedSize: 8Gi
+      className: ""
 
   # External DB settings (optional)
   external:

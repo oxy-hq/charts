@@ -13,8 +13,7 @@ maintainers:
     email: luong@oxy.tech
 
 dependencies:
-  - name: cluster
-    version: 0.5.0
-    repository: "https://cloudnative-pg.github.io/charts"
+  - name: postgres
+    version: "1.6.1"
+    repository: "https://groundhog2k.github.io/helm-charts/"
     condition: database.postgres.enabled
-    alias: postgresql
