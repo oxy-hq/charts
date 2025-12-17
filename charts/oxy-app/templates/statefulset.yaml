@@ -47,8 +47,7 @@ spec:
               echo "Waiting for PostgreSQL to be ready..."
               until pg_isready \
                 -h {{ .Release.Name }}-postgres.{{ .Release.Namespace }}.svc.cluster.local \
-                -p 5432 \
-                -U {{ default "postgres" .Values.postgres.userDatabase.user.value }}; do
+                -p 5432; do
                 echo "PostgreSQL is not ready yet. Waiting 5 seconds..."
                 sleep 5
               done
