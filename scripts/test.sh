@@ -344,9 +344,9 @@ test_postgres_deployment() {
         log_info "Getting pod status:"
         kubectl get pods -n "$NAMESPACE" -o wide || true
         log_info "Describing PostgreSQL pod:"
-        kubectl describe pod -l app.kubernetes.io/name=postgresql -n "$NAMESPACE" || true
+        kubectl describe pod -l app.kubernetes.io/name=postgres -n "$NAMESPACE" || true
         log_info "PostgreSQL pod logs:"
-        kubectl logs -l app.kubernetes.io/name=postgresql -n "$NAMESPACE" --tail=100 || true
+        kubectl logs -l app.kubernetes.io/name=postgres -n "$NAMESPACE" --tail=100 || true
         log_info "Describing app pod:"
         kubectl describe pod -l app.kubernetes.io/instance=test-postgres -n "$NAMESPACE" || true
         log_info "App pod logs:"
@@ -369,11 +369,7 @@ test_postgres_deployment() {
 
     # Test database connectivity
     log_info "Testing database connectivity..."
-    postgres_pod=$(kubectl get pod -l cnpg.io/cluster=test-postgres-postgresql -n "$NAMESPACE" -o jsonpath='{.items[0].metadata.name}')
-    if [ -z "$postgres_pod" ]; then
-        log_warn "PostgreSQL pod not found with CNPG label, trying alternative selector..."
-        postgres_pod=$(kubectl get pod -n "$NAMESPACE" --selector='role=primary' -o jsonpath='{.items[0].metadata.name}')
-    fi
+    postgres_pod=$(kubectl get pod -l app.kubernetes.io/name=postgres -n "$NAMESPACE" -o jsonpath='{.items[0].metadata.name}')
     if [ -n "$postgres_pod" ]; then
         if kubectl exec -n "$NAMESPACE" "$postgres_pod" -- pg_isready -U app -d app >/dev/null 2>&1; then
             log_info "PostgreSQL connectivity test passed!"
