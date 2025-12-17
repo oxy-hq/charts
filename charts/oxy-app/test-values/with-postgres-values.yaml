@@ -14,34 +14,23 @@ service:
   port: 80
   targetPort: 80
 
-# Enable PostgreSQL dependency
+# Enable PostgreSQL dependency (groundhog2k postgres chart)
 database:
   postgres:
     enabled: true
-    auth:
-      username: app
-      password: testpass123
-      database: app
-    # Legacy fields for backwards compatibility
-    postgresqlUsername: app
-    postgresqlPassword: testpass123
-    postgresqlDatabase: app
-
-# Configure PostgreSQL for testing (CloudNativePG)
-postgresql:
-  type: postgresql
-  cluster:
-    instances: 1
-    imageName: ghcr.io/cloudnative-pg/postgresql:17.2
+    settings:
+      superuserPassword:
+        value: postgres
+    userDatabase:
+      name:
+        value: app
+      user:
+        value: app
+      password:
+        value: testpass123
     storage:
-      size: 1Gi
-      storageClass: standard
-  # Configure the default app database and user that CNPG creates
-  databases:
-    - name: app
-      owner: app
-      ensure: present
-
+      requestedSize: 1Gi
+      className: standard
 
 resources:
   limits:
