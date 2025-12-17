@@ -18,27 +18,29 @@ service:
 database:
   postgres:
     enabled: true
+    auth:
+      username: app
+      password: testpass123
+      database: app
+    # Legacy fields for backwards compatibility
+    postgresqlUsername: app
+    postgresqlPassword: testpass123
+    postgresqlDatabase: app
 
 # Configure PostgreSQL for testing (CloudNativePG)
 postgresql:
   type: postgresql
-  imageName: ghcr.io/cloudnative-pg/postgresql:17.2
-  instances: 1
-  bootstrap:
-    initdb:
-      database: testdb
-      owner: testuser
-      secret:
-        name: "" # Will be auto-generated
-  storage:
-    size: 1Gi
-    storageClass: standard
-  superuserSecret:
-    name: ""
-  # Credentials for application user
-  credentials:
-    username: testuser
-    password: testpass
+  cluster:
+    instances: 1
+    imageName: ghcr.io/cloudnative-pg/postgresql:17.2
+    storage:
+      size: 1Gi
+      storageClass: standard
+  # Configure the default app database and user that CNPG creates
+  databases:
+    - name: app
+      owner: app
+      ensure: present
 
 
 resources:
