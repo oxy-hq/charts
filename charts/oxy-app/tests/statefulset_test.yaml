@@ -219,34 +219,38 @@ tests:
       database:
         postgres:
           enabled: true
-          postgresqlUsername: "testuser"
-          postgresqlPassword: "testpass"
-          postgresqlDatabase: "testdb"
+          userDatabase:
+            name:
+              value: "testdb"
+            user:
+              value: "testuser"
+            password:
+              value: "testpass"
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: OXY_DATABASE_URL
-            value: "postgresql://testuser:testpass@RELEASE-NAME-postgresql-rw.NAMESPACE.svc.cluster.local:5432/testdb"
+            value: "postgresql://testuser:testpass@RELEASE-NAME-postgres.NAMESPACE.svc.cluster.local:5432/testdb"
 
-  - it: should support new CloudNativePG PostgreSQL chart format
+  - it: should support groundhog2k PostgreSQL chart with custom values
     set:
       database:
         postgres:
           enabled: true
-      postgresql:
-        credentials:
-          username: "cloudnative-user"
-          password: "cloudnative-pass"
-        bootstrap:
-          initdb:
-            database: "cloudnative-db"
+          userDatabase:
+            name:
+              value: "custom-db"
+            user:
+              value: "custom-user"
+            password:
+              value: "custom-pass"
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: OXY_DATABASE_URL
-            value: "postgresql://cloudnative-user:cloudnative-pass@RELEASE-NAME-postgresql-rw.NAMESPACE.svc.cluster.local:5432/cloudnative-db"
+            value: "postgresql://custom-user:custom-pass@RELEASE-NAME-postgres.NAMESPACE.svc.cluster.local:5432/custom-db"
 
   # =======================
   # Init Containers
@@ -268,7 +272,9 @@ tests:
       database:
         postgres:
           enabled: true
-          postgresqlUsername: "testuser"
+          userDatabase:
+            user:
+              value: "testuser"
     asserts:
       - lengthEqual:
           path: spec.template.spec.initContainers
@@ -302,7 +308,9 @@ tests:
       database:
         postgres:
           enabled: true
-          postgresqlUsername: "testuser"
+          userDatabase:
+            user:
+              value: "testuser"
       gitSync:
         enabled: true
         repository: "git@github.com:example/repo.git"
@@ -1273,7 +1281,9 @@ tests:
       database:
         postgres:
           enabled: true
-          postgresqlUsername: "testuser"
+          userDatabase:
+            user:
+              value: "testuser"
       persistence:
         enabled: true
     asserts:
