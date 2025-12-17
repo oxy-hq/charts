@@ -215,13 +215,11 @@ httpAuth:
   passwordKey: "password"
 
 database:
-  # Subchart Postgres settings (optional; not selected automatically)
+  # Enable or disable the postgres subchart
   postgres:
     enabled: false
-    # groundhog2k postgres chart configuration
-    settings:
-      superuserPassword:
-        value: postgres
+    # Configuration values for connecting to the postgres subchart
+    # These are used by the oxy-app to construct the DATABASE_URL
     userDatabase:
       name:
         value: oxydb
@@ -229,9 +227,6 @@ database:
         value: oxy
       password:
         value: postgres
-    storage:
-      requestedSize: 8Gi
-      className: ""
 
   # External DB settings (optional)
   external:
@@ -262,6 +257,23 @@ database:
     host: ""
     port: 5432
     database: ""
+
+# Configuration for the postgres subchart (groundhog2k/postgres)
+# When database.postgres.enabled is true, configure the subchart here
+postgres:
+  settings:
+    superuserPassword:
+      value: postgres
+  userDatabase:
+    name:
+      value: oxydb
+    user:
+      value: oxy
+    password:
+      value: postgres
+  storage:
+    requestedSize: 8Gi
+    className: ""
 
 # Allow users to supply arbitrary initContainers and sidecar containers.
 # Each entry should be a Kubernetes container spec. Examples below show

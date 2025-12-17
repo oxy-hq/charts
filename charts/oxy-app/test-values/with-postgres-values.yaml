@@ -18,19 +18,22 @@ service:
 database:
   postgres:
     enabled: true
-    settings:
-      superuserPassword:
-        value: postgres
-    userDatabase:
-      name:
-        value: app
-      user:
-        value: app
-      password:
-        value: testpass123
-    storage:
-      requestedSize: 1Gi
-      className: standard
+
+# Configure the postgres subchart (groundhog2k)
+postgres:
+  settings:
+    superuserPassword:
+      value: postgres
+  userDatabase:
+    name:
+      value: app
+    user:
+      value: app
+    password:
+      value: testpass123
+  storage:
+    requestedSize: 1Gi
+    className: standard
 
 resources:
   limits:
