@@ -343,12 +343,16 @@ test_postgres_deployment() {
         log_error "Helm install failed"
         log_info "Getting pod status:"
         kubectl get pods -n "$NAMESPACE" -o wide || true
+        log_info "Getting services:"
+        kubectl get svc -n "$NAMESPACE" -o wide || true
         log_info "Describing PostgreSQL pod:"
         kubectl describe pod -l app.kubernetes.io/name=postgres -n "$NAMESPACE" || true
         log_info "PostgreSQL pod logs:"
         kubectl logs -l app.kubernetes.io/name=postgres -n "$NAMESPACE" --tail=100 || true
         log_info "Describing app pod:"
         kubectl describe pod -l app.kubernetes.io/instance=test-postgres -n "$NAMESPACE" || true
+        log_info "Init container logs (wait-for-postgres):"
+        kubectl logs -l app.kubernetes.io/instance=test-postgres -n "$NAMESPACE" -c wait-for-postgres --tail=50 || true
         log_info "App pod logs:"
         kubectl logs -l app.kubernetes.io/instance=test-postgres -n "$NAMESPACE" --tail=100 || true
         return 1

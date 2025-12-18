@@ -45,13 +45,41 @@ spec:
           args:
             - |
               echo "Waiting for PostgreSQL to be ready..."
-              until pg_isready \
-                -h {{ .Release.Name }}-postgres.{{ .Release.Namespace }}.svc.cluster.local \
-                -p 5432; do
-                echo "PostgreSQL is not ready yet. Waiting 5 seconds..."
+              PG_HOST="{{ .Release.Name }}-postgres.{{ .Release.Namespace }}.svc.cluster.local"
+              PG_PORT="5432"
+              MAX_RETRIES=60
+              RETRY_COUNT=0
+              
+              echo "Target: $PG_HOST:$PG_PORT"
+              
+              # First, check DNS resolution
+              echo "Checking DNS resolution..."
+              while [ $RETRY_COUNT -lt 10 ]; do
+                if nslookup "$PG_HOST" >/dev/null 2>&1; then
+                  echo "DNS resolution successful for $PG_HOST"
+                  break
+                fi
+                echo "DNS lookup failed, retrying in 2 seconds... ($RETRY_COUNT/10)"
+                RETRY_COUNT=$((RETRY_COUNT + 1))
+                sleep 2
+              done
+              
+              # Reset counter for pg_isready check
+              RETRY_COUNT=0
+              
+              # Now check PostgreSQL readiness
+              while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+                if pg_isready -h "$PG_HOST" -p "$PG_PORT" -t 5; then
+                  echo "PostgreSQL is ready and accepting connections!"
+                  exit 0
+                fi
+                echo "PostgreSQL is not ready yet. Waiting 5 seconds... ($RETRY_COUNT/$MAX_RETRIES)"
+                RETRY_COUNT=$((RETRY_COUNT + 1))
                 sleep 5
               done
-              echo "PostgreSQL is ready and accepting connections!"
+              
+              echo "ERROR: PostgreSQL did not become ready within the timeout period"
+              exit 1
         {{- end }}
         {{- if .Values.gitSync.enabled }}
         # Git Clone Init Container
