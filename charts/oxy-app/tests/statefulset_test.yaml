@@ -232,7 +232,7 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: OXY_DATABASE_URL
-            value: "postgresql://testuser:testpass@RELEASE-NAME-postgres.NAMESPACE.svc.cluster.local:5432/testdb"
+            value: "postgresql://testuser:testpass@postgres.NAMESPACE.svc.cluster.local:5432/testdb"
 
   - it: should support groundhog2k PostgreSQL chart with custom values
     set:
@@ -252,7 +252,7 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: OXY_DATABASE_URL
-            value: "postgresql://custom-user:custom-pass@RELEASE-NAME-postgres.NAMESPACE.svc.cluster.local:5432/custom-db"
+            value: "postgresql://custom-user:custom-pass@postgres.NAMESPACE.svc.cluster.local:5432/custom-db"
 
   # =======================
   # Init Containers
