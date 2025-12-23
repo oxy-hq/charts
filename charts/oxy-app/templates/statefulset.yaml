@@ -45,7 +45,7 @@ spec:
           args:
             - |
               echo "Waiting for PostgreSQL to be ready..."
-              PG_HOST="postgres.{{ .Release.Namespace }}.svc.cluster.local"
+              PG_HOST="{{ .Release.Name }}.{{ .Release.Namespace }}.svc.cluster.local"
               PG_PORT="5432"
               MAX_RETRIES=60
               RETRY_COUNT=0
@@ -245,9 +245,10 @@ spec:
                 .Values.database.external.database | quote }}
             {{- else if .Values.database.postgres.enabled }}
             - name: OXY_DATABASE_URL
-              value: {{ printf "postgresql://%s:%s@postgres.%s.svc.cluster.local:5432/%s"
+              value: {{ printf "postgresql://%s:%s@%s.%s.svc.cluster.local:5432/%s"
                 (default "postgres" .Values.postgres.userDatabase.user.value)
                 (default "postgres" .Values.postgres.userDatabase.password.value)
+                .Release.Name
                 .Release.Namespace
                 (default "postgres" .Values.postgres.userDatabase.name.value) | quote }}
             {{- end }}
