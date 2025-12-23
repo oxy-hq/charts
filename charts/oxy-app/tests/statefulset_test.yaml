@@ -50,7 +50,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: "ghcr.io/oxy-hq/oxy:0.3.19"
+          value: "ghcr.io/oxy-hq/oxy:0.4.0"
       - contains:
           path: spec.template.spec.containers[0].ports
           content:
@@ -232,7 +232,7 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: OXY_DATABASE_URL
-            value: "postgresql://testuser:testpass@RELEASE-NAME.NAMESPACE.svc.cluster.local:5432/testdb"
+            value: "postgresql://testuser:testpass@RELEASE-NAME-postgres.NAMESPACE.svc.cluster.local:5432/testdb"
 
   - it: should support groundhog2k PostgreSQL chart with custom values
     set:
@@ -252,7 +252,28 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: OXY_DATABASE_URL
-            value: "postgresql://custom-user:custom-pass@RELEASE-NAME.NAMESPACE.svc.cluster.local:5432/custom-db"
+            value: "postgresql://custom-user:custom-pass@RELEASE-NAME-postgres.NAMESPACE.svc.cluster.local:5432/custom-db"
+
+  - it: should use postgres fullnameOverride for service name when provided
+    set:
+      database:
+        postgres:
+          enabled: true
+      postgres:
+        fullnameOverride: "my-postgres"
+        userDatabase:
+          name:
+            value: "testdb"
+          user:
+            value: "testuser"
+          password:
+            value: "testpass"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_DATABASE_URL
+            value: "postgresql://testuser:testpass@my-postgres.NAMESPACE.svc.cluster.local:5432/testdb"
 
   # =======================
   # Init Containers

@@ -1,6 +1,6 @@
 # oxy-app
 
-![Version: 0.3.1](https://img.shields.io/badge/Version-0.3.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.3.19](https://img.shields.io/badge/AppVersion-0.3.19-informational?style=flat-square)
+![Version: 0.3.2](https://img.shields.io/badge/Version-0.3.2-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.4.0](https://img.shields.io/badge/AppVersion-0.4.0-informational?style=flat-square)
 
 A Helm chart for Oxy application deployment on kubernetes
 
@@ -45,6 +45,8 @@ A Helm chart for Oxy application deployment on kubernetes
 | database.external.storeRef.name | string | `""` |  |
 | database.external.user | string | `""` |  |
 | database.postgres.enabled | bool | `false` |  |
+| database.postgres.host | string | `""` |  |
+| database.postgres.port | int | `5432` |  |
 | env.OXY_DATABASE_URL | string | `""` |  |
 | env.OXY_STATE_DIR | string | `"/workspace/oxy_data"` |  |
 | externalSecrets.create | bool | `false` |  |
@@ -109,12 +111,13 @@ A Helm chart for Oxy application deployment on kubernetes
 | persistence.size | string | `"20Gi"` |  |
 | persistence.storageClassName | string | `""` |  |
 | persistence.volumeMode | string | `"Filesystem"` |  |
+| postgres.fullnameOverride | string | `""` |  |
 | postgres.settings.superuserPassword.value | string | `"postgres"` |  |
 | postgres.storage.className | string | `""` |  |
 | postgres.storage.requestedSize | string | `"8Gi"` |  |
-| postgres.userDatabase.name.value | string | `"oxydb"` |  |
+| postgres.userDatabase.name.value | string | `"postgres"` |  |
 | postgres.userDatabase.password.value | string | `"postgres"` |  |
-| postgres.userDatabase.user.value | string | `"oxy"` |  |
+| postgres.userDatabase.user.value | string | `"postgres"` |  |
 | readinessProbe.failureThreshold | int | `3` |  |
 | readinessProbe.httpGet.path | string | `"/"` |  |
 | readinessProbe.httpGet.port | int | `3000` |  |

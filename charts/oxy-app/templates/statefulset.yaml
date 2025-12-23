@@ -45,8 +45,14 @@ spec:
           args:
             - |
               echo "Waiting for PostgreSQL to be ready..."
-              PG_HOST="{{ .Release.Name }}.{{ .Release.Namespace }}.svc.cluster.local"
-              PG_PORT="5432"
+              {{- if .Values.postgres.fullnameOverride }}
+              PG_HOST="{{ .Values.postgres.fullnameOverride }}.{{ .Release.Namespace }}.svc.cluster.local"
+              {{- else if .Values.database.postgres.host }}
+              PG_HOST="{{ .Values.database.postgres.host }}"
+              {{- else }}
+              PG_HOST="{{ .Release.Name }}-postgres.{{ .Release.Namespace }}.svc.cluster.local"
+              {{- end }}
+              PG_PORT="{{ .Values.database.postgres.port }}"
               MAX_RETRIES=60
               RETRY_COUNT=0
               
@@ -245,11 +251,19 @@ spec:
                 .Values.database.external.database | quote }}
             {{- else if .Values.database.postgres.enabled }}
             - name: OXY_DATABASE_URL
-              value: {{ printf "postgresql://%s:%s@%s.%s.svc.cluster.local:5432/%s"
+              {{- $pgHost := "" }}
+              {{- if .Values.postgres.fullnameOverride }}
+                {{- $pgHost = printf "%s.%s.svc.cluster.local" .Values.postgres.fullnameOverride .Release.Namespace }}
+              {{- else if .Values.database.postgres.host }}
+                {{- $pgHost = .Values.database.postgres.host }}
+              {{- else }}
+                {{- $pgHost = printf "%s-postgres.%s.svc.cluster.local" .Release.Name .Release.Namespace }}
+              {{- end }}
+              value: {{ printf "postgresql://%s:%s@%s:%v/%s"
                 (default "postgres" .Values.postgres.userDatabase.user.value)
                 (default "postgres" .Values.postgres.userDatabase.password.value)
-                .Release.Name
-                .Release.Namespace
+                $pgHost
+                .Values.database.postgres.port
                 (default "postgres" .Values.postgres.userDatabase.name.value) | quote }}
             {{- end }}
 

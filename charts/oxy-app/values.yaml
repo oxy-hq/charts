@@ -218,6 +218,14 @@ database:
   # Enable or disable the postgres subchart
   postgres:
     enabled: false
+    # Host for the postgres service created by the subchart
+    # Format: servicename.namespace.svc.cluster.local
+    # Common patterns:
+    # - {release-name}-postgres (most common for groundhog2k chart)
+    # - {subchart-name} (if using alias)
+    # Leave empty to auto-generate as: {release-name}-postgres.{namespace}.svc.cluster.local
+    host: ""
+    port: 5432
     # Note: Connection details are inferred from the postgres.* configuration below
     # No need to duplicate userDatabase configuration here
 
@@ -253,16 +261,22 @@ database:
 
 # Configuration for the postgres subchart (groundhog2k/postgres)
 # When database.postgres.enabled is true, these values configure the postgres subchart
-# Make sure userDatabase values match database.postgres.userDatabase above
+# The fullnameOverride controls the service name created by the subchart
+# Example: if fullnameOverride is "my-postgres", the service will be "my-postgres"
+# If not set, the service name follows Helm's pattern: {release-name}-postgres
 postgres:
+  # Override the full name of the postgres subchart resources
+  # This determines the service name that will be created
+  # Leave empty to use default: {release-name}-postgres
+  fullnameOverride: ""
   settings:
     superuserPassword:
       value: postgres
   userDatabase:
     name:
-      value: oxydb
+      value: postgres
     user:
-      value: oxy
+      value: postgres
     password:
       value: postgres
   storage:
