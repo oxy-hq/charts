@@ -4,7 +4,7 @@ fullnameOverride: "oxy-test-postgres"
 
 app:
   image: "ghcr.io/oxy-hq/oxy"
-  imageTag: "0.3.8"
+  imageTag: "0.3.19"
   imagePullPolicy: "IfNotPresent"
 
 replicaCount: 1
@@ -14,25 +14,26 @@ service:
   port: 80
   targetPort: 80
 
-# Enable PostgreSQL dependency
+# Enable PostgreSQL dependency (groundhog2k postgres chart)
 database:
   postgres:
     enabled: true
 
-# Configure PostgreSQL for testing
-postgresql:
-  image:
-    registry: docker.io
-    repository: bitnamilegacy/postgresql # Use bitnamilegacy for older versions
-    tag: 16.4.0-debian-12-r13
-  auth:
-    username: testuser
-    password: testpass
-    database: testdb
-  primary:
-    persistence:
-      enabled: false  # Disable persistence for CI
-
+# Configure the postgres subchart (groundhog2k)
+# Connection details are automatically inferred from these values
+postgres:
+  # Use Deployment with emptyDir for testing (no PVC needed)
+  useDeployment: true
+  settings:
+    superuserPassword:
+      value: postgres
+  userDatabase:
+    name:
+      value: app
+    user:
+      value: app
+    password:
+      value: testpass123
 
 resources:
   limits:

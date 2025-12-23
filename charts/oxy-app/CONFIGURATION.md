@@ -1,6 +1,6 @@
 # oxy-app
 
-![Version: 0.3.0](https://img.shields.io/badge/Version-0.3.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.3.8](https://img.shields.io/badge/AppVersion-0.3.8-informational?style=flat-square)
+![Version: 0.3.1](https://img.shields.io/badge/Version-0.3.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.3.19](https://img.shields.io/badge/AppVersion-0.3.19-informational?style=flat-square)
 
 A Helm chart for Oxy application deployment on kubernetes
 
@@ -15,7 +15,7 @@ A Helm chart for Oxy application deployment on kubernetes
 
 | Repository | Name | Version |
 |------------|------|---------|
-| https://charts.bitnami.com/bitnami | postgresql | 16.7.27 |
+| https://groundhog2k.github.io/helm-charts/ | postgres | 1.6.1 |
 
 ## Values
 
@@ -44,13 +44,7 @@ A Helm chart for Oxy application deployment on kubernetes
 | database.external.storeRef.kind | string | `"SecretStore"` |  |
 | database.external.storeRef.name | string | `""` |  |
 | database.external.user | string | `""` |  |
-| database.postgres.auth.database | string | `"oxydb"` |  |
-| database.postgres.auth.password | string | `"postgres"` |  |
-| database.postgres.auth.username | string | `"oxy"` |  |
 | database.postgres.enabled | bool | `false` |  |
-| database.postgres.postgresqlDatabase | string | `"oxydb"` |  |
-| database.postgres.postgresqlPassword | string | `"postgres"` |  |
-| database.postgres.postgresqlUsername | string | `"oxy"` |  |
 | env.OXY_DATABASE_URL | string | `""` |  |
 | env.OXY_STATE_DIR | string | `"/workspace/oxy_data"` |  |
 | externalSecrets.create | bool | `false` |  |
@@ -115,6 +109,12 @@ A Helm chart for Oxy application deployment on kubernetes
 | persistence.size | string | `"20Gi"` |  |
 | persistence.storageClassName | string | `""` |  |
 | persistence.volumeMode | string | `"Filesystem"` |  |
+| postgres.settings.superuserPassword.value | string | `"postgres"` |  |
+| postgres.storage.className | string | `""` |  |
+| postgres.storage.requestedSize | string | `"8Gi"` |  |
+| postgres.userDatabase.name.value | string | `"oxydb"` |  |
+| postgres.userDatabase.password.value | string | `"postgres"` |  |
+| postgres.userDatabase.user.value | string | `"oxy"` |  |
 | readinessProbe.failureThreshold | int | `3` |  |
 | readinessProbe.httpGet.path | string | `"/"` |  |
 | readinessProbe.httpGet.port | int | `3000` |  |

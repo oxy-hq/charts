@@ -167,9 +167,9 @@ externalSecrets:
 # Use `sshKey.secretName` to point to an existing Secret in production,
 # or provide `sshKey.privateKey` (inline) for development/testing only.
 sshKey:
-  secretName: ""    # If empty, defaults to gitSync.sshSecretName
-  privateKey: ""   # Inline private SSH key (DO NOT commit to VCS)
-  knownHosts: ""   # Optional known_hosts content (multiline)
+  secretName: ""  # If empty, defaults to gitSync.sshSecretName
+  privateKey: ""  # Inline private SSH key (DO NOT commit to VCS)
+  knownHosts: ""  # Optional known_hosts content (multiline)
 
 # Git sync sidecar configuration
 gitSync:
@@ -188,16 +188,16 @@ gitSync:
   # GitHub App authentication (optional)
   # When provided, the chart will create a secret and mount it for git-sync.
   githubApp:
-    secretName: ""       # Optional: existing secret name containing GitHub App data
-    privateKey: ""      # PEM private key contents for GitHub App (DO NOT commit)
-    privateKeyKey: "github_app_private_key" # key name in secret for private key
-    applicationId: ""   # GitHub App Application ID (inline)
-    applicationIdKey: "github_app_application_id" # key name in secret for app id
-    clientId: ""        # GitHub App Client ID (inline)
+    secretName: ""  # Optional: existing secret name containing GitHub App data
+    privateKey: ""  # PEM private key contents for GitHub App (DO NOT commit)
+    privateKeyKey: "github_app_private_key"  # key name in secret for private key
+    applicationId: ""  # GitHub App Application ID (inline)
+    applicationIdKey: "github_app_application_id"  # key name in secret for app id
+    clientId: ""  # GitHub App Client ID (inline)
     clientIdKey: "github_app_client_id"
     installationId: ""  # Installation ID (inline)
-    installationIdKey: "github_app_installation_id" # key name in secret for installation id
-    baseUrl: "https://api.github.com" # GitHub API base URL (for GHES)
+    installationIdKey: "github_app_installation_id"  # key name in secret for installation id
+    baseUrl: "https://api.github.com"  # GitHub API base URL (for GHES)
     baseUrlKey: "github_app_base_url"
 
 # HTTP authentication for git-sync (for HTTPS git repositories)
@@ -215,19 +215,11 @@ httpAuth:
   passwordKey: "password"
 
 database:
-  # Subchart Postgres settings (optional; not selected automatically)
+  # Enable or disable the postgres subchart
   postgres:
     enabled: false
-    # PostgreSQL auth configuration (for chart version 16.x+)
-    auth:
-      username: oxy
-      password: postgres
-      database: oxydb
-    # Legacy configuration (deprecated in chart version 16.x+)
-    # Keep for backward compatibility references
-    postgresqlUsername: oxy
-    postgresqlPassword: postgres
-    postgresqlDatabase: oxydb
+    # Note: Connection details are inferred from the postgres.* configuration below
+    # No need to duplicate userDatabase configuration here
 
   # External DB settings (optional)
   external:
@@ -258,6 +250,24 @@ database:
     host: ""
     port: 5432
     database: ""
+
+# Configuration for the postgres subchart (groundhog2k/postgres)
+# When database.postgres.enabled is true, these values configure the postgres subchart
+# Make sure userDatabase values match database.postgres.userDatabase above
+postgres:
+  settings:
+    superuserPassword:
+      value: postgres
+  userDatabase:
+    name:
+      value: oxydb
+    user:
+      value: oxy
+    password:
+      value: postgres
+  storage:
+    requestedSize: 8Gi
+    className: ""
 
 # Allow users to supply arbitrary initContainers and sidecar containers.
 # Each entry should be a Kubernetes container spec. Examples below show

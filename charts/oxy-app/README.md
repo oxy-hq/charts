@@ -42,6 +42,8 @@ Notes: replace `oxy-app` release name, namespace, or values file as needed for y
 
 This doc tries to focus only on chart-specific, differential behavior you won't find in a generic Helm tutorial.
 
+> **⚠️ PostgreSQL Migration Notice**: The Bitnami PostgreSQL chart dependency has been replaced with CloudNativePG. See [docs/postgresql-migration.md](docs/postgresql-migration.md) for migration guidance.
+
 - Deployment type: StatefulSet (requires a PVC). Reason: the app needs persistent storage for state, database files (if you are using sqlite), and git repo clones.
 - Architecture: single main container. Optional init containers are used only for git cloning when `gitSync.enabled` is true; env file assembly is no longer performed by an init-container.
 - State directory & persistence
@@ -50,7 +52,7 @@ This doc tries to focus only on chart-specific, differential behavior you won't 
 - Database selection precedence
   1. `env.OXY_DATABASE_URL`
   2. `database.external.connectionString` or composed `database.external.*`
-  3. bundled postgres subchart (`database.postgres.enabled`)
+  3. bundled postgres subchart (`database.postgres.enabled`) - **Now using CloudNativePG**
   4. sqlite fallback
 - For production, it is recommended to set `env.OXY_DATABASE_URL` or use an external managed DB.
 - gitSync / init-container

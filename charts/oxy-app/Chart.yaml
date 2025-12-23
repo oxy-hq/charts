@@ -2,8 +2,8 @@ apiVersion: v2
 name: oxy-app
 description: A Helm chart for Oxy application deployment on kubernetes
 type: application
-version: 0.3.0
-appVersion: "0.3.8"
+version: 0.3.1
+appVersion: "0.3.19"
 keywords:
   - oxy
 maintainers:
@@ -13,7 +13,7 @@ maintainers:
     email: luong@oxy.tech
 
 dependencies:
-  - name: postgresql
-    version: 16.7.27
-    repository: "https://charts.bitnami.com/bitnami"
+  - name: postgres
+    version: "1.6.1"
+    repository: "https://groundhog2k.github.io/helm-charts/"
     condition: database.postgres.enabled

@@ -4,7 +4,7 @@ fullnameOverride: "oxy-test-persist"
 
 app:
   image: "ghcr.io/oxy-hq/oxy"
-  imageTag: "0.3.8"
+  imageTag: "0.3.19"
   imagePullPolicy: "IfNotPresent"
   replicaCount: 1
 

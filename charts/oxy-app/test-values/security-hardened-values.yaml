@@ -4,7 +4,7 @@ fullnameOverride: "oxy-test-secure"
 
 app:
   image: "ghcr.io/oxy-hq/oxy"
-  imageTag: "0.3.8"
+  imageTag: "0.3.19"
   imagePullPolicy: "Always"  # Always pull for security
   replicaCount: 1
   port: 3000

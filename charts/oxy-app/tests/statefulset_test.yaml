@@ -50,7 +50,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: "ghcr.io/oxy-hq/oxy:0.3.8"
+          value: "ghcr.io/oxy-hq/oxy:0.3.19"
       - contains:
           path: spec.template.spec.containers[0].ports
           content:
@@ -219,32 +219,40 @@ tests:
       database:
         postgres:
           enabled: true
-          postgresqlUsername: "testuser"
-          postgresqlPassword: "testpass"
-          postgresqlDatabase: "testdb"
+      postgres:
+        userDatabase:
+          name:
+            value: "testdb"
+          user:
+            value: "testuser"
+          password:
+            value: "testpass"
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: OXY_DATABASE_URL
-            value: "postgresql://testuser:testpass@RELEASE-NAME-postgresql.NAMESPACE.svc.cluster.local:5432/testdb"
+            value: "postgresql://testuser:testpass@RELEASE-NAME.NAMESPACE.svc.cluster.local:5432/testdb"
 
-  - it: should support new Bitnami PostgreSQL chart format
+  - it: should support groundhog2k PostgreSQL chart with custom values
     set:
       database:
         postgres:
           enabled: true
-      postgresql:
-        auth:
-          username: "bitnami-user"
-          password: "bitnami-pass"
-          database: "bitnami-db"
+      postgres:
+        userDatabase:
+          name:
+            value: "custom-db"
+          user:
+            value: "custom-user"
+          password:
+            value: "custom-pass"
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: OXY_DATABASE_URL
-            value: "postgresql://bitnami-user:bitnami-pass@RELEASE-NAME-postgresql.NAMESPACE.svc.cluster.local:5432/bitnami-db"
+            value: "postgresql://custom-user:custom-pass@RELEASE-NAME.NAMESPACE.svc.cluster.local:5432/custom-db"
 
   # =======================
   # Init Containers
@@ -266,9 +274,10 @@ tests:
       database:
         postgres:
           enabled: true
-      postgresql:
-        auth:
-          username: "testuser"
+      postgres:
+        userDatabase:
+          user:
+            value: "testuser"
     asserts:
       - lengthEqual:
           path: spec.template.spec.initContainers
@@ -302,6 +311,10 @@ tests:
       database:
         postgres:
           enabled: true
+      postgres:
+        userDatabase:
+          user:
+            value: "testuser"
       gitSync:
         enabled: true
         repository: "git@github.com:example/repo.git"
@@ -1272,6 +1285,10 @@ tests:
       database:
         postgres:
           enabled: true
+      postgres:
+        userDatabase:
+          user:
+            value: "testuser"
       persistence:
         enabled: true
     asserts:
