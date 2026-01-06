@@ -50,7 +50,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: "ghcr.io/oxy-hq/oxy:0.4.0"
+          value: "ghcr.io/oxy-hq/oxy:0.4.4"
       - contains:
           path: spec.template.spec.containers[0].ports
           content:
@@ -481,6 +481,107 @@ tests:
       - contains:
           path: spec.template.spec.initContainers[0].args
           content: "--one-time=true"
+
+  # =======================
+  # Git Sync Path Configuration (Subdirectory Safety)
+  # =======================
+
+  - it: should use default git-sync paths as subdirectories of mount path
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      persistence:
+        enabled: true
+        mountPath: "/workspace"
+    asserts:
+      # Init container should use subdirectories
+      - contains:
+          path: spec.template.spec.initContainers[0].args
+          content: "--root=/workspace/git"
+      - contains:
+          path: spec.template.spec.initContainers[0].args
+          content: "--link=/workspace/current"
+      # Sidecar should use same subdirectories
+      - contains:
+          path: spec.template.spec.containers[1].args
+          content: "--root=/workspace/git"
+      - contains:
+          path: spec.template.spec.containers[1].args
+          content: "--link=/workspace/current"
+
+  - it: should allow custom git-sync directory names while maintaining subdirectory structure
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+        root: "myrepo"
+        link: "latest"
+      persistence:
+        enabled: true
+        mountPath: "/data"
+    asserts:
+      # Should append custom names to mount path
+      - contains:
+          path: spec.template.spec.initContainers[0].args
+          content: "--root=/data/myrepo"
+      - contains:
+          path: spec.template.spec.initContainers[0].args
+          content: "--link=/data/latest"
+      - contains:
+          path: spec.template.spec.containers[1].args
+          content: "--root=/data/myrepo"
+      - contains:
+          path: spec.template.spec.containers[1].args
+          content: "--link=/data/latest"
+
+  - it: should ensure git-sync paths avoid volume root to prevent lost+found conflicts
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      persistence:
+        enabled: true
+        mountPath: "/mnt/data"
+    asserts:
+      # Verify paths are NOT at volume root
+      - notContains:
+          path: spec.template.spec.initContainers[0].args
+          content: "--root=/mnt/data"
+      # Verify paths ARE in subdirectories
+      - contains:
+          path: spec.template.spec.initContainers[0].args
+          content: "--root=/mnt/data/git"
+      - contains:
+          path: spec.template.spec.initContainers[0].args
+          content: "--link=/mnt/data/current"
+
+  - it: should set workingDir to git link path for main container
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      persistence:
+        enabled: true
+        mountPath: "/workspace"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].workingDir
+          value: "/workspace/current"
+
+  - it: should set workingDir with custom link directory
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+        link: "active"
+      persistence:
+        enabled: true
+        mountPath: "/data"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].workingDir
+          value: "/data/active"
 
   # =======================
   # Sidecar Containers
@@ -1209,7 +1310,7 @@ tests:
       gitSync:
         enabled: true
         repository: "git@github.com:example/repo.git"
-        link: "/data/repo"
+        link: "repo"
       semanticEngine:
         enabled: true
       persistence:

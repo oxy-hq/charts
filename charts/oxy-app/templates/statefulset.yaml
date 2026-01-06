@@ -1,8 +1,17 @@
 {{/*
 Define git sync paths
+Per git-sync documentation: when using persistent volumes (especially those at filesystem root),
+the --root flag must point to a subdirectory of the volume mount, NOT the mount point itself.
+This avoids conflicts with filesystem metadata like 'lost+found' in ext2/3/4 filesystems,
+which can cause git-sync to fail or leave directories empty.
+
+We ensure this by treating gitSync.root and gitSync.link as relative directory names that
+are always appended to the persistence.mountPath, preventing accidental misconfiguration.
 */}}
-{{- $gitRoot := default (printf "%s/git" .Values.persistence.mountPath) .Values.gitSync.root -}}
-{{- $gitLink := default (printf "%s/current" .Values.persistence.mountPath) .Values.gitSync.link -}}
+{{- $gitRootDir := default "git" .Values.gitSync.root -}}
+{{- $gitLinkDir := default "current" .Values.gitSync.link -}}
+{{- $gitRoot := printf "%s/%s" .Values.persistence.mountPath $gitRootDir -}}
+{{- $gitLink := printf "%s/%s" .Values.persistence.mountPath $gitLinkDir -}}
 
 apiVersion: apps/v1
 kind: StatefulSet
@@ -107,14 +116,8 @@ spec:
             - --username={{ .Values.httpAuth.username }}
             - --password-file=/etc/git-auth/password
             {{- else if or .Values.gitSync.githubApp.applicationId .Values.gitSync.githubApp.privateKey .Values.gitSync.githubApp.secretName }}
-            {{- /* GitHub App authentication: pass private key file and allow IDs via env */}}
+            {{- /* GitHub App authentication: use private key file arg + env vars for IDs and base URL */}}
             - --github-app-private-key-file=/etc/github-app/{{ .Values.gitSync.githubApp.privateKeyKey }}
-            {{- if .Values.gitSync.githubApp.clientId }}
-            - --github-app-client-id={{ .Values.gitSync.githubApp.clientId }}
-            {{- end }}
-            {{- if .Values.gitSync.githubApp.baseUrl }}
-            - --github-base-url={{ .Values.gitSync.githubApp.baseUrl }}
-            {{- end }}
             {{- else if .Values.sshKey.privateKey }}
             - --ssh-key-file=/etc/git-secret/ssh
             {{- if .Values.sshKey.knownHosts }}
@@ -346,14 +349,8 @@ spec:
             - --username={{ .Values.httpAuth.username }}
             - --password-file=/etc/git-auth/password
             {{- else if or .Values.gitSync.githubApp.applicationId .Values.gitSync.githubApp.privateKey .Values.gitSync.githubApp.secretName }}
-            {{- /* GitHub App authentication: pass private key file and allow IDs via env */}}
+            {{- /* GitHub App authentication: use private key file arg + env vars for IDs and base URL */}}
             - --github-app-private-key-file=/etc/github-app/{{ .Values.gitSync.githubApp.privateKeyKey }}
-            {{- if .Values.gitSync.githubApp.clientId }}
-            - --github-app-client-id={{ .Values.gitSync.githubApp.clientId }}
-            {{- end }}
-            {{- if .Values.gitSync.githubApp.baseUrl }}
-            - --github-base-url={{ .Values.gitSync.githubApp.baseUrl }}
-            {{- end }}
             {{- else if .Values.sshKey.privateKey }}
             - --ssh-key-file=/etc/git-secret/ssh
             {{- if .Values.sshKey.knownHosts }}

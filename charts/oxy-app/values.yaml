@@ -178,26 +178,36 @@ gitSync:
   branch: main
   sshSecretName: oxy-git-ssh
   enabled: false
-  # Root directory where git-sync stores repo data (defaults to <persistence.mountPath>/git)
+  # IMPORTANT: Per git-sync documentation, when using persistent volumes at filesystem root,
+  # the --root must be a SUB-DIRECTORY of the mount point to avoid conflicts with filesystem
+  # metadata like 'lost+found'. This value should be a DIRECTORY NAME (not an absolute path)
+  # that will be appended to persistence.mountPath. Defaults to "git" -> /workspace/git
   root: ""
-  # Link path inside the mount that points to the latest synced revision (defaults to <persistence.mountPath>/current)
+  # Link directory name (not absolute path) for the symlink pointing to the latest synced
+  # revision. Will be appended to persistence.mountPath. Defaults to "current" -> /workspace/current
   link: ""
   # Image pull policy for the git-sync init container. Valid values: Always, IfNotPresent, Never
   imagePullPolicy: IfNotPresent
 
   # GitHub App authentication (optional)
-  # When provided, the chart will create a secret and mount it for git-sync.
+  # All parameters are passed as environment variables to git-sync:
+  #   - GITSYNC_GITHUB_APP_APPLICATION_ID (or use clientId)
+  #   - GITSYNC_GITHUB_APP_INSTALLATION_ID (required)
+  #   - GITSYNC_GITHUB_APP_CLIENT_ID (alternative to applicationId)
+  #   - GITSYNC_GITHUB_BASE_URL (optional, defaults to https://api.github.com)
+  # The private key file is passed via --github-app-private-key-file argument.
+  # Note: You must provide either applicationId OR clientId (not both).
   githubApp:
     secretName: ""  # Optional: existing secret name containing GitHub App data
     privateKey: ""  # PEM private key contents for GitHub App (DO NOT commit)
     privateKeyKey: "github_app_private_key"  # key name in secret for private key
-    applicationId: ""  # GitHub App Application ID (inline)
+    applicationId: ""  # GitHub App Application ID (inline) - use either this OR clientId
     applicationIdKey: "github_app_application_id"  # key name in secret for app id
-    clientId: ""  # GitHub App Client ID (inline)
+    clientId: ""  # GitHub App Client ID (inline) - use either this OR applicationId
     clientIdKey: "github_app_client_id"
-    installationId: ""  # Installation ID (inline)
+    installationId: ""  # Installation ID (inline, required for GitHub App auth)
     installationIdKey: "github_app_installation_id"  # key name in secret for installation id
-    baseUrl: "https://api.github.com"  # GitHub API base URL (for GHES)
+    baseUrl: "https://api.github.com"  # GitHub API base URL (for GitHub Enterprise Server)
     baseUrlKey: "github_app_base_url"
 
 # HTTP authentication for git-sync (for HTTPS git repositories)
