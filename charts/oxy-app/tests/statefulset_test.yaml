@@ -50,7 +50,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: "ghcr.io/oxy-hq/oxy:0.4.4"
+          value: "ghcr.io/oxy-hq/oxy:0.4.5"
       - contains:
           path: spec.template.spec.containers[0].ports
           content:

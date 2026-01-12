@@ -12,6 +12,10 @@ are always appended to the persistence.mountPath, preventing accidental misconfi
 {{- $gitLinkDir := default "current" .Values.gitSync.link -}}
 {{- $gitRoot := printf "%s/%s" .Values.persistence.mountPath $gitRootDir -}}
 {{- $gitLink := printf "%s/%s" .Values.persistence.mountPath $gitLinkDir -}}
+{{- $workingDir := $gitLink -}}
+{{- if and .Values.gitSync.workingDir (ne .Values.gitSync.workingDir "") -}}
+  {{- $workingDir = printf "%s/%s" $gitLink .Values.gitSync.workingDir -}}
+{{- end -}}
 
 apiVersion: apps/v1
 kind: StatefulSet
@@ -214,7 +218,7 @@ spec:
               exec oxy serve{{- if not .Values.gitSync.enabled }} --cloud{{- end }}
           {{- end }}
           {{- if .Values.gitSync.enabled }}
-          workingDir: {{ $gitLink }}
+          workingDir: {{ $workingDir }}
           {{- end }}
           ports:
             - containerPort: {{ .Values.app.port }}
@@ -424,7 +428,7 @@ spec:
         - name: semantic-engine
           image: "{{ .Values.semanticEngine.image }}:{{ default (default .Chart.AppVersion .Values.app.imageTag) .Values.semanticEngine.imageTag }}"
           imagePullPolicy: {{ .Values.semanticEngine.imagePullPolicy }}
-          workingDir: {{ $gitLink }}
+          workingDir: {{ $workingDir }}
           ports:
             - containerPort: 4000
               protocol: TCP

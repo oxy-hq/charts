@@ -186,6 +186,12 @@ gitSync:
   # Link directory name (not absolute path) for the symlink pointing to the latest synced
   # revision. Will be appended to persistence.mountPath. Defaults to "current" -> /workspace/current
   link: ""
+  # Working directory subdirectory (optional). When set, this subdirectory path will be
+  # appended to the git link directory to set as the container's workingDir.
+  # For example, if workingDir: "backend", the final working directory will be:
+  # /workspace/current/backend (assuming default link and mountPath values)
+  # Leave empty to use the root of the cloned repository.
+  workingDir: ""
   # Image pull policy for the git-sync init container. Valid values: Always, IfNotPresent, Never
   imagePullPolicy: IfNotPresent
 
