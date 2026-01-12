@@ -76,6 +76,7 @@ A Helm chart for Oxy application deployment on kubernetes
 | gitSync.repository | string | `""` |  |
 | gitSync.root | string | `""` |  |
 | gitSync.sshSecretName | string | `"oxy-git-ssh"` |  |
+| gitSync.workingDir | string | `""` |  |
 | headlessService.enabled | bool | `true` |  |
 | httpAuth.password | string | `""` |  |
 | httpAuth.passwordKey | string | `"password"` |  |

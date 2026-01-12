@@ -9,6 +9,10 @@ gitSync:
   period: 30s
   # The secret name where SSH keys are stored (defaults to oxy-git-ssh if not specified)
   sshSecretName: oxy-git-ssh
+  # Optional: Set a subdirectory within the cloned repo as the working directory
+  # Example: workingDir: "backend" will set workingDir to /workspace/current/backend
+  # Leave empty to use the root of the cloned repository
+  workingDir: ""
 
 # SSH Key configuration
 # IMPORTANT: For production, DO NOT store SSH keys in values.yaml!
