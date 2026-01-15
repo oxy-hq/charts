@@ -336,94 +336,6 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
 
-        {{- if .Values.gitSync.enabled }}
-        # Git Sync Sidecar (keeps the repo up-to-date)
-        - name: git-sync
-          image: k8s.gcr.io/git-sync/git-sync:v4.4.3
-          imagePullPolicy: {{ .Values.gitSync.imagePullPolicy }}
-          args:
-            - --repo={{ .Values.gitSync.repository }}
-            - --branch={{ .Values.gitSync.branch }}
-            - --root={{ $gitRoot }}
-            - --link={{ $gitLink }}
-            - --period={{ .Values.gitSync.period }}
-            - --depth=1
-            {{- if .Values.httpAuth.username }}
-            {{- /* HTTP authentication */}}
-            - --username={{ .Values.httpAuth.username }}
-            - --password-file=/etc/git-auth/password
-            {{- else if or .Values.gitSync.githubApp.applicationId .Values.gitSync.githubApp.privateKey .Values.gitSync.githubApp.secretName }}
-            {{- /* GitHub App authentication: use private key file arg + env vars for IDs and base URL */}}
-            - --github-app-private-key-file=/etc/github-app/{{ .Values.gitSync.githubApp.privateKeyKey }}
-            {{- else if .Values.sshKey.privateKey }}
-            - --ssh-key-file=/etc/git-secret/ssh
-            {{- if .Values.sshKey.knownHosts }}
-            - --ssh-known-hosts-file=/etc/git-secret/known_hosts
-            {{- end }}
-            {{- else }}
-            {{- /* No auth provided; rely on externally managed secrets or disabled gitSync */}}
-            {{- end }}
-            - --max-failures=5
-            - --verbose=1
-          env:
-            {{- if .Values.gitSync.githubApp.secretName }}
-            - name: GITSYNC_GITHUB_APP_APPLICATION_ID
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.gitSync.githubApp.secretName }}
-                  key: {{ .Values.gitSync.githubApp.applicationIdKey }}
-            - name: GITSYNC_GITHUB_APP_INSTALLATION_ID
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.gitSync.githubApp.secretName }}
-                  key: {{ .Values.gitSync.githubApp.installationIdKey }}
-            - name: GITSYNC_GITHUB_APP_CLIENT_ID
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.gitSync.githubApp.secretName }}
-                  key: {{ .Values.gitSync.githubApp.clientIdKey }}
-            - name: GITSYNC_GITHUB_BASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.gitSync.githubApp.secretName }}
-                  key: {{ .Values.gitSync.githubApp.baseUrlKey }}
-            {{- else }}
-            {{- if .Values.gitSync.githubApp.applicationId }}
-            - name: GITSYNC_GITHUB_APP_APPLICATION_ID
-              value: {{ .Values.gitSync.githubApp.applicationId | quote }}
-            {{- end }}
-            {{- if .Values.gitSync.githubApp.installationId }}
-            - name: GITSYNC_GITHUB_APP_INSTALLATION_ID
-              value: {{ .Values.gitSync.githubApp.installationId | quote }}
-            {{- end }}
-            {{- if .Values.gitSync.githubApp.clientId }}
-            - name: GITSYNC_GITHUB_APP_CLIENT_ID
-              value: {{ .Values.gitSync.githubApp.clientId | quote }}
-            {{- end }}
-            {{- if .Values.gitSync.githubApp.baseUrl }}
-            - name: GITSYNC_GITHUB_BASE_URL
-              value: {{ .Values.gitSync.githubApp.baseUrl | quote }}
-            {{- end }}
-            {{- end }}
-          volumeMounts:
-            - name: workspace
-              mountPath: {{ .Values.persistence.mountPath }}
-            {{- if .Values.httpAuth.username }}
-            {{- /* HTTP authentication */}}
-            - name: git-http-auth
-              mountPath: /etc/git-auth
-              readOnly: true
-            {{- else if or .Values.gitSync.githubApp.applicationId .Values.gitSync.githubApp.privateKey .Values.gitSync.githubApp.secretName }}
-            {{- /* Mount GitHub App secret */}}
-            - name: github-app-secret
-              mountPath: /etc/github-app
-              readOnly: true
-            {{- else }}
-            - name: git-ssh
-              mountPath: /etc/git-secret
-              readOnly: true
-            {{- end }}
-
         {{- if and .Values.gitSync.enabled .Values.semanticEngine.enabled }}
         - name: semantic-engine
           image: "{{ .Values.semanticEngine.image }}:{{ default (default .Chart.AppVersion .Values.app.imageTag) .Values.semanticEngine.imageTag }}"
@@ -436,7 +348,6 @@ spec:
           volumeMounts:
             - name: workspace
               mountPath: {{ .Values.persistence.mountPath }}
-        {{- end }}
         {{- end }}
 
         {{- /* Render user-supplied sidecars after built-in sidecars */}}

@@ -94,6 +94,12 @@ nodeSelector:
 
 tolerations:
 
+# Node affinity configuration (optional). Provide a map compatible with
+# Kubernetes PodAffinity/PodAntiAffinity/NodeAffinity specs. An empty map
+# here prevents template engines from erroring when `.Values.affinity` is
+# referenced but not set by the user.
+affinity: {}
+
 # Service configuration
 service:
   type: ClusterIP
