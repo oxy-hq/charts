@@ -40,6 +40,10 @@ spec:
       labels:
         {{- include "oxy-app.selectorLabels" . | nindent 8 }}
         version: v1
+      {{- if .Values.otelCollector.enabled }}
+      annotations:
+        checksum/otel-config: {{ include (print $.Template.BasePath "/otel-configmap.yaml") . | sha256sum }}
+      {{- end }}
     spec:
       {{- $sa := include "oxy-app.serviceAccountName" . }}
       {{- if ne $sa "" }}
