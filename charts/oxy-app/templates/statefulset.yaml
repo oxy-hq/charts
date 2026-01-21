@@ -408,18 +408,25 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          livenessProbe:
-            httpGet:
-              path: /
-              port: 13133
-            initialDelaySeconds: 10
-            periodSeconds: 30
-          readinessProbe:
+          startupProbe:
             httpGet:
               path: /
               port: 13133
             initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 13133
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 13133
             periodSeconds: 10
+            failureThreshold: 3
         {{- end }}
 
         {{- /* Render user-supplied sidecars after built-in sidecars */}}

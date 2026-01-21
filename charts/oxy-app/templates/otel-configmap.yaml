@@ -31,6 +31,10 @@ metadata:
     {{- include "oxy-app.labels" . | nindent 4 }}
 data:
   config.yaml: |
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+
     receivers:
       otlp:
         protocols:
@@ -79,6 +83,7 @@ data:
       {{- end }}
 
     service:
+      extensions: [health_check]
       pipelines:
         traces:
           receivers: [otlp]

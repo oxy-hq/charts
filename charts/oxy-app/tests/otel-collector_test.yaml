@@ -333,6 +333,12 @@ tests:
         enabled: true
     asserts:
       - equal:
+          path: spec.template.spec.containers[1].startupProbe.httpGet.port
+          value: 13133
+      - equal:
+          path: spec.template.spec.containers[1].startupProbe.failureThreshold
+          value: 12
+      - equal:
           path: spec.template.spec.containers[1].livenessProbe.httpGet.port
           value: 13133
       - equal:
