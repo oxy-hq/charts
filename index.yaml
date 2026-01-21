@@ -3,6 +3,28 @@ entries:
   oxy-app:
   - apiVersion: v2
     appVersion: 0.4.9
+    created: "2026-01-21T09:37:27.302784644Z"
+    dependencies:
+    - condition: database.postgres.enabled
+      name: postgres
+      repository: https://groundhog2k.github.io/helm-charts/
+      version: 1.6.1
+    description: A Helm chart for Oxy application deployment on kubernetes
+    digest: 5a0ebad9623e4e3a4b1fe37ee91d04afe3632ccb61c03c0fa586316f3c9d9d78
+    keywords:
+    - oxy
+    maintainers:
+    - email: hello@oxy.tech
+      name: Oxy Team
+    - email: luong@oxy.tech
+      name: Luong Vo
+    name: oxy-app
+    type: application
+    urls:
+    - https://github.com/oxy-hq/charts/releases/download/oxy-app-0.3.7/oxy-app-0.3.7.tgz
+    version: 0.3.7
+  - apiVersion: v2
+    appVersion: 0.4.9
     created: "2026-01-21T09:06:52.391779334Z"
     dependencies:
     - condition: database.postgres.enabled
@@ -639,4 +661,4 @@ entries:
     urls:
     - https://github.com/oxy-hq/charts/releases/download/oxy-app-0.1.3/oxy-app-0.1.3.tgz
     version: 0.1.3
-generated: "2026-01-21T09:06:52.392065856Z"
+generated: "2026-01-21T09:37:27.303069312Z"
