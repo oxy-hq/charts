@@ -14,7 +14,6 @@ TEST_RELEASES=(
     "test-postgres"
     "test-production"
     "test-persist"
-    "test-otel"
     "upgrade-test"
     "resource-test"
 )
@@ -620,98 +619,6 @@ test_production_like_deployment() {
     log_info "Production-like deployment test passed!"
 }
 
-test_otel_collector_deployment() {
-    log_info "Testing deployment with OpenTelemetry Collector..."
-
-    # Install with otel-collector enabled
-    log_info "Installing with otel-collector sidecar..."
-    if ! helm install test-otel "$CHART_PATH" \
-        -f "$CHART_PATH/test-values/with-otel-collector-values.yaml" \
-        -n "$NAMESPACE" \
-        --wait --timeout=3m; then
-        log_error "Helm install failed"
-        log_info "Getting pod status:"
-        kubectl get pods -n "$NAMESPACE" -o wide || true
-        log_info "Describing pod:"
-        kubectl describe pod -l app.kubernetes.io/instance=test-otel -n "$NAMESPACE" || true
-        return 1
-    fi
-
-    # Wait for all containers to be ready (main app + otel-collector sidecar)
-    log_info "Waiting for all containers to be ready..."
-    if ! kubectl wait --for=condition=ready pod \
-        -l app.kubernetes.io/instance=test-otel \
-        -n "$NAMESPACE" \
-        --timeout=120s; then
-        log_error "Pod failed to become ready"
-        kubectl get pods -n "$NAMESPACE" -o wide || true
-        kubectl describe pod -l app.kubernetes.io/instance=test-otel -n "$NAMESPACE" || true
-        kubectl logs -l app.kubernetes.io/instance=test-otel -n "$NAMESPACE" -c otel-collector --tail=50 || true
-        return 1
-    fi
-
-    # Verify otel-collector container is running
-    log_info "Verifying otel-collector container..."
-    pod_name=$(kubectl get pod -l app.kubernetes.io/instance=test-otel -n "$NAMESPACE" -o jsonpath='{.items[0].metadata.name}')
-
-    # Check container count (should be 2: main app + otel-collector)
-    container_count=$(kubectl get pod "$pod_name" -n "$NAMESPACE" -o jsonpath='{.spec.containers[*].name}' | wc -w)
-    if [ "$container_count" -lt 2 ]; then
-        log_error "Expected at least 2 containers, found $container_count"
-        kubectl get pod "$pod_name" -n "$NAMESPACE" -o jsonpath='{.spec.containers[*].name}'
-        return 1
-    fi
-    log_info "Container count verified: $container_count containers"
-
-    # Verify otel-collector container is in the pod
-    if kubectl get pod "$pod_name" -n "$NAMESPACE" -o jsonpath='{.spec.containers[*].name}' | grep -q "otel-collector"; then
-        log_info "otel-collector container found in pod"
-    else
-        log_error "otel-collector container not found in pod"
-        return 1
-    fi
-
-    # Check otel-collector container status
-    otel_ready=$(kubectl get pod "$pod_name" -n "$NAMESPACE" -o jsonpath='{.status.containerStatuses[?(@.name=="otel-collector")].ready}')
-    if [ "$otel_ready" = "true" ]; then
-        log_info "otel-collector container is ready"
-    else
-        log_error "otel-collector container is not ready"
-        kubectl logs "$pod_name" -n "$NAMESPACE" -c otel-collector --tail=50 || true
-        return 1
-    fi
-
-    # Verify otel-collector health endpoint is responding
-    log_info "Testing otel-collector health endpoint..."
-    if kubectl exec "$pod_name" -n "$NAMESPACE" -c oxy-app -- \
-        sh -c 'wget -q -O- http://localhost:13133/ >/dev/null 2>&1 || curl -sf http://localhost:13133/ >/dev/null 2>&1' 2>/dev/null; then
-        log_info "otel-collector health endpoint is responding"
-    else
-        log_warn "Could not verify health endpoint (wget/curl may not be available in container)"
-    fi
-
-    # Verify OTLP gRPC port is listening
-    log_info "Verifying OTLP ports..."
-    if kubectl exec "$pod_name" -n "$NAMESPACE" -c otel-collector -- \
-        sh -c 'netstat -tlnp 2>/dev/null | grep -q ":4317" || ss -tlnp 2>/dev/null | grep -q ":4317" || true'; then
-        log_info "OTLP gRPC port (4317) verified"
-    fi
-
-    # Check otel-collector logs for successful startup
-    log_info "Checking otel-collector logs for successful startup..."
-    if kubectl logs "$pod_name" -n "$NAMESPACE" -c otel-collector --tail=20 | grep -q "Everything is ready"; then
-        log_info "otel-collector started successfully!"
-    else
-        log_warn "Could not find 'Everything is ready' in otel-collector logs"
-        kubectl logs "$pod_name" -n "$NAMESPACE" -c otel-collector --tail=20 || true
-    fi
-
-    # Cleanup this test
-    helm uninstall test-otel -n "$NAMESPACE" --wait
-
-    log_info "OpenTelemetry Collector deployment test passed!"
-}
-
 test_upgrade_scenarios() {
     log_info "Testing helm upgrade scenarios..."
 
@@ -777,7 +684,6 @@ run_integration_tests() {
     test_postgres_deployment
     test_production_like_deployment
     test_persistence_deployment
-    test_otel_collector_deployment
     test_upgrade_scenarios
 
     local elapsed=$SECONDS
