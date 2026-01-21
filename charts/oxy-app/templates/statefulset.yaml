@@ -290,6 +290,31 @@ spec:
               value: "http://localhost:4000"
             {{- end }}
 
+            # ClickHouse Configuration (when clickhouse.enabled is true)
+            {{- if .Values.clickhouse.enabled }}
+            - name: OXY_CLICKHOUSE_URL
+              value: {{ .Values.clickhouse.url | quote }}
+            - name: OXY_CLICKHOUSE_DATABASE
+              value: {{ .Values.clickhouse.database | quote }}
+            {{- if and .Values.clickhouse.existingSecret .Values.clickhouse.existingSecret.name }}
+            - name: OXY_CLICKHOUSE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.clickhouse.existingSecret.name }}
+                  key: {{ default "username" .Values.clickhouse.existingSecret.usernameKey }}
+            - name: OXY_CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.clickhouse.existingSecret.name }}
+                  key: {{ default "password" .Values.clickhouse.existingSecret.passwordKey }}
+            {{- else }}
+            - name: OXY_CLICKHOUSE_USER
+              value: {{ .Values.clickhouse.username | quote }}
+            - name: OXY_CLICKHOUSE_PASSWORD
+              value: {{ .Values.clickhouse.password | quote }}
+            {{- end }}
+            {{- end }}
+
           # ConfigMap / Secret Environment Variables
           {{- if or .Values.configMap.enabled (gt (len .Values.externalSecrets.envSecretNames) 0) }}
           envFrom:
@@ -348,6 +373,53 @@ spec:
           volumeMounts:
             - name: workspace
               mountPath: {{ .Values.persistence.mountPath }}
+        {{- end }}
+
+        {{- if .Values.otelCollector.enabled }}
+        - name: otel-collector
+          image: "{{ .Values.otelCollector.image }}:{{ .Values.otelCollector.imageTag }}"
+          imagePullPolicy: {{ .Values.otelCollector.imagePullPolicy }}
+          command:
+            - "/otelcol-contrib"
+            - "--config=/etc/otelcol/config.yaml"
+          ports:
+            - containerPort: {{ .Values.otelCollector.ports.otlpGrpc }}
+              protocol: TCP
+              name: otlp-grpc
+            - containerPort: {{ .Values.otelCollector.ports.otlpHttp }}
+              protocol: TCP
+              name: otlp-http
+            - containerPort: {{ .Values.otelCollector.ports.metrics }}
+              protocol: TCP
+              name: metrics
+          {{- if and .Values.clickhouse.existingSecret .Values.clickhouse.existingSecret.name }}
+          env:
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.clickhouse.existingSecret.name }}
+                  key: {{ default "password" .Values.clickhouse.existingSecret.passwordKey }}
+          {{- end }}
+          volumeMounts:
+            - name: otel-collector-config
+              mountPath: /etc/otelcol
+              readOnly: true
+          {{- with .Values.otelCollector.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 13133
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 13133
+            initialDelaySeconds: 5
+            periodSeconds: 10
         {{- end }}
 
         {{- /* Render user-supplied sidecars after built-in sidecars */}}
@@ -413,6 +485,12 @@ spec:
           secret:
             secretName: {{ $fileSecret.name | quote }}
             optional: true
+        {{- end }}
+        {{- /* OpenTelemetry Collector config volume */}}
+        {{- if .Values.otelCollector.enabled }}
+        - name: otel-collector-config
+          configMap:
+            name: {{ include "oxy-app.fullname" . }}-otel-collector
         {{- end }}
 
       # Node Selection and Tolerations

@@ -1,0 +1,117 @@
+{{- if .Values.otelCollector.enabled }}
+{{- /*
+  Resolve ClickHouse settings with fallback to shared config:
+  - otelCollector.clickhouse.* overrides take precedence
+  - Falls back to shared clickhouse.* config
+  - For TCP endpoint: can derive from HTTP URL if tcpEndpoint not set
+*/ -}}
+{{- $chEndpoint := .Values.otelCollector.clickhouse.endpoint -}}
+{{- if not $chEndpoint -}}
+  {{- if .Values.clickhouse.tcpEndpoint -}}
+    {{- $chEndpoint = .Values.clickhouse.tcpEndpoint -}}
+  {{- else if .Values.clickhouse.url -}}
+    {{- /* Derive TCP endpoint from HTTP URL: http://host:8123 -> tcp://host:9000 */ -}}
+    {{- $chEndpoint = .Values.clickhouse.url | replace "http://" "tcp://" | replace "https://" "tcp://" | replace ":8123" ":9000" -}}
+  {{- end -}}
+{{- end -}}
+{{- $chDatabase := default .Values.clickhouse.database .Values.otelCollector.clickhouse.database -}}
+{{- $chUsername := default .Values.clickhouse.username .Values.otelCollector.clickhouse.username -}}
+{{- $chPassword := default .Values.clickhouse.password .Values.otelCollector.clickhouse.password -}}
+{{- /* Check if using existing secret (shared or otel-specific) */ -}}
+{{- $useSecret := false -}}
+{{- if and .Values.clickhouse.existingSecret .Values.clickhouse.existingSecret.name -}}
+  {{- $useSecret = true -}}
+{{- end -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "oxy-app.fullname" . }}-otel-collector
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "oxy-app.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:{{ .Values.otelCollector.ports.otlpGrpc }}
+          http:
+            endpoint: 0.0.0.0:{{ .Values.otelCollector.ports.otlpHttp }}
+
+    processors:
+      batch:
+        timeout: {{ .Values.otelCollector.processors.batch.timeout }}
+        send_batch_size: {{ .Values.otelCollector.processors.batch.sendBatchSize }}
+        send_batch_max_size: {{ .Values.otelCollector.processors.batch.sendBatchMaxSize }}
+      memory_limiter:
+        check_interval: {{ .Values.otelCollector.processors.memoryLimiter.checkInterval }}
+        limit_mib: {{ .Values.otelCollector.processors.memoryLimiter.limitMib }}
+
+    exporters:
+      {{- if .Values.otelCollector.clickhouse.enabled }}
+      clickhouse:
+        endpoint: {{ $chEndpoint }}?dial_timeout=10s
+        database: {{ $chDatabase }}
+        username: {{ $chUsername }}
+        {{- if $useSecret }}
+        password: ${CLICKHOUSE_PASSWORD}
+        {{- else }}
+        password: {{ $chPassword | quote }}
+        {{- end }}
+        async_insert: {{ .Values.otelCollector.clickhouse.asyncInsert }}
+        ttl: {{ .Values.otelCollector.clickhouse.ttl }}
+        compress: {{ .Values.otelCollector.clickhouse.compress }}
+        create_schema: {{ .Values.otelCollector.clickhouse.createSchema }}
+        logs_table_name: {{ .Values.otelCollector.clickhouse.logsTableName }}
+        traces_table_name: {{ .Values.otelCollector.clickhouse.tracesTableName }}
+        metrics_table_name: {{ .Values.otelCollector.clickhouse.metricsTableName }}
+        timeout: {{ .Values.otelCollector.clickhouse.timeout }}
+        retry_on_failure:
+          enabled: {{ .Values.otelCollector.clickhouse.retry.enabled }}
+          initial_interval: {{ .Values.otelCollector.clickhouse.retry.initialInterval }}
+          max_interval: {{ .Values.otelCollector.clickhouse.retry.maxInterval }}
+          max_elapsed_time: {{ .Values.otelCollector.clickhouse.retry.maxElapsedTime }}
+      {{- end }}
+      {{- if .Values.otelCollector.debug.enabled }}
+      debug:
+        verbosity: {{ .Values.otelCollector.debug.verbosity }}
+      {{- end }}
+
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters:
+            {{- if .Values.otelCollector.clickhouse.enabled }}
+            - clickhouse
+            {{- end }}
+            {{- if .Values.otelCollector.debug.enabled }}
+            - debug
+            {{- end }}
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters:
+            {{- if .Values.otelCollector.clickhouse.enabled }}
+            - clickhouse
+            {{- end }}
+            {{- if .Values.otelCollector.debug.enabled }}
+            - debug
+            {{- end }}
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters:
+            {{- if .Values.otelCollector.clickhouse.enabled }}
+            - clickhouse
+            {{- end }}
+            {{- if .Values.otelCollector.debug.enabled }}
+            - debug
+            {{- end }}
+
+      telemetry:
+        logs:
+          level: {{ .Values.otelCollector.telemetry.logs.level }}
+{{- end }}

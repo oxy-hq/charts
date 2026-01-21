@@ -1,0 +1,465 @@
+suite: otel-collector tests
+templates:
+  - otel-configmap.yaml
+  - statefulset.yaml
+
+tests:
+  # =======================
+  # ConfigMap Tests
+  # =======================
+
+  - it: should not render otel ConfigMap when disabled
+    template: otel-configmap.yaml
+    set:
+      otelCollector:
+        enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render otel ConfigMap when enabled
+    template: otel-configmap.yaml
+    set:
+      otelCollector:
+        enabled: true
+      clickhouse:
+        enabled: true
+        url: "http://clickhouse:8123"
+        database: "otel"
+        username: "default"
+        password: "default"
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-oxy-app-otel-collector
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: oxy-app
+
+  - it: should use shared ClickHouse config in ConfigMap
+    template: otel-configmap.yaml
+    set:
+      otelCollector:
+        enabled: true
+      clickhouse:
+        enabled: true
+        url: "http://my-clickhouse:8123"
+        database: "mydb"
+        username: "myuser"
+        password: "mypassword"
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "endpoint: tcp://my-clickhouse:9000"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "database: mydb"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "username: myuser"
+
+  - it: should use tcpEndpoint when provided
+    template: otel-configmap.yaml
+    set:
+      otelCollector:
+        enabled: true
+      clickhouse:
+        enabled: true
+        url: "http://clickhouse:8123"
+        tcpEndpoint: "tcp://clickhouse-tcp:9440"
+        database: "otel"
+        username: "default"
+        password: "default"
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "endpoint: tcp://clickhouse-tcp:9440"
+
+  - it: should allow otel-collector specific overrides
+    template: otel-configmap.yaml
+    set:
+      otelCollector:
+        enabled: true
+        clickhouse:
+          enabled: true
+          endpoint: "tcp://otel-specific-ch:9000"
+          database: "otel_traces"
+          username: "otel_user"
+          password: "otel_password"
+      clickhouse:
+        enabled: true
+        url: "http://shared-ch:8123"
+        database: "shared_db"
+        username: "shared_user"
+        password: "shared_password"
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "endpoint: tcp://otel-specific-ch:9000"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "database: otel_traces"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "username: otel_user"
+
+  - it: should configure custom table names
+    template: otel-configmap.yaml
+    set:
+      otelCollector:
+        enabled: true
+        clickhouse:
+          enabled: true
+          logsTableName: "custom_logs"
+          tracesTableName: "custom_traces"
+          metricsTableName: "custom_metrics"
+      clickhouse:
+        enabled: true
+        url: "http://clickhouse:8123"
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "logs_table_name: custom_logs"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "traces_table_name: custom_traces"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "metrics_table_name: custom_metrics"
+
+  - it: should configure custom ports
+    template: otel-configmap.yaml
+    set:
+      otelCollector:
+        enabled: true
+        ports:
+          otlpGrpc: 14317
+          otlpHttp: 14318
+      clickhouse:
+        enabled: true
+        url: "http://clickhouse:8123"
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "endpoint: 0.0.0.0:14317"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "endpoint: 0.0.0.0:14318"
+
+  - it: should enable debug exporter when configured
+    template: otel-configmap.yaml
+    set:
+      otelCollector:
+        enabled: true
+        debug:
+          enabled: true
+          verbosity: "detailed"
+      clickhouse:
+        enabled: true
+        url: "http://clickhouse:8123"
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "debug:"
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "verbosity: detailed"
+
+  # =======================
+  # StatefulSet Sidecar Tests
+  # =======================
+
+  - it: should not add otel-collector sidecar when disabled
+    template: statefulset.yaml
+    set:
+      otelCollector:
+        enabled: false
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 1
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: oxy-app
+
+  - it: should add otel-collector sidecar when enabled
+    template: statefulset.yaml
+    set:
+      otelCollector:
+        enabled: true
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 2
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: otel-collector
+
+  - it: should configure otel-collector image correctly
+    template: statefulset.yaml
+    set:
+      otelCollector:
+        enabled: true
+        image: "otel/opentelemetry-collector-contrib"
+        imageTag: "0.95.0"
+        imagePullPolicy: Always
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].image
+          value: "otel/opentelemetry-collector-contrib:0.95.0"
+      - equal:
+          path: spec.template.spec.containers[1].imagePullPolicy
+          value: Always
+
+  - it: should expose correct ports on otel-collector
+    template: statefulset.yaml
+    set:
+      otelCollector:
+        enabled: true
+        ports:
+          otlpGrpc: 4317
+          otlpHttp: 4318
+          metrics: 8888
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].ports
+          content:
+            containerPort: 4317
+            protocol: TCP
+            name: otlp-grpc
+      - contains:
+          path: spec.template.spec.containers[1].ports
+          content:
+            containerPort: 4318
+            protocol: TCP
+            name: otlp-http
+      - contains:
+          path: spec.template.spec.containers[1].ports
+          content:
+            containerPort: 8888
+            protocol: TCP
+            name: metrics
+
+  - it: should configure otel-collector resources
+    template: statefulset.yaml
+    set:
+      otelCollector:
+        enabled: true
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].resources.requests.cpu
+          value: 200m
+      - equal:
+          path: spec.template.spec.containers[1].resources.requests.memory
+          value: 256Mi
+      - equal:
+          path: spec.template.spec.containers[1].resources.limits.cpu
+          value: 1000m
+      - equal:
+          path: spec.template.spec.containers[1].resources.limits.memory
+          value: 1Gi
+
+  - it: should mount otel-collector config volume
+    template: statefulset.yaml
+    set:
+      otelCollector:
+        enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          content:
+            name: otel-collector-config
+            mountPath: /etc/otelcol
+            readOnly: true
+
+  - it: should add otel-collector config volume
+    template: statefulset.yaml
+    set:
+      otelCollector:
+        enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: otel-collector-config
+            configMap:
+              name: RELEASE-NAME-oxy-app-otel-collector
+
+  - it: should inject CLICKHOUSE_PASSWORD from shared existing secret
+    template: statefulset.yaml
+    set:
+      otelCollector:
+        enabled: true
+      clickhouse:
+        enabled: true
+        existingSecret:
+          name: my-clickhouse-secret
+          passwordKey: ch-password
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: CLICKHOUSE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: my-clickhouse-secret
+                key: ch-password
+
+  - it: should not inject CLICKHOUSE_PASSWORD when no existing secret
+    template: statefulset.yaml
+    set:
+      otelCollector:
+        enabled: true
+      clickhouse:
+        enabled: true
+        password: "inline-password"
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[1].env
+
+  - it: should configure health probes for otel-collector
+    template: statefulset.yaml
+    set:
+      otelCollector:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].livenessProbe.httpGet.port
+          value: 13133
+      - equal:
+          path: spec.template.spec.containers[1].readinessProbe.httpGet.port
+          value: 13133
+
+  # =======================
+  # Main App ClickHouse Env Vars
+  # =======================
+
+  - it: should not inject ClickHouse env vars when disabled
+    template: statefulset.yaml
+    set:
+      clickhouse:
+        enabled: false
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_CLICKHOUSE_URL
+
+  - it: should inject ClickHouse env vars when enabled
+    template: statefulset.yaml
+    set:
+      clickhouse:
+        enabled: true
+        url: "http://clickhouse:8123"
+        database: "otel"
+        username: "default"
+        password: "mypassword"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_CLICKHOUSE_URL
+            value: "http://clickhouse:8123"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_CLICKHOUSE_DATABASE
+            value: "otel"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_CLICKHOUSE_USER
+            value: "default"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_CLICKHOUSE_PASSWORD
+            value: "mypassword"
+
+  - it: should inject ClickHouse credentials from existing secret
+    template: statefulset.yaml
+    set:
+      clickhouse:
+        enabled: true
+        url: "http://clickhouse:8123"
+        database: "otel"
+        existingSecret:
+          name: clickhouse-credentials
+          usernameKey: ch-user
+          passwordKey: ch-pass
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_CLICKHOUSE_USER
+            valueFrom:
+              secretKeyRef:
+                name: clickhouse-credentials
+                key: ch-user
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_CLICKHOUSE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: clickhouse-credentials
+                key: ch-pass
+
+  # =======================
+  # Integration with Other Sidecars
+  # =======================
+
+  - it: should work with semantic-engine and otel-collector together
+    template: statefulset.yaml
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      semanticEngine:
+        enabled: true
+      otelCollector:
+        enabled: true
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 3
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: oxy-app
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: semantic-engine
+      - equal:
+          path: spec.template.spec.containers[2].name
+          value: otel-collector
+
+  - it: should work with otel-collector and extraSidecars
+    template: statefulset.yaml
+    set:
+      otelCollector:
+        enabled: true
+      extraSidecars:
+        - name: custom-sidecar
+          image: busybox:latest
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 3
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: oxy-app
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: otel-collector
+      - equal:
+          path: spec.template.spec.containers[2].name
+          value: custom-sidecar

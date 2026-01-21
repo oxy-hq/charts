@@ -1,6 +1,6 @@
 # oxy-app
 
-![Version: 0.3.5](https://img.shields.io/badge/Version-0.3.5-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.4.6](https://img.shields.io/badge/AppVersion-0.4.6-informational?style=flat-square)
+![Version: 0.3.5](https://img.shields.io/badge/Version-0.3.5-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.4.9](https://img.shields.io/badge/AppVersion-0.4.9-informational?style=flat-square)
 
 A Helm chart for Oxy application deployment on kubernetes
 
@@ -28,6 +28,15 @@ A Helm chart for Oxy application deployment on kubernetes
 | app.imageTag | string | `""` |  |
 | app.port | int | `3000` |  |
 | app.replicaCount | int | `1` |  |
+| clickhouse.database | string | `"otel"` |  |
+| clickhouse.enabled | bool | `false` |  |
+| clickhouse.existingSecret.name | string | `""` |  |
+| clickhouse.existingSecret.passwordKey | string | `"password"` |  |
+| clickhouse.existingSecret.usernameKey | string | `"username"` |  |
+| clickhouse.password | string | `""` |  |
+| clickhouse.tcpEndpoint | string | `""` |  |
+| clickhouse.url | string | `""` |  |
+| clickhouse.username | string | `"default"` |  |
 | configMap.data | object | `{}` |  |
 | configMap.enabled | bool | `false` |  |
 | database.external.connectionString | string | `""` |  |
@@ -99,6 +108,42 @@ A Helm chart for Oxy application deployment on kubernetes
 | livenessProbe.timeoutSeconds | int | `10` |  |
 | name | string | `"oxy-app"` |  |
 | nodeSelector | string | `nil` |  |
+| otelCollector.clickhouse.asyncInsert | bool | `true` |  |
+| otelCollector.clickhouse.compress | string | `"lz4"` |  |
+| otelCollector.clickhouse.createSchema | bool | `true` |  |
+| otelCollector.clickhouse.database | string | `""` |  |
+| otelCollector.clickhouse.enabled | bool | `true` |  |
+| otelCollector.clickhouse.endpoint | string | `""` |  |
+| otelCollector.clickhouse.logsTableName | string | `"otel_logs"` |  |
+| otelCollector.clickhouse.metricsTableName | string | `"otel_metrics"` |  |
+| otelCollector.clickhouse.password | string | `""` |  |
+| otelCollector.clickhouse.retry.enabled | bool | `true` |  |
+| otelCollector.clickhouse.retry.initialInterval | string | `"5s"` |  |
+| otelCollector.clickhouse.retry.maxElapsedTime | string | `"300s"` |  |
+| otelCollector.clickhouse.retry.maxInterval | string | `"30s"` |  |
+| otelCollector.clickhouse.timeout | string | `"5s"` |  |
+| otelCollector.clickhouse.tracesTableName | string | `"otel_traces"` |  |
+| otelCollector.clickhouse.ttl | string | `"72h"` |  |
+| otelCollector.clickhouse.username | string | `""` |  |
+| otelCollector.debug.enabled | bool | `false` |  |
+| otelCollector.debug.verbosity | string | `"detailed"` |  |
+| otelCollector.enabled | bool | `false` |  |
+| otelCollector.image | string | `"otel/opentelemetry-collector-contrib"` |  |
+| otelCollector.imagePullPolicy | string | `"IfNotPresent"` |  |
+| otelCollector.imageTag | string | `"latest"` |  |
+| otelCollector.ports.metrics | int | `8888` |  |
+| otelCollector.ports.otlpGrpc | int | `4317` |  |
+| otelCollector.ports.otlpHttp | int | `4318` |  |
+| otelCollector.processors.batch.sendBatchMaxSize | int | `1000` |  |
+| otelCollector.processors.batch.sendBatchSize | int | `100` |  |
+| otelCollector.processors.batch.timeout | string | `"10s"` |  |
+| otelCollector.processors.memoryLimiter.checkInterval | string | `"1s"` |  |
+| otelCollector.processors.memoryLimiter.limitMib | int | `512` |  |
+| otelCollector.resources.limits.cpu | string | `"500m"` |  |
+| otelCollector.resources.limits.memory | string | `"512Mi"` |  |
+| otelCollector.resources.requests.cpu | string | `"100m"` |  |
+| otelCollector.resources.requests.memory | string | `"128Mi"` |  |
+| otelCollector.telemetry.logs.level | string | `"info"` |  |
 | pdb.enabled | bool | `false` |  |
 | pdb.maxUnavailable | string | `""` |  |
 | pdb.minAvailable | string | `""` |  |

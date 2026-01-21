@@ -305,6 +305,27 @@ postgres:
     requestedSize: 8Gi
     className: ""
 
+# ClickHouse configuration (shared between oxy-app and otel-collector)
+# This configures the ClickHouse connection used by the main application
+# and optionally by the OpenTelemetry Collector for trace/metrics export
+clickhouse:
+  enabled: false
+  # HTTP endpoint for oxy-app (e.g., http://clickhouse:8123)
+  url: ""
+  # TCP endpoint for otel-collector (e.g., tcp://clickhouse:9000)
+  # If empty, derived from url by replacing http->tcp and port 8123->9000
+  tcpEndpoint: ""
+  database: "otel"
+  username: "default"
+  # Password can be provided inline (dev only) or via existingSecret
+  password: ""
+  # Use existing secret for credentials (recommended for production)
+  # The secret should contain keys for username and password
+  existingSecret:
+    name: ""
+    usernameKey: "username"
+    passwordKey: "password"
+
 # Allow users to supply arbitrary initContainers and sidecar containers.
 # Each entry should be a Kubernetes container spec. Examples below show
 # how to mount a secret and run a simple command. These are merged into
@@ -322,6 +343,79 @@ extraInitContainers: []
 #       - name: workspace
 #         mountPath: /workspace
 extraSidecars: []
+
+# OpenTelemetry Collector sidecar configuration
+# Collects traces/metrics and exports to ClickHouse or other backends
+otelCollector:
+  enabled: false
+  image: otel/opentelemetry-collector-contrib
+  imageTag: "latest"
+  imagePullPolicy: IfNotPresent
+
+  # Resource limits for the collector
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Receiver ports
+  ports:
+    otlpGrpc: 4317
+    otlpHttp: 4318
+    metrics: 8888
+
+  # Processor configuration
+  processors:
+    batch:
+      timeout: 10s
+      sendBatchSize: 100
+      sendBatchMaxSize: 1000
+    memoryLimiter:
+      checkInterval: 1s
+      limitMib: 512
+
+  # ClickHouse exporter configuration
+  # By default, uses the shared clickhouse.* config above
+  # Set overrides here for otel-collector specific settings
+  clickhouse:
+    enabled: true
+    # Override endpoint (if empty, uses shared clickhouse.tcpEndpoint or derived from clickhouse.url)
+    endpoint: ""
+    # Override database (if empty, uses shared clickhouse.database)
+    database: ""
+    # Override credentials (if empty, uses shared clickhouse.username/password)
+    username: ""
+    password: ""
+    # Table configuration
+    logsTableName: "otel_logs"
+    tracesTableName: "otel_traces"
+    metricsTableName: "otel_metrics"
+    # Performance settings
+    asyncInsert: true
+    compress: "lz4"
+    createSchema: true
+    # Data retention (TTL)
+    ttl: "72h"
+    # Timeout and retry settings
+    timeout: "5s"
+    retry:
+      enabled: true
+      initialInterval: "5s"
+      maxInterval: "30s"
+      maxElapsedTime: "300s"
+
+  # Debug exporter (useful for troubleshooting)
+  debug:
+    enabled: false
+    verbosity: "detailed"
+
+  # Service telemetry (collector's own logs)
+  telemetry:
+    logs:
+      level: "info"
 
 # PodDisruptionBudget configuration
 pdb:
