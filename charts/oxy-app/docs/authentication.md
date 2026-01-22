@@ -134,11 +134,6 @@ When using GitHub App authentication (not using an external secret via `secretNa
 - `gitSync.githubApp.applicationId` — GitHub App Application ID (numeric)
 - `gitSync.githubApp.installationId` — Installation ID (numeric)
 
-### Optional fields with sensible defaults
-
-- `gitSync.githubApp.clientId` — alternative to applicationId (use one or the other, not both)
-- `gitSync.githubApp.baseUrl` — GitHub API base URL (defaults to `https://api.github.com`; only needed for GitHub Enterprise Server)
-
 ### Secret key name fields
 
 These control the key names when reading from or creating secrets:
@@ -146,8 +141,6 @@ These control the key names when reading from or creating secrets:
 - `gitSync.githubApp.privateKeyKey` — key name inside the Secret for the private key (default: `github_app_private_key`)
 - `gitSync.githubApp.applicationIdKey` — key name in secret for app id (default: `github_app_application_id`)
 - `gitSync.githubApp.installationIdKey` — key name in secret for installation id (default: `github_app_installation_id`)
-- `gitSync.githubApp.clientIdKey` — key name in secret for client id (default: `github_app_client_id`)
-- `gitSync.githubApp.baseUrlKey` — key name in secret for base URL (default: `github_app_base_url`)
 
 ### External secret
 
@@ -166,8 +159,6 @@ gitSync:
       -----END PRIVATE KEY-----
     applicationId: "123"  # Required
     installationId: "456"  # Required
-    # Optional: only set for GitHub Enterprise Server
-    # baseUrl: "https://github.example.com/api/v3"
 ```
 
 Secret-backed (recommended for production):
@@ -197,11 +188,11 @@ gitSync:
 
 How it works in the chart:
 
-- When all three required inline fields (`privateKey`, `applicationId`, and `installationId`) are provided and `secretName` is empty, the chart creates a Secret named `<release-name>-github-app` containing the required keys. The template mounts only the private key file into `/etc/github-app/<privateKeyKey>` so git-sync can use the `--github-app-private-key-file` flag. Optional fields (`clientId` and non-default `baseUrl`) are only included in the secret if explicitly set.
+- When all three required inline fields (`privateKey`, `applicationId`, and `installationId`) are provided and `secretName` is empty, the chart creates a Secret named `<release-name>-github-app` containing the required keys. The template mounts only the private key file into `/etc/github-app/<privateKeyKey>` so git-sync can use the `--github-app-private-key-file` flag.
 
-- If `gitSync.githubApp.secretName` is provided, the chart mounts the provided Secret at `/etc/github-app` (full mount, no items filter), and reads all IDs via env `valueFrom.secretKeyRef` for `GITSYNC_GITHUB_APP_APPLICATION_ID`, `GITSYNC_GITHUB_APP_INSTALLATION_ID`, and optionally `GITSYNC_GITHUB_APP_CLIENT_ID` and `GITSYNC_GITHUB_BASE_URL`.
+- If `gitSync.githubApp.secretName` is provided, the chart mounts the provided Secret at `/etc/github-app` (full mount, no items filter), and reads all IDs via env `valueFrom.secretKeyRef` for `GITSYNC_GITHUB_APP_APPLICATION_ID` and `GITSYNC_GITHUB_APP_INSTALLATION_ID`.
 
-- Git-sync flags used: `--github-app-private-key-file=/etc/github-app/<privateKeyKey>`. Environment variables are set for the IDs and optional base URL.
+- Git-sync flags used: `--github-app-private-key-file=/etc/github-app/<privateKeyKey>`. Environment variables are set for the application and installation IDs.
 
 Notes on numeric values:
 
@@ -294,8 +285,6 @@ If using `gitSync.githubApp.secretName`, ensure the secret contains the required
 - `github_app_private_key` (required)
 - `github_app_application_id` (required)
 - `github_app_installation_id` (required)
-- `github_app_client_id` (optional, alternative to application_id)
-- `github_app_base_url` (optional, only needed for GitHub Enterprise)
 
 ## Migration notes
 

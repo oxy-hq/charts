@@ -123,7 +123,7 @@ spec:
             {{- /* HTTP authentication */}}
             - --username={{ .Values.httpAuth.username }}
             - --password-file=/etc/git-auth/password
-            {{- else if or .Values.gitSync.githubApp.secretName (and .Values.gitSync.githubApp.privateKey (or .Values.gitSync.githubApp.applicationId .Values.gitSync.githubApp.clientId) .Values.gitSync.githubApp.installationId) }}
+            {{- else if or .Values.gitSync.githubApp.secretName (and .Values.gitSync.githubApp.privateKey .Values.gitSync.githubApp.applicationId .Values.gitSync.githubApp.installationId) }}
             {{- /* GitHub App authentication: use private key file arg + env vars for IDs and base URL */}}
             - --github-app-private-key-file=/etc/github-app/{{ .Values.gitSync.githubApp.privateKeyKey }}
             {{- else if .Values.sshKey.privateKey }}
@@ -150,16 +150,6 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.gitSync.githubApp.secretName }}
                   key: {{ .Values.gitSync.githubApp.installationIdKey }}
-            - name: GITSYNC_GITHUB_APP_CLIENT_ID
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.gitSync.githubApp.secretName }}
-                  key: {{ .Values.gitSync.githubApp.clientIdKey }}
-            - name: GITSYNC_GITHUB_BASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.gitSync.githubApp.secretName }}
-                  key: {{ .Values.gitSync.githubApp.baseUrlKey }}
             {{- else }}
             {{- if .Values.gitSync.githubApp.applicationId }}
             - name: GITSYNC_GITHUB_APP_APPLICATION_ID
@@ -168,14 +158,6 @@ spec:
             {{- if .Values.gitSync.githubApp.installationId }}
             - name: GITSYNC_GITHUB_APP_INSTALLATION_ID
               value: {{ .Values.gitSync.githubApp.installationId | quote }}
-            {{- end }}
-            {{- if .Values.gitSync.githubApp.clientId }}
-            - name: GITSYNC_GITHUB_APP_CLIENT_ID
-              value: {{ .Values.gitSync.githubApp.clientId | quote }}
-            {{- end }}
-            {{- if and .Values.gitSync.githubApp.baseUrl (ne .Values.gitSync.githubApp.baseUrl "https://api.github.com") }}
-            - name: GITSYNC_GITHUB_BASE_URL
-              value: {{ .Values.gitSync.githubApp.baseUrl | quote }}
             {{- end }}
             {{- end }}
           volumeMounts:
@@ -186,7 +168,7 @@ spec:
             - name: git-http-auth
               mountPath: /etc/git-auth
               readOnly: true
-            {{- else if or .Values.gitSync.githubApp.secretName (and .Values.gitSync.githubApp.privateKey (or .Values.gitSync.githubApp.applicationId .Values.gitSync.githubApp.clientId) .Values.gitSync.githubApp.installationId) }}
+            {{- else if or .Values.gitSync.githubApp.secretName (and .Values.gitSync.githubApp.privateKey .Values.gitSync.githubApp.applicationId .Values.gitSync.githubApp.installationId) }}
             {{- /* Mount GitHub App secret (either user-provided or chart-created) */}}
             - name: github-app-secret
               mountPath: /etc/github-app
@@ -457,7 +439,7 @@ spec:
             items:
               - key: {{ .Values.httpAuth.passwordKey }}
                 path: password
-        {{- else if or .Values.gitSync.githubApp.secretName (and .Values.gitSync.githubApp.privateKey (or .Values.gitSync.githubApp.applicationId .Values.gitSync.githubApp.clientId) .Values.gitSync.githubApp.installationId) }}
+        {{- else if or .Values.gitSync.githubApp.secretName (and .Values.gitSync.githubApp.privateKey .Values.gitSync.githubApp.applicationId .Values.gitSync.githubApp.installationId) }}
         {{- /* GitHub App secret: if user provided a secretName, mount entire secret; otherwise chart-created secret mounts only the private key file */}}
         {{- if .Values.gitSync.githubApp.secretName }}
         - name: github-app-secret

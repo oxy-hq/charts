@@ -1,6 +1,6 @@
 # oxy-app
 
-![Version: 0.3.5](https://img.shields.io/badge/Version-0.3.5-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.4.9](https://img.shields.io/badge/AppVersion-0.4.9-informational?style=flat-square)
+![Version: 0.3.10](https://img.shields.io/badge/Version-0.3.10-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.4.9](https://img.shields.io/badge/AppVersion-0.4.9-informational?style=flat-square)
 
 A Helm chart for Oxy application deployment on kubernetes
 
@@ -71,10 +71,6 @@ A Helm chart for Oxy application deployment on kubernetes
 | gitSync.enabled | bool | `false` |  |
 | gitSync.githubApp.applicationId | string | `""` |  |
 | gitSync.githubApp.applicationIdKey | string | `"github_app_application_id"` |  |
-| gitSync.githubApp.baseUrl | string | `"https://api.github.com"` |  |
-| gitSync.githubApp.baseUrlKey | string | `"github_app_base_url"` |  |
-| gitSync.githubApp.clientId | string | `""` |  |
-| gitSync.githubApp.clientIdKey | string | `"github_app_client_id"` |  |
 | gitSync.githubApp.installationId | string | `""` |  |
 | gitSync.githubApp.installationIdKey | string | `"github_app_installation_id"` |  |
 | gitSync.githubApp.privateKey | string | `""` |  |
