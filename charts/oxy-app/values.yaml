@@ -202,25 +202,32 @@ gitSync:
   imagePullPolicy: IfNotPresent
 
   # GitHub App authentication (optional)
-  # All parameters are passed as environment variables to git-sync:
-  #   - GITSYNC_GITHUB_APP_APPLICATION_ID (or use clientId)
-  #   - GITSYNC_GITHUB_APP_INSTALLATION_ID (required)
-  #   - GITSYNC_GITHUB_APP_CLIENT_ID (alternative to applicationId)
-  #   - GITSYNC_GITHUB_BASE_URL (optional, defaults to https://api.github.com)
+  # REQUIRED fields when using GitHub App authentication:
+  #   - privateKey: GitHub App PEM private key
+  #   - applicationId: GitHub App Application ID (or use clientId as alternative)
+  #   - installationId: GitHub App Installation ID
+  #
+  # OPTIONAL fields with sensible defaults:
+  #   - clientId: Alternative to applicationId (use one or the other, not both)
+  #   - baseUrl: Defaults to "https://api.github.com" (only needed for GitHub Enterprise)
+  #
   # The private key file is passed via --github-app-private-key-file argument.
-  # Note: You must provide either applicationId OR clientId (not both).
+  # Environment variables set: GITSYNC_GITHUB_APP_APPLICATION_ID, GITSYNC_GITHUB_APP_INSTALLATION_ID
   githubApp:
-    secretName: ""  # Optional: existing secret name containing GitHub App data
-    privateKey: ""  # PEM private key contents for GitHub App (DO NOT commit)
+    secretName: ""  # Optional: existing secret name containing GitHub App data (if set, inline values are ignored)
+    # Required fields (when not using secretName):
+    privateKey: ""  # REQUIRED: PEM private key contents for GitHub App (DO NOT commit in production)
+    applicationId: ""  # REQUIRED: GitHub App Application ID (or use clientId)
+    installationId: ""  # REQUIRED: Installation ID for GitHub App auth
+    # Secret key names (used when creating secrets or reading from existing secrets):
     privateKeyKey: "github_app_private_key"  # key name in secret for private key
-    applicationId: ""  # GitHub App Application ID (inline) - use either this OR clientId
     applicationIdKey: "github_app_application_id"  # key name in secret for app id
-    clientId: ""  # GitHub App Client ID (inline) - use either this OR applicationId
-    clientIdKey: "github_app_client_id"
-    installationId: ""  # Installation ID (inline, required for GitHub App auth)
     installationIdKey: "github_app_installation_id"  # key name in secret for installation id
-    baseUrl: "https://api.github.com"  # GitHub API base URL (for GitHub Enterprise Server)
-    baseUrlKey: "github_app_base_url"
+    # Optional fields:
+    clientId: ""  # OPTIONAL: GitHub App Client ID (alternative to applicationId, not both)
+    clientIdKey: "github_app_client_id"  # key name in secret for client id
+    baseUrl: "https://api.github.com"  # OPTIONAL: GitHub API base URL (only set for GitHub Enterprise Server)
+    baseUrlKey: "github_app_base_url"  # key name in secret for base URL
 
 # HTTP authentication for git-sync (for HTTPS git repositories)
 # Use this when cloning from HTTPS URLs that require username/password authentication
