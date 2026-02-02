@@ -249,6 +249,17 @@ database:
     # Note: Connection details are inferred from the postgres.* configuration below
     # No need to duplicate userDatabase configuration here
 
+  # Enable or disable the clickhouse subchart
+  clickhouse:
+    enabled: false
+    # Host for the ClickHouse service created by the subchart
+    # Leave empty to auto-generate as: {release-name}-clickhouse.{namespace}.svc.cluster.local
+    host: ""
+    # HTTP port (used by oxy-app for queries)
+    httpPort: 8123
+    # TCP/Native port (used by otel-collector)
+    tcpPort: 9000
+
   # External DB settings (optional)
   external:
     enabled: false
@@ -302,6 +313,51 @@ postgres:
   storage:
     requestedSize: 8Gi
     className: ""
+
+# Configuration for the clickhouse subchart (Bitnami)
+# When database.clickhouse.enabled is true, these values configure the subchart
+# See: https://artifacthub.io/packages/helm/bitnami/clickhouse
+clickhouseSubchart:
+  # Override the full name of the clickhouse subchart resources
+  # This determines the service name that will be created
+  # Leave empty to use default: {release-name}-clickhouse
+  fullnameOverride: ""
+  # Image configuration - use legacy Bitnami images (non-paid)
+  image:
+    repository: bitnamilegacy/clickhouse
+  # Authentication configuration
+  auth:
+    username: "default"
+    password: "clickhouse"
+    # Use existing secret for credentials (recommended for production)
+    existingSecret: ""
+    existingSecretPasswordKey: "password"
+  # ClickHouse Keeper (required for single-node setup, alternative to ZooKeeper)
+  keeper:
+    enabled: true
+    image:
+      repository: bitnamilegacy/clickhouse-keeper
+  # ZooKeeper (alternative to Keeper, disabled by default)
+  zookeeper:
+    enabled: false
+    image:
+      repository: bitnamilegacy/zookeeper
+  # Shard and replica configuration
+  shards: 1
+  replicaCount: 1
+  # Resource configuration
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+  # Persistence configuration
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: ""
 
 # ClickHouse configuration (shared between oxy-app and otel-collector)
 # This configures the ClickHouse connection used by the main application

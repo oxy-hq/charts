@@ -52,7 +52,7 @@ spec:
       securityContext:
         fsGroup: {{ .Values.securityContext.fsGroup }}
 
-      {{- if or .Values.gitSync.enabled .Values.database.postgres.enabled .Values.extraInitContainers }}
+      {{- if or .Values.gitSync.enabled .Values.database.postgres.enabled .Values.database.clickhouse.enabled .Values.extraInitContainers }}
       initContainers:
         {{- if .Values.database.postgres.enabled }}
         # Wait for PostgreSQL to be ready
@@ -102,6 +102,56 @@ spec:
               done
               
               echo "ERROR: PostgreSQL did not become ready within the timeout period"
+              exit 1
+        {{- end }}
+        {{- if .Values.database.clickhouse.enabled }}
+        # Wait for ClickHouse to be ready
+        - name: wait-for-clickhouse
+          image: curlimages/curl:8.5.0
+          command: ['sh', '-c']
+          args:
+            - |
+              echo "Waiting for ClickHouse to be ready..."
+              {{- if .Values.clickhouseSubchart.fullnameOverride }}
+              CH_HOST="{{ .Values.clickhouseSubchart.fullnameOverride }}.{{ .Release.Namespace }}.svc.cluster.local"
+              {{- else if .Values.database.clickhouse.host }}
+              CH_HOST="{{ .Values.database.clickhouse.host }}"
+              {{- else }}
+              CH_HOST="{{ .Release.Name }}-clickhouse.{{ .Release.Namespace }}.svc.cluster.local"
+              {{- end }}
+              CH_PORT="{{ .Values.database.clickhouse.httpPort }}"
+              MAX_RETRIES=60
+              RETRY_COUNT=0
+
+              echo "Target: $CH_HOST:$CH_PORT"
+
+              # First, check DNS resolution
+              echo "Checking DNS resolution..."
+              while [ $RETRY_COUNT -lt 10 ]; do
+                if nslookup "$CH_HOST" >/dev/null 2>&1; then
+                  echo "DNS resolution successful for $CH_HOST"
+                  break
+                fi
+                echo "DNS lookup failed, retrying in 2 seconds... ($RETRY_COUNT/10)"
+                RETRY_COUNT=$((RETRY_COUNT + 1))
+                sleep 2
+              done
+
+              # Reset counter for ClickHouse health check
+              RETRY_COUNT=0
+
+              # Now check ClickHouse readiness via HTTP ping endpoint
+              while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+                if curl -sf "http://$CH_HOST:$CH_PORT/ping" >/dev/null 2>&1; then
+                  echo "ClickHouse is ready and accepting connections!"
+                  exit 0
+                fi
+                echo "ClickHouse is not ready yet. Waiting 5 seconds... ($RETRY_COUNT/$MAX_RETRIES)"
+                RETRY_COUNT=$((RETRY_COUNT + 1))
+                sleep 5
+              done
+
+              echo "ERROR: ClickHouse did not become ready within the timeout period"
               exit 1
         {{- end }}
         {{- if .Values.gitSync.enabled }}
@@ -276,8 +326,38 @@ spec:
               value: "http://localhost:4000"
             {{- end }}
 
-            # ClickHouse Configuration (when clickhouse.enabled is true)
-            {{- if .Values.clickhouse.enabled }}
+            # ClickHouse Configuration
+            # Preference order:
+            # 1) Embedded subchart (database.clickhouse.enabled = true)
+            # 2) External ClickHouse (clickhouse.enabled = true, database.clickhouse.enabled = false)
+            {{- if .Values.database.clickhouse.enabled }}
+            {{- $chHost := "" }}
+            {{- if .Values.clickhouseSubchart.fullnameOverride }}
+              {{- $chHost = printf "%s.%s.svc.cluster.local" .Values.clickhouseSubchart.fullnameOverride .Release.Namespace }}
+            {{- else if .Values.database.clickhouse.host }}
+              {{- $chHost = .Values.database.clickhouse.host }}
+            {{- else }}
+              {{- $chHost = printf "%s-clickhouse.%s.svc.cluster.local" .Release.Name .Release.Namespace }}
+            {{- end }}
+            - name: OXY_CLICKHOUSE_URL
+              value: {{ printf "http://%s:%v" $chHost (.Values.database.clickhouse.httpPort | default 8123) | quote }}
+            - name: OXY_CLICKHOUSE_DATABASE
+              value: {{ .Values.clickhouse.database | default "default" | quote }}
+            {{- if .Values.clickhouseSubchart.auth.existingSecret }}
+            - name: OXY_CLICKHOUSE_USER
+              value: {{ .Values.clickhouseSubchart.auth.username | default "default" | quote }}
+            - name: OXY_CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.clickhouseSubchart.auth.existingSecret }}
+                  key: {{ .Values.clickhouseSubchart.auth.existingSecretPasswordKey | default "password" }}
+            {{- else }}
+            - name: OXY_CLICKHOUSE_USER
+              value: {{ .Values.clickhouseSubchart.auth.username | default "default" | quote }}
+            - name: OXY_CLICKHOUSE_PASSWORD
+              value: {{ .Values.clickhouseSubchart.auth.password | default "" | quote }}
+            {{- end }}
+            {{- else if .Values.clickhouse.enabled }}
             - name: OXY_CLICKHOUSE_URL
               value: {{ .Values.clickhouse.url | quote }}
             - name: OXY_CLICKHOUSE_DATABASE
@@ -378,13 +458,18 @@ spec:
             - containerPort: {{ .Values.otelCollector.ports.metrics }}
               protocol: TCP
               name: metrics
-          {{- if and .Values.clickhouse.existingSecret .Values.clickhouse.existingSecret.name }}
+          {{- if or (and .Values.database.clickhouse.enabled .Values.clickhouseSubchart.auth.existingSecret) (and .Values.clickhouse.existingSecret .Values.clickhouse.existingSecret.name) }}
           env:
             - name: CLICKHOUSE_PASSWORD
               valueFrom:
                 secretKeyRef:
+                  {{- if and .Values.database.clickhouse.enabled .Values.clickhouseSubchart.auth.existingSecret }}
+                  name: {{ .Values.clickhouseSubchart.auth.existingSecret }}
+                  key: {{ .Values.clickhouseSubchart.auth.existingSecretPasswordKey | default "password" }}
+                  {{- else }}
                   name: {{ .Values.clickhouse.existingSecret.name }}
                   key: {{ default "password" .Values.clickhouse.existingSecret.passwordKey }}
+                  {{- end }}
           {{- end }}
           volumeMounts:
             - name: otel-collector-config

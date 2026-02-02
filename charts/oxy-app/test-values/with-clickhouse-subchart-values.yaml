@@ -1,0 +1,63 @@
+# Integration test with ClickHouse subchart enabled
+nameOverride: "oxy-test-clickhouse"
+fullnameOverride: "oxy-test-clickhouse"
+
+app:
+  image: "ghcr.io/oxy-hq/oxy"
+  imageTag: "0.4.9"
+  imagePullPolicy: "IfNotPresent"
+  replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3000
+
+# Enable ClickHouse subchart
+database:
+  clickhouse:
+    enabled: true
+    httpPort: 8123
+    tcpPort: 9000
+
+# ClickHouse connection config (auto-derived from subchart when enabled)
+clickhouse:
+  enabled: true
+  database: "default"
+
+# Configure clickhouse subchart (Bitnami)
+clickhouseSubchart:
+  fullnameOverride: "test-clickhouse-db"
+  image:
+    repository: bitnamilegacy/clickhouse
+  auth:
+    username: "default"
+    password: "testpassword"
+  keeper:
+    enabled: true
+    image:
+      repository: bitnamilegacy/clickhouse-keeper
+  zookeeper:
+    enabled: false
+    image:
+      repository: bitnamilegacy/zookeeper
+  shards: 1
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  persistence:
+    enabled: true
+    size: 5Gi
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi

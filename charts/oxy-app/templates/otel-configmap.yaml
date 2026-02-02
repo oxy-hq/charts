@@ -3,24 +3,54 @@
   Resolve ClickHouse settings with fallback to shared config:
   - otelCollector.clickhouse.* overrides take precedence
   - Falls back to shared clickhouse.* config
+  - For embedded subchart (database.clickhouse.enabled), auto-derive endpoints
   - For TCP endpoint: can derive from HTTP URL if tcpEndpoint not set
 */ -}}
 {{- $chEndpoint := .Values.otelCollector.clickhouse.endpoint -}}
+{{- $chDatabase := "" -}}
+{{- $chUsername := "" -}}
+{{- $chPassword := "" -}}
+{{- $useSecret := false -}}
+
 {{- if not $chEndpoint -}}
-  {{- if .Values.clickhouse.tcpEndpoint -}}
+  {{- if .Values.database.clickhouse.enabled -}}
+    {{- /* Using embedded ClickHouse subchart - derive TCP endpoint */ -}}
+    {{- $chHost := "" -}}
+    {{- if .Values.clickhouseSubchart.fullnameOverride -}}
+      {{- $chHost = printf "%s.%s.svc.cluster.local" .Values.clickhouseSubchart.fullnameOverride $.Release.Namespace -}}
+    {{- else if .Values.database.clickhouse.host -}}
+      {{- $chHost = .Values.database.clickhouse.host -}}
+    {{- else -}}
+      {{- $chHost = printf "%s-clickhouse.%s.svc.cluster.local" $.Release.Name $.Release.Namespace -}}
+    {{- end -}}
+    {{- $chTcpPort := .Values.database.clickhouse.tcpPort | default 9000 -}}
+    {{- $chEndpoint = printf "tcp://%s:%v" $chHost $chTcpPort -}}
+  {{- else if .Values.clickhouse.tcpEndpoint -}}
     {{- $chEndpoint = .Values.clickhouse.tcpEndpoint -}}
   {{- else if .Values.clickhouse.url -}}
     {{- /* Derive TCP endpoint from HTTP URL: http://host:8123 -> tcp://host:9000 */ -}}
     {{- $chEndpoint = .Values.clickhouse.url | replace "http://" "tcp://" | replace "https://" "tcp://" | replace ":8123" ":9000" -}}
   {{- end -}}
 {{- end -}}
-{{- $chDatabase := default .Values.clickhouse.database .Values.otelCollector.clickhouse.database -}}
-{{- $chUsername := default .Values.clickhouse.username .Values.otelCollector.clickhouse.username -}}
-{{- $chPassword := default .Values.clickhouse.password .Values.otelCollector.clickhouse.password -}}
-{{- /* Check if using existing secret (shared or otel-specific) */ -}}
-{{- $useSecret := false -}}
-{{- if and .Values.clickhouse.existingSecret .Values.clickhouse.existingSecret.name -}}
-  {{- $useSecret = true -}}
+
+{{- /* Resolve credentials based on subchart or external config */ -}}
+{{- if .Values.database.clickhouse.enabled -}}
+  {{- /* Using embedded subchart */ -}}
+  {{- $chDatabase = default "default" (default .Values.clickhouse.database .Values.otelCollector.clickhouse.database) -}}
+  {{- $chUsername = default "default" (default .Values.clickhouseSubchart.auth.username .Values.otelCollector.clickhouse.username) -}}
+  {{- if .Values.clickhouseSubchart.auth.existingSecret -}}
+    {{- $useSecret = true -}}
+  {{- else -}}
+    {{- $chPassword = default "" (default .Values.clickhouseSubchart.auth.password .Values.otelCollector.clickhouse.password) -}}
+  {{- end -}}
+{{- else -}}
+  {{- /* Using external ClickHouse */ -}}
+  {{- $chDatabase = default .Values.clickhouse.database .Values.otelCollector.clickhouse.database -}}
+  {{- $chUsername = default .Values.clickhouse.username .Values.otelCollector.clickhouse.username -}}
+  {{- $chPassword = default .Values.clickhouse.password .Values.otelCollector.clickhouse.password -}}
+  {{- if and .Values.clickhouse.existingSecret .Values.clickhouse.existingSecret.name -}}
+    {{- $useSecret = true -}}
+  {{- end -}}
 {{- end -}}
 apiVersion: v1
 kind: ConfigMap

@@ -2,7 +2,7 @@ apiVersion: v2
 name: oxy-app
 description: A Helm chart for Oxy application deployment on kubernetes
 type: application
-version: 0.3.10
+version: 0.3.11
 appVersion: "0.4.9"
 keywords:
   - oxy
@@ -17,3 +17,8 @@ dependencies:
     version: "1.6.1"
     repository: "https://groundhog2k.github.io/helm-charts/"
     condition: database.postgres.enabled
+  - name: clickhouse
+    version: "9.4.4"
+    repository: "oci://registry-1.docker.io/bitnamicharts"
+    condition: database.clickhouse.enabled
+    alias: clickhouseSubchart
