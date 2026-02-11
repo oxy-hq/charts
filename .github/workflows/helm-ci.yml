@@ -72,7 +72,16 @@ jobs:
         if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
         run: |
           export CI=true
-          helm unittest charts/oxy-app -f "tests/**/*_test.yaml"
+          # Run unit tests for all charts that have tests
+          for chart_dir in charts/*/; do
+            chart_name=$(basename "$chart_dir")
+            if [ -d "${chart_dir}tests" ] && ls "${chart_dir}tests/"*_test.yaml 1> /dev/null 2>&1; then
+              echo "Running unit tests for ${chart_name}..."
+              helm unittest "$chart_dir" -f "tests/**/*_test.yaml"
+            else
+              echo "No unit tests found for ${chart_name}, skipping..."
+            fi
+          done
 
       - name: Create kind cluster
         if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
@@ -90,10 +99,12 @@ jobs:
             --selector=app.kubernetes.io/component=controller \
             --timeout=90s
 
-      - name: Run integration tests
+      - name: Run integration tests for oxy-app
         if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
         run: |
           export CI=true
+          # Currently only oxy-app has integration tests
+          # Other charts (oxy, oxy-start) can add their own test-values and extend this step
           ./scripts/test.sh --cleanup
 
   publish:
@@ -141,7 +152,10 @@ jobs:
 
       - name: Add dependency chart repos
         run: |
+          # Add all required chart repositories for dependencies
+          # groundhog2k: Used by oxy-app for PostgreSQL/ClickHouse subcharts
           helm repo add groundhog2k https://groundhog2k.github.io/helm-charts/
+          # Add additional repos here as needed for other charts
 
       - name: Run chart-releaser
         uses: helm/chart-releaser-action@v1.7.0
