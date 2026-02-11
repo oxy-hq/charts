@@ -2,6 +2,8 @@ chart-dirs:
   - charts
 exclude:
   - charts/**/tests/**
+# Chart repositories for dependencies
+# groundhog2k: Used by oxy-app for postgres and clickhouse subcharts
 chart-repos:
   - groundhog2k=https://groundhog2k.github.io/helm-charts/
 remote: origin
