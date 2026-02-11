@@ -1,0 +1,397 @@
+{{/*
+Define git sync paths (same logic as oxy-app)
+*/}}
+{{- $gitRootDir := default "git" .Values.gitSync.root -}}
+{{- $gitLinkDir := default "current" .Values.gitSync.link -}}
+{{- $gitRoot := printf "%s/%s" .Values.persistence.mountPath $gitRootDir -}}
+{{- $gitLink := printf "%s/%s" .Values.persistence.mountPath $gitLinkDir -}}
+{{- $workingDir := $gitLink -}}
+{{- if and .Values.gitSync.workingDir (ne .Values.gitSync.workingDir "") -}}
+  {{- $workingDir = printf "%s/%s" $gitLink .Values.gitSync.workingDir -}}
+{{- end -}}
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "oxy-start.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "oxy-start.labels" . | nindent 4 }}
+    version: v1
+spec:
+  serviceName: {{ include "oxy-start.fullname" . }}-headless
+  replicas: {{ .Values.app.replicaCount }}
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      partition: 0
+  selector:
+    matchLabels:
+      {{- include "oxy-start.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "oxy-start.selectorLabels" . | nindent 8 }}
+        version: v1
+    spec:
+      {{- $sa := include "oxy-start.serviceAccountName" . }}
+      {{- if ne $sa "" }}
+      serviceAccountName: {{ $sa | quote }}
+      {{- end }}
+      securityContext:
+        fsGroup: {{ .Values.securityContext.fsGroup }}
+
+      {{- if or .Values.dind.enabled .Values.gitSync.enabled .Values.extraInitContainers }}
+      initContainers:
+        {{- if .Values.dind.enabled }}
+        # Copy the docker CLI binary into a shared volume so the oxy container
+        # can talk to the DinD daemon without needing docker in its own image.
+        - name: docker-cli-install
+          image: "{{ .Values.dind.image }}:{{ .Values.dind.imageTag }}"
+          imagePullPolicy: {{ .Values.dind.imagePullPolicy }}
+          command: ['cp', '/usr/local/bin/docker', '/docker-bin/docker']
+          volumeMounts:
+            - name: docker-bin
+              mountPath: /docker-bin
+        {{- end }}
+
+        {{- if .Values.gitSync.enabled }}
+        # Git Clone Init Container
+        - name: git-clone
+          image: k8s.gcr.io/git-sync/git-sync:v4.4.3
+          imagePullPolicy: {{ .Values.gitSync.imagePullPolicy }}
+          args:
+            - --repo={{ .Values.gitSync.repository }}
+            - --branch={{ .Values.gitSync.branch }}
+            - --root={{ $gitRoot }}
+            - --link={{ $gitLink }}
+            - --one-time=true
+            - --depth=1
+            {{- if .Values.httpAuth.username }}
+            - --username={{ .Values.httpAuth.username }}
+            - --password-file=/etc/git-auth/password
+            {{- else if or .Values.gitSync.githubApp.secretName (and .Values.gitSync.githubApp.privateKey .Values.gitSync.githubApp.applicationId .Values.gitSync.githubApp.installationId) }}
+            - --github-app-private-key-file=/etc/github-app/{{ .Values.gitSync.githubApp.privateKeyKey }}
+            {{- else if .Values.sshKey.privateKey }}
+            - --ssh-key-file=/etc/git-secret/ssh
+            {{- if .Values.sshKey.knownHosts }}
+            - --ssh-known-hosts-file=/etc/git-secret/known_hosts
+            {{- end }}
+            {{- end }}
+            - --max-failures=5
+            - --verbose=1
+            - --one-time
+            - --git-gc=off
+          env:
+            {{- if .Values.gitSync.githubApp.secretName }}
+            - name: GITSYNC_GITHUB_APP_APPLICATION_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.gitSync.githubApp.secretName }}
+                  key: {{ .Values.gitSync.githubApp.applicationIdKey }}
+            - name: GITSYNC_GITHUB_APP_INSTALLATION_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.gitSync.githubApp.secretName }}
+                  key: {{ .Values.gitSync.githubApp.installationIdKey }}
+            {{- else }}
+            {{- if .Values.gitSync.githubApp.applicationId }}
+            - name: GITSYNC_GITHUB_APP_APPLICATION_ID
+              value: {{ .Values.gitSync.githubApp.applicationId | quote }}
+            {{- end }}
+            {{- if .Values.gitSync.githubApp.installationId }}
+            - name: GITSYNC_GITHUB_APP_INSTALLATION_ID
+              value: {{ .Values.gitSync.githubApp.installationId | quote }}
+            {{- end }}
+            {{- end }}
+          volumeMounts:
+            - name: workspace
+              mountPath: {{ .Values.persistence.mountPath }}
+            {{- if .Values.httpAuth.username }}
+            - name: git-http-auth
+              mountPath: /etc/git-auth
+              readOnly: true
+            {{- else if or .Values.gitSync.githubApp.secretName (and .Values.gitSync.githubApp.privateKey .Values.gitSync.githubApp.applicationId .Values.gitSync.githubApp.installationId) }}
+            - name: github-app-secret
+              mountPath: /etc/github-app
+              readOnly: true
+            {{- else if .Values.sshKey.privateKey }}
+            - name: git-ssh
+              mountPath: /etc/git-secret
+              readOnly: true
+            {{- end }}
+        {{- end }}
+
+        {{- with .Values.extraInitContainers }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+
+      containers:
+        # ─── Main Oxy Container ───
+        - name: {{ include "oxy-start.name" . }}
+          image: "{{ .Values.app.image }}:{{ default .Chart.AppVersion .Values.app.imageTag }}"
+          imagePullPolicy: {{ .Values.app.imagePullPolicy }}
+          {{- if and .Values.app.command (gt (len .Values.app.command) 0) }}
+          command:
+            {{- range .Values.app.command }}
+            - {{ . | quote }}
+            {{- end }}
+          {{- else }}
+          command:
+            - sh
+            - -c
+            - |
+              {{- if .Values.dind.enabled }}
+              # Wait for the DinD daemon to be ready
+              echo "Waiting for Docker daemon..."
+              until docker info >/dev/null 2>&1; do
+                sleep 1
+              done
+              echo "Docker daemon is ready."
+
+              # Start all services via oxy start
+              oxy start{{ if .Values.oxyStart.enterprise }} --enterprise{{ end }}{{ if .Values.oxyStart.clean }} --clean{{ end }}
+
+              {{- end }}
+              # Run the main server
+              exec oxy serve{{- if not .Values.gitSync.enabled }} --cloud{{- end }}
+          {{- end }}
+          {{- if .Values.gitSync.enabled }}
+          workingDir: {{ $workingDir }}
+          {{- end }}
+          ports:
+            - containerPort: {{ .Values.app.port }}
+              protocol: TCP
+              name: traffic-port
+
+          env:
+            # Docker host pointing to the DinD sidecar
+            {{- if .Values.dind.enabled }}
+            - name: DOCKER_HOST
+              value: "tcp://localhost:2375"
+            # Prepend the shared docker-cli binary to PATH
+            - name: PATH
+              value: "/docker-bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            {{- end }}
+
+            # State Directory
+            {{- if and .Values.env.OXY_STATE_DIR (ne .Values.env.OXY_STATE_DIR "") }}
+            - name: OXY_STATE_DIR
+              value: {{ .Values.env.OXY_STATE_DIR | quote }}
+            {{- else }}
+            - name: OXY_STATE_DIR
+              value: {{ printf "%s/%s" .Values.persistence.mountPath .Values.persistence.folder | quote }}
+            {{- end }}
+
+            # Additional environment variables
+            {{- range $key, $value := .Values.env }}
+            {{- if ne $key "OXY_STATE_DIR" }}
+            {{- if ne (toString $value) "" }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- end }}
+            {{- end }}
+
+          {{- if or .Values.configMap.enabled (gt (len .Values.externalSecrets.envSecretNames) 0) }}
+          envFrom:
+            {{- if .Values.configMap.enabled }}
+            - configMapRef:
+                name: {{ include "oxy-start.fullname" . }}-config
+            {{- end }}
+            {{- range .Values.externalSecrets.envSecretNames }}
+            - secretRef:
+                name: {{ . | quote }}
+            {{- end }}
+          {{- end }}
+
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          volumeMounts:
+            - name: workspace
+              mountPath: {{ .Values.persistence.mountPath }}
+            {{- if .Values.dind.enabled }}
+            - name: docker-bin
+              mountPath: /docker-bin
+              readOnly: true
+            {{- end }}
+            {{- range $idx, $secretName := .Values.externalSecrets.envSecretNames }}
+            - name: env-secret-{{ $idx }}
+              mountPath: /secrets/env/{{ $secretName }}
+              readOnly: true
+            {{- end }}
+            {{- range $idx, $fileSecret := .Values.externalSecrets.fileSecrets }}
+            - name: file-secret-{{ $idx }}
+              mountPath: /secrets/files/{{ $fileSecret.name }}
+              readOnly: true
+            {{- end }}
+
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+        {{- if .Values.dind.enabled }}
+        # ─── Docker-in-Docker Sidecar ───
+        - name: dind
+          image: "{{ .Values.dind.image }}:{{ .Values.dind.imageTag }}"
+          imagePullPolicy: {{ .Values.dind.imagePullPolicy }}
+          securityContext:
+            privileged: true
+          env:
+            # Disable TLS for simplicity within the pod (localhost only)
+            - name: DOCKER_TLS_CERTDIR
+              value: ""
+          ports:
+            - containerPort: 2375
+              protocol: TCP
+              name: docker
+          volumeMounts:
+            - name: dind-storage
+              mountPath: /var/lib/docker
+          {{- with .Values.dind.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          readinessProbe:
+            exec:
+              command: ["docker", "info"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            exec:
+              command: ["docker", "info"]
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+        {{- end }}
+
+        {{- with .Values.extraSidecars }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+
+      # ─── Volumes ───
+      volumes:
+        {{- if .Values.dind.enabled }}
+        - name: docker-bin
+          emptyDir: {}
+        {{- end }}
+
+        {{- if .Values.gitSync.enabled }}
+        {{- if .Values.httpAuth.username }}
+        {{- $httpAuthSecretName := "" }}
+        {{- if .Values.httpAuth.secretName }}
+          {{- $httpAuthSecretName = .Values.httpAuth.secretName }}
+        {{- else if .Values.httpAuth.password }}
+          {{- $httpAuthSecretName = printf "%s-http-auth" (include "oxy-start.fullname" $) }}
+        {{- end }}
+        - name: git-http-auth
+          secret:
+            secretName: {{ $httpAuthSecretName }}
+            defaultMode: 0400
+            optional: false
+            items:
+              - key: {{ .Values.httpAuth.passwordKey }}
+                path: password
+        {{- else if or .Values.gitSync.githubApp.secretName (and .Values.gitSync.githubApp.privateKey .Values.gitSync.githubApp.applicationId .Values.gitSync.githubApp.installationId) }}
+        {{- if .Values.gitSync.githubApp.secretName }}
+        - name: github-app-secret
+          secret:
+            secretName: {{ .Values.gitSync.githubApp.secretName }}
+            defaultMode: 0400
+            optional: false
+        {{- else }}
+        - name: github-app-secret
+          secret:
+            secretName: {{ printf "%s-github-app" (include "oxy-start.fullname" $) }}
+            defaultMode: 0400
+            optional: false
+            items:
+              - key: {{ .Values.gitSync.githubApp.privateKeyKey }}
+                path: {{ .Values.gitSync.githubApp.privateKeyKey }}
+        {{- end }}
+        {{- else }}
+        - name: git-ssh
+          secret:
+            secretName: {{ default .Values.gitSync.sshSecretName .Values.sshKey.secretName }}
+            defaultMode: 0400
+            optional: false
+        {{- end }}
+        {{- end }}
+
+        {{- range $idx, $secretName := .Values.externalSecrets.envSecretNames }}
+        - name: env-secret-{{ $idx }}
+          secret:
+            secretName: {{ $secretName | quote }}
+            optional: true
+        {{- end }}
+        {{- range $idx, $fileSecret := .Values.externalSecrets.fileSecrets }}
+        - name: file-secret-{{ $idx }}
+          secret:
+            secretName: {{ $fileSecret.name | quote }}
+            optional: true
+        {{- end }}
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+  # ─── Persistent Volume Claim Templates ───
+  volumeClaimTemplates:
+    - metadata:
+        name: workspace
+        {{- with .Values.persistence.annotations }}
+        annotations:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.persistence.labels }}
+        labels:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes:
+          - {{ .Values.persistence.accessMode | quote }}
+        {{- with .Values.persistence.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
+        {{- with .Values.persistence.volumeMode }}
+        volumeMode: {{ . }}
+        {{- end }}
+        {{- with .Values.persistence.selector }}
+        selector:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size }}
+    {{- if .Values.dind.enabled }}
+    - metadata:
+        name: dind-storage
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        {{- with .Values.dind.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.dind.storageSize }}
+    {{- end }}

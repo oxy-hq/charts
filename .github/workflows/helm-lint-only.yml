@@ -1,0 +1,55 @@
+name: Helm lint-only (lightweight charts)
+
+# Lightweight workflow for charts that only need linting validation
+# Currently used for: oxy-start
+# These charts don't require extensive integration testing
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "charts/oxy-start/**"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "charts/oxy-start/**"
+
+jobs:
+  lint:
+    name: Lint charts (oxy-start)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4.2.0
+
+      - uses: actions/setup-python@v5.3.0
+        with:
+          python-version: "3.x"
+          check-latest: true
+
+      - name: Set up chart-testing
+        uses: helm/chart-testing-action@v2.8.0
+
+      - name: Run chart-testing (list-changed)
+        id: list-changed
+        if: github.event_name == 'pull_request'
+        run: |
+          changed=$(ct list-changed --target-branch ${{ github.event.repository.default_branch }} --chart-dirs charts)
+          if [[ -n "$changed" ]]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Changed charts: $changed"
+          fi
+
+      - name: Run chart-testing (lint)
+        if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
+        run: |
+          ct lint --target-branch ${{ github.event.repository.default_branch }} --config ct.yaml --charts charts/oxy-start

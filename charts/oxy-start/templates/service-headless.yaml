@@ -1,0 +1,19 @@
+{{- if .Values.headlessService.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "oxy-start.fullname" . }}-headless
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "oxy-start.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "oxy-start.selectorLabels" . | nindent 4 }}
+  ports:
+  - port: {{ .Values.app.port }}
+    targetPort: {{ .Values.app.port }}
+    protocol: TCP
+    name: traffic-port
+  clusterIP: None
+  type: ClusterIP
+{{- end }}

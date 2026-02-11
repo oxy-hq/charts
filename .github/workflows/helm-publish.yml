@@ -1,0 +1,83 @@
+name: Helm publish
+
+# This workflow publishes all Helm charts after their respective tests pass
+# It runs after either:
+# - helm-ci.yml (oxy-app full tests) completes
+# - helm-lint-only.yml (oxy-start, oxy linting) completes
+
+on:
+  workflow_run:
+    workflows: ["Helm tests and release (oxy-app)", "Helm lint-only (lightweight charts)"]
+    types:
+      - completed
+    branches:
+      - main
+
+jobs:
+  publish:
+    name: Package & Publish Helm charts
+    runs-on: ubuntu-latest
+    # Only run if the triggering workflow succeeded
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    permissions:
+      contents: write # to push chart release and create a release (helm/chart-releaser-action)
+      packages: write # needed for ghcr access
+    steps:
+      - name: Verify workflow success
+        run: |
+          echo "✅ Triggering workflow '${{ github.event.workflow_run.name }}' completed successfully"
+          echo "Proceeding with chart publishing..."
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create GitHub App Token
+        uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ vars.ARGO_APP_ID }}
+          private-key: ${{ secrets.ARGO_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Configure Git
+        run: |
+          git config --global user.email "153820223+oxyhelper[bot]@users.noreply.github.com"
+          git config --global user.name "oxyhelper[bot]"
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4.2.0
+
+      - name: Add dependency chart repos
+        run: |
+          # Add all required chart repositories for dependencies
+          # groundhog2k: Used by oxy-app for PostgreSQL/ClickHouse subcharts
+          helm repo add groundhog2k https://groundhog2k.github.io/helm-charts/
+          # Add additional repos here as needed for other charts
+
+      - name: Run chart-releaser
+        uses: helm/chart-releaser-action@v1.7.0
+        env:
+          CR_TOKEN: "${{ steps.app-token.outputs.token }}"
+          CR_SKIP_EXISTING: "true"
+        with:
+          charts_dir: charts
+          config: cr.yaml
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push charts to GHCR
+        run: |
+          shopt -s nullglob
+          for pkg in .cr-release-packages/*.tgz; do
+            if [ -z "${pkg:-}" ]; then
+              break
+            fi
+            helm push "${pkg}" "oci://ghcr.io/${{ github.repository_owner }}/helm-charts"
+          done
