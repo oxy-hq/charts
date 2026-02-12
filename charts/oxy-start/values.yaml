@@ -34,6 +34,8 @@ dind:
       memory: 4Gi
 
 # oxy start configuration
+# The 'oxy start' command automatically starts PostgreSQL (and optionally ClickHouse, OTel, etc.)
+# inside the DinD sidecar. The database URL defaults to: postgresql://oxy:oxy@localhost:5432/oxy
 oxyStart:
   # Run oxy start --enterprise (adds ClickHouse, OTel Collector, Cube.js)
   enterprise: false
