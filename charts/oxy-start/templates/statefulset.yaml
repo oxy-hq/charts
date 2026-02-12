@@ -145,8 +145,10 @@ spec:
               {{- if .Values.dind.enabled }}
               # Wait for the DinD daemon to be ready
               echo "Waiting for Docker daemon..."
-              timeout=60
+              timeout=120
               elapsed=0
+
+              # Check 1: Docker daemon responds to info command
               until docker info >/dev/null 2>&1; do
                 if [ $elapsed -ge $timeout ]; then
                   echo "Error: Docker daemon failed to start within ${timeout}s"
@@ -155,7 +157,33 @@ spec:
                 sleep 2
                 elapsed=$((elapsed + 2))
               done
-              echo "Docker daemon is ready."
+              echo "Docker daemon responded to 'docker info'"
+
+              # Check 2: Verify Docker API is fully operational via version check
+              echo "Verifying Docker API is fully operational..."
+              until docker version >/dev/null 2>&1; do
+                if [ $elapsed -ge $timeout ]; then
+                  echo "Error: Docker API not fully operational within ${timeout}s"
+                  exit 1
+                fi
+                sleep 2
+                elapsed=$((elapsed + 2))
+              done
+
+              # Check 3: Give DinD extra time to fully initialize storage drivers
+              echo "Allowing DinD storage initialization..."
+              sleep 5
+
+              echo "Docker daemon is fully ready."
+
+              # Verify DOCKER_HOST is set correctly
+              echo "DOCKER_HOST is set to: $DOCKER_HOST"
+              echo "Testing Docker connectivity with 'docker ps'..."
+              if docker ps >/dev/null 2>&1; then
+                echo "✓ Docker API connection verified"
+              else
+                echo "✗ Warning: Docker ps failed, but proceeding anyway..."
+              fi
 
               # Start all services via oxy start
               # This starts PostgreSQL, ClickHouse (if --enterprise), and other services
