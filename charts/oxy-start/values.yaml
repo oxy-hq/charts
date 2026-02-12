@@ -35,7 +35,7 @@ dind:
 
 # oxy start configuration
 # The 'oxy start' command automatically starts PostgreSQL (and optionally ClickHouse, OTel, etc.)
-# inside the DinD sidecar via Docker API (tcp://localhost:2375)
+# inside the DinD sidecar via Docker socket (unix:///var/run/docker.sock)
 # Note: DinD needs ~10-15s to fully initialize before oxy start can pull images and create containers
 oxyStart:
   # Run oxy start --enterprise (adds ClickHouse, OTel Collector, Cube.js)
