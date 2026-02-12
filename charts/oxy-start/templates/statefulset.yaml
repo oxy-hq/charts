@@ -145,12 +145,22 @@ spec:
               {{- if .Values.dind.enabled }}
               # Wait for the DinD daemon to be ready
               echo "Waiting for Docker daemon..."
+              timeout=60
+              elapsed=0
               until docker info >/dev/null 2>&1; do
-                sleep 1
+                if [ $elapsed -ge $timeout ]; then
+                  echo "Error: Docker daemon failed to start within ${timeout}s"
+                  exit 1
+                fi
+                sleep 2
+                elapsed=$((elapsed + 2))
               done
               echo "Docker daemon is ready."
 
               # Start all services via oxy start
+              # This starts PostgreSQL, ClickHouse (if --enterprise), and other services
+              # with opinionated defaults - no manual database URL configuration needed
+              echo "Starting Oxy services..."
               oxy start{{ if .Values.oxyStart.enterprise }} --enterprise{{ end }}{{ if .Values.oxyStart.clean }} --clean{{ end }}
 
               {{- end }}
