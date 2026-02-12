@@ -287,9 +287,15 @@ spec:
           securityContext:
             privileged: true
           env:
-            # Disable TLS and expose Unix socket for oxy compatibility
-            - name: DOCKER_TLS_CERTDIR
-              value: ""
+            # Configure dockerd to listen on both Unix socket and TCP
+            # Removing DOCKER_TLS_CERTDIR allows Unix socket creation
+            - name: DOCKER_HOST
+              value: "unix:///var/run/docker.sock"
+          command:
+            - dockerd
+            - --host=unix:///var/run/docker.sock
+            - --host=tcp://0.0.0.0:2375
+            - --tls=false
           ports:
             - containerPort: 2375
               protocol: TCP
