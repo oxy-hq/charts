@@ -757,6 +757,29 @@ entries:
   oxy-start:
   - apiVersion: v2
     appVersion: 0.5.11
+    created: "2026-02-12T01:08:06.641503842Z"
+    description: Oxy with Docker-in-Docker — self-contained deployment using `oxy
+      start` to manage all services internally
+    digest: fe6a71af8466a6c4768b083ec27bc25d725c70fe040d04919e7476fd73edeb8b
+    home: https://oxy.tech
+    keywords:
+    - oxy
+    - docker-in-docker
+    - dind
+    maintainers:
+    - name: Oxy Team
+      url: https://oxy.tech
+    - name: Luong Vo
+      url: https://github.com/luongvo
+    name: oxy-start
+    sources:
+    - https://github.com/oxy-hq/charts
+    type: application
+    urls:
+    - https://github.com/oxy-hq/charts/releases/download/oxy-start-0.1.1/oxy-start-0.1.1.tgz
+    version: 0.1.1
+  - apiVersion: v2
+    appVersion: 0.5.11
     created: "2026-02-11T10:50:45.926458434Z"
     description: Oxy with Docker-in-Docker — self-contained deployment using `oxy
       start` to manage all services internally
@@ -778,4 +801,4 @@ entries:
     urls:
     - https://github.com/oxy-hq/charts/releases/download/oxy-start-0.1.0/oxy-start-0.1.0.tgz
     version: 0.1.0
-generated: "2026-02-11T10:50:45.926532612Z"
+generated: "2026-02-12T01:08:06.641594853Z"
