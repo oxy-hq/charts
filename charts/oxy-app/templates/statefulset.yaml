@@ -251,7 +251,7 @@ spec:
             - sh
             - -c
             - |
-              exec oxy serve{{- if not .Values.gitSync.enabled }} --cloud{{- end }}
+              exec oxy serve{{- if not .Values.gitSync.enabled }} --cloud{{- end }}{{- if .Values.app.internalHost }} --internal-host {{ .Values.app.internalHost }} --internal-port {{ .Values.app.internalPort }}{{- end }}
           {{- end }}
           {{- if .Values.gitSync.enabled }}
           workingDir: {{ $workingDir }}
@@ -260,6 +260,11 @@ spec:
             - containerPort: {{ .Values.app.port }}
               protocol: TCP
               name: traffic-port
+            {{- if .Values.app.internalHost }}
+            - containerPort: {{ .Values.app.internalPort }}
+              protocol: TCP
+              name: internal-port
+            {{- end }}
 
           # Environment Variables
           env:

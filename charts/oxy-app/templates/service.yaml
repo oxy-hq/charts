@@ -13,4 +13,10 @@ spec:
     targetPort: {{ .Values.service.targetPort }}
     protocol: TCP
     name: traffic-port
+  {{- if .Values.app.internalHost }}
+  - port: {{ .Values.service.internalPort }}
+    targetPort: {{ .Values.app.internalPort }}
+    protocol: TCP
+    name: internal-port
+  {{- end }}
   type: {{ .Values.service.type }}

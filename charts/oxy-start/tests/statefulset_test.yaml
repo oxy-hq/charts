@@ -1,0 +1,300 @@
+suite: statefulset tests
+templates:
+  - statefulset.yaml
+
+tests:
+  # =======================
+  # Basic StatefulSet Tests
+  # =======================
+
+  - it: should create a StatefulSet with correct metadata
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-oxy-start
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: oxy-start
+      - equal:
+          path: metadata.labels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+
+  - it: should configure StatefulSet with correct defaults
+    asserts:
+      - equal:
+          path: spec.serviceName
+          value: RELEASE-NAME-oxy-start-headless
+      - equal:
+          path: spec.replicas
+          value: 1
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: oxy-start
+
+  # =======================
+  # Container Configuration
+  # =======================
+
+  - it: should configure main container correctly
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "ghcr.io/oxy-hq/oxy:0.5.11"
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            containerPort: 3000
+            protocol: TCP
+            name: traffic-port
+
+  - it: should only expose main port by default
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers[0].ports
+          count: 1
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].name
+          value: traffic-port
+
+  # =======================
+  # DinD Sidecar Tests
+  # =======================
+
+  - it: should deploy DinD sidecar by default
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 2
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: oxy-start
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: dind
+
+  - it: should configure DinD container correctly
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].image
+          value: "docker:27-dind"
+      - equal:
+          path: spec.template.spec.containers[1].securityContext.privileged
+          value: true
+      - contains:
+          path: spec.template.spec.containers[1].ports
+          content:
+            containerPort: 2375
+            protocol: TCP
+            name: docker
+
+  # =======================
+  # Internal Port Tests
+  # =======================
+
+  - it: should not include internal port flags by default
+    set:
+      gitSync:
+        enabled: false
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--internal-host.*"
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--internal-port.*"
+
+  - it: should expose internal container port when internalHost is set
+    set:
+      app:
+        internalHost: "0.0.0.0"
+        internalPort: 3001
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers[0].ports
+          count: 2
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            containerPort: 3000
+            protocol: TCP
+            name: traffic-port
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            containerPort: 3001
+            protocol: TCP
+            name: internal-port
+
+  - it: should include internal port flags in command when enabled
+    set:
+      gitSync:
+        enabled: false
+      app:
+        internalHost: "0.0.0.0"
+        internalPort: 3001
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--internal-host 0\\.0\\.0\\.0.*"
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--internal-port 3001.*"
+
+  - it: should support custom internal host and port
+    set:
+      gitSync:
+        enabled: false
+      app:
+        internalHost: "127.0.0.1"
+        internalPort: 8001
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers[0].ports
+          count: 2
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            containerPort: 8001
+            protocol: TCP
+            name: internal-port
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--internal-host 127\\.0\\.0\\.1.*"
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--internal-port 8001.*"
+
+  - it: should work with both git sync and internal port
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      app:
+        internalHost: "0.0.0.0"
+        internalPort: 3001
+      persistence:
+        enabled: true
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--cloud.*"
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--internal-host 0\\.0\\.0\\.0.*"
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--internal-port 3001.*"
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            containerPort: 3001
+            protocol: TCP
+            name: internal-port
+
+  - it: should work with DinD and internal port together
+    set:
+      dind:
+        enabled: true
+      app:
+        internalHost: "0.0.0.0"
+        internalPort: 3001
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 2
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: oxy-start
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: dind
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            containerPort: 3001
+            protocol: TCP
+            name: internal-port
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--internal-host 0\\.0\\.0\\.0.*"
+
+  # =======================
+  # Environment Variables
+  # =======================
+
+  - it: should set default environment variables
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_STATE_DIR
+            value: "/workspace/oxy_data"
+
+  - it: should set DOCKER_HOST when DinD is enabled
+    set:
+      dind:
+        enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DOCKER_HOST
+            value: "unix:///var/run/docker.sock"
+
+  # =======================
+  # Resource Configuration
+  # =======================
+
+  - it: should set default resource limits for main container
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 250m
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 512Mi
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 1000m
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 2Gi
+
+  - it: should set default resource limits for DinD container
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].resources.requests.cpu
+          value: 500m
+      - equal:
+          path: spec.template.spec.containers[1].resources.requests.memory
+          value: 1Gi
+      - equal:
+          path: spec.template.spec.containers[1].resources.limits.cpu
+          value: 2000m
+      - equal:
+          path: spec.template.spec.containers[1].resources.limits.memory
+          value: 4Gi
+
+  # =======================
+  # Persistence & Volumes
+  # =======================
+
+  - it: should configure workspace volume claim template
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].metadata.name
+          value: workspace
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: 20Gi
+
+  - it: should configure DinD storage volume claim template
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[1].metadata.name
+          value: dind-storage
+      - equal:
+          path: spec.volumeClaimTemplates[1].spec.resources.requests.storage
+          value: 40Gi
