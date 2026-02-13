@@ -14,6 +14,11 @@ app:
   # Override the container command. When empty, the chart runs:
   #   oxy start [--enterprise] && oxy serve [--cloud]
   command: []
+  # Internal API port configuration (optional)
+  # The internal API serves the same routes with authentication bypassed (auto-authenticated as internal user)
+  # Leave internalHost empty to disable the internal API
+  internalPort: 3001
+  internalHost: ""  # Set to "0.0.0.0" to enable internal API on all interfaces
 
 # Docker-in-Docker sidecar configuration
 dind:
@@ -104,6 +109,8 @@ service:
   port: 80
   targetPort: 3000
   name: ""
+  # Internal API port (exposed only if app.internalHost is set)
+  internalPort: 3001
 
 # Headless service for StatefulSet
 headlessService:

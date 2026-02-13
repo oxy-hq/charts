@@ -50,13 +50,22 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: "ghcr.io/oxy-hq/oxy:0.5.11"
+          value: "ghcr.io/oxy-hq/oxy:0.5.16"
       - contains:
           path: spec.template.spec.containers[0].ports
           content:
             containerPort: 3000
             protocol: TCP
             name: traffic-port
+
+  - it: should only expose main port by default
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers[0].ports
+          count: 1
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].name
+          value: traffic-port
 
   - it: should support custom image configuration
     set:
@@ -392,6 +401,110 @@ tests:
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
           pattern: ".*--cloud.*"
+
+  # =======================
+  # Internal Port Tests
+  # =======================
+
+  - it: should not include internal port flags by default
+    set:
+      gitSync:
+        enabled: false
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--internal-host.*"
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--internal-port.*"
+
+  - it: should expose internal container port when internalHost is set
+    set:
+      app:
+        internalHost: "0.0.0.0"
+        internalPort: 3001
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers[0].ports
+          count: 2
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            containerPort: 3000
+            protocol: TCP
+            name: traffic-port
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            containerPort: 3001
+            protocol: TCP
+            name: internal-port
+
+  - it: should include internal port flags in command when enabled
+    set:
+      gitSync:
+        enabled: false
+      app:
+        internalHost: "0.0.0.0"
+        internalPort: 3001
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--internal-host 0\\.0\\.0\\.0.*"
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--internal-port 3001.*"
+
+  - it: should support custom internal host and port
+    set:
+      gitSync:
+        enabled: false
+      app:
+        internalHost: "127.0.0.1"
+        internalPort: 8001
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers[0].ports
+          count: 2
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            containerPort: 8001
+            protocol: TCP
+            name: internal-port
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--internal-host 127\\.0\\.0\\.1.*"
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--internal-port 8001.*"
+
+  - it: should work with both git sync and internal port
+    set:
+      gitSync:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      app:
+        internalHost: "0.0.0.0"
+        internalPort: 3001
+      persistence:
+        enabled: true
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--cloud.*"
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--internal-host 0\\.0\\.0\\.0.*"
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--internal-port 3001.*"
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            containerPort: 3001
+            protocol: TCP
+            name: internal-port
 
   - it: should have two containers when git sync enabled (includes semantic engine)
     set:

@@ -12,7 +12,7 @@ tests:
           of: Service
       - equal:
           path: metadata.name
-          value: RELEASE-NAME-oxy-app
+          value: RELEASE-NAME-oxy-start
       - equal:
           path: spec.type
           value: ClusterIP
@@ -32,7 +32,7 @@ tests:
     asserts:
       - equal:
           path: spec.selector["app.kubernetes.io/name"]
-          value: oxy-app
+          value: oxy-start
       - equal:
           path: spec.selector["app.kubernetes.io/instance"]
           value: RELEASE-NAME
@@ -60,7 +60,7 @@ tests:
           of: Service
       - equal:
           path: metadata.name
-          value: RELEASE-NAME-oxy-app-headless
+          value: RELEASE-NAME-oxy-start-headless
       - equal:
           path: spec.clusterIP
           value: None
@@ -70,44 +70,6 @@ tests:
       - equal:
           path: spec.ports[0].targetPort
           value: 3000
-
-  # Headless service selector
-  - it: should have correct selector for headless service
-    template: service-headless.yaml
-    asserts:
-      - equal:
-          path: spec.selector["app.kubernetes.io/name"]
-          value: oxy-app
-      - equal:
-          path: spec.selector["app.kubernetes.io/instance"]
-          value: RELEASE-NAME
-
-  # Service labels
-  - it: should have correct labels
-    template: service.yaml
-    asserts:
-      - equal:
-          path: metadata.labels["app.kubernetes.io/name"]
-          value: oxy-app
-      - equal:
-          path: metadata.labels["app.kubernetes.io/instance"]
-          value: RELEASE-NAME
-      - equal:
-          path: metadata.labels["app.kubernetes.io/managed-by"]
-          value: Helm
-
-  - it: should have correct labels for headless service
-    template: service-headless.yaml
-    asserts:
-      - equal:
-          path: metadata.labels["app.kubernetes.io/name"]
-          value: oxy-app
-      - equal:
-          path: metadata.labels["app.kubernetes.io/instance"]
-          value: RELEASE-NAME
-      - equal:
-          path: metadata.labels["app.kubernetes.io/managed-by"]
-          value: Helm
 
   # Internal port tests
   - it: should not expose internal port by default

@@ -1,6 +1,6 @@
 # oxy-start
 
-![Version: 0.1.0](https://img.shields.io/badge/Version-0.1.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.5.11](https://img.shields.io/badge/AppVersion-0.5.11-informational?style=flat-square)
+![Version: 0.2.0](https://img.shields.io/badge/Version-0.2.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.5.16](https://img.shields.io/badge/AppVersion-0.5.16-informational?style=flat-square)
 
 Oxy with Docker-in-Docker — self-contained deployment using `oxy start` to manage all services internally
 
@@ -26,6 +26,8 @@ Oxy with Docker-in-Docker — self-contained deployment using `oxy start` to man
 | app.image | string | `"ghcr.io/oxy-hq/oxy"` |  |
 | app.imagePullPolicy | string | `"IfNotPresent"` |  |
 | app.imageTag | string | `""` |  |
+| app.internalHost | string | `""` |  |
+| app.internalPort | int | `3001` |  |
 | app.port | int | `3000` |  |
 | app.replicaCount | int | `1` |  |
 | configMap.data | object | `{}` |  |
@@ -115,6 +117,7 @@ Oxy with Docker-in-Docker — self-contained deployment using `oxy start` to man
 | resources.requests.cpu | string | `"250m"` |  |
 | resources.requests.memory | string | `"512Mi"` |  |
 | securityContext.fsGroup | int | `1000` |  |
+| service.internalPort | int | `3001` |  |
 | service.name | string | `""` |  |
 | service.port | int | `80` |  |
 | service.targetPort | int | `3000` |  |
