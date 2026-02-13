@@ -1,6 +1,6 @@
 # oxy-app
 
-![Version: 0.3.10](https://img.shields.io/badge/Version-0.3.10-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.5.11](https://img.shields.io/badge/AppVersion-0.5.11-informational?style=flat-square)
+![Version: 0.4.0](https://img.shields.io/badge/Version-0.4.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.5.16](https://img.shields.io/badge/AppVersion-0.5.16-informational?style=flat-square)
 
 A Helm chart for Oxy application deployment on kubernetes
 
@@ -16,6 +16,7 @@ A Helm chart for Oxy application deployment on kubernetes
 | Repository | Name | Version |
 |------------|------|---------|
 | https://groundhog2k.github.io/helm-charts/ | postgres | 1.6.1 |
+| oci://registry-1.docker.io/bitnamicharts | clickhouseSubchart(clickhouse) | 9.4.4 |
 
 ## Values
 
@@ -26,6 +27,8 @@ A Helm chart for Oxy application deployment on kubernetes
 | app.image | string | `"ghcr.io/oxy-hq/oxy"` |  |
 | app.imagePullPolicy | string | `"IfNotPresent"` |  |
 | app.imageTag | string | `""` |  |
+| app.internalHost | string | `""` |  |
+| app.internalPort | int | `3001` |  |
 | app.port | int | `3000` |  |
 | app.replicaCount | int | `1` |  |
 | clickhouse.database | string | `"otel"` |  |
@@ -37,8 +40,31 @@ A Helm chart for Oxy application deployment on kubernetes
 | clickhouse.tcpEndpoint | string | `""` |  |
 | clickhouse.url | string | `""` |  |
 | clickhouse.username | string | `"default"` |  |
+| clickhouseSubchart.auth.existingSecret | string | `""` |  |
+| clickhouseSubchart.auth.existingSecretPasswordKey | string | `"password"` |  |
+| clickhouseSubchart.auth.password | string | `"clickhouse"` |  |
+| clickhouseSubchart.auth.username | string | `"default"` |  |
+| clickhouseSubchart.fullnameOverride | string | `""` |  |
+| clickhouseSubchart.image.repository | string | `"bitnamilegacy/clickhouse"` |  |
+| clickhouseSubchart.keeper.enabled | bool | `true` |  |
+| clickhouseSubchart.keeper.image.repository | string | `"bitnamilegacy/clickhouse-keeper"` |  |
+| clickhouseSubchart.persistence.enabled | bool | `true` |  |
+| clickhouseSubchart.persistence.size | string | `"10Gi"` |  |
+| clickhouseSubchart.persistence.storageClass | string | `""` |  |
+| clickhouseSubchart.replicaCount | int | `1` |  |
+| clickhouseSubchart.resources.limits.cpu | string | `"1000m"` |  |
+| clickhouseSubchart.resources.limits.memory | string | `"2Gi"` |  |
+| clickhouseSubchart.resources.requests.cpu | string | `"250m"` |  |
+| clickhouseSubchart.resources.requests.memory | string | `"512Mi"` |  |
+| clickhouseSubchart.shards | int | `1` |  |
+| clickhouseSubchart.zookeeper.enabled | bool | `false` |  |
+| clickhouseSubchart.zookeeper.image.repository | string | `"bitnamilegacy/zookeeper"` |  |
 | configMap.data | object | `{}` |  |
 | configMap.enabled | bool | `false` |  |
+| database.clickhouse.enabled | bool | `false` |  |
+| database.clickhouse.host | string | `""` |  |
+| database.clickhouse.httpPort | int | `8123` |  |
+| database.clickhouse.tcpPort | int | `9000` |  |
 | database.external.connectionString | string | `""` |  |
 | database.external.dataWarehouseSecret.backend | string | `""` |  |
 | database.external.dataWarehouseSecret.key | string | `""` |  |
@@ -176,6 +202,7 @@ A Helm chart for Oxy application deployment on kubernetes
 | semanticEngine.image | string | `"ghcr.io/oxy-hq/oxy-semantic-engine"` |  |
 | semanticEngine.imagePullPolicy | string | `"IfNotPresent"` |  |
 | semanticEngine.imageTag | string | `""` |  |
+| service.internalPort | int | `3001` |  |
 | service.name | string | `""` |  |
 | service.port | int | `80` |  |
 | service.targetPort | int | `3000` |  |
