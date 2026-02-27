@@ -138,6 +138,15 @@ readinessProbe:
   timeoutSeconds: 5
   failureThreshold: 3
 
+# Lifecycle hooks
+lifecycle:
+  preStop:
+    exec:
+      command: ["sleep", "5"]
+
+# Termination grace period (should be > preStop sleep + app shutdown time)
+terminationGracePeriodSeconds: 30
+
 # Security context
 securityContext:
   fsGroup: 1000

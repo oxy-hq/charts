@@ -1,6 +1,6 @@
 # oxy-start
 
-![Version: 0.2.0](https://img.shields.io/badge/Version-0.2.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.5.16](https://img.shields.io/badge/AppVersion-0.5.16-informational?style=flat-square)
+![Version: 0.2.0](https://img.shields.io/badge/Version-0.2.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.5.19](https://img.shields.io/badge/AppVersion-0.5.19-informational?style=flat-square)
 
 Oxy with Docker-in-Docker — self-contained deployment using `oxy start` to manage all services internally
 
@@ -81,6 +81,8 @@ Oxy with Docker-in-Docker — self-contained deployment using `oxy start` to man
 | ingress.path | string | `"/"` |  |
 | ingress.pathType | string | `"Prefix"` |  |
 | ingress.tls | list | `[]` |  |
+| lifecycle.preStop.exec.command[0] | string | `"sleep"` |  |
+| lifecycle.preStop.exec.command[1] | string | `"5"` |  |
 | livenessProbe.failureThreshold | int | `5` |  |
 | livenessProbe.httpGet.path | string | `"/"` |  |
 | livenessProbe.httpGet.port | int | `3000` |  |
@@ -128,6 +130,7 @@ Oxy with Docker-in-Docker — self-contained deployment using `oxy start` to man
 | sshKey.knownHosts | string | `""` |  |
 | sshKey.privateKey | string | `""` |  |
 | sshKey.secretName | string | `""` |  |
+| terminationGracePeriodSeconds | int | `30` |  |
 | tolerations | string | `nil` |  |
 
 ----------------------------------------------

@@ -38,6 +38,7 @@ spec:
       {{- if ne $sa "" }}
       serviceAccountName: {{ $sa | quote }}
       {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       securityContext:
         fsGroup: {{ .Values.securityContext.fsGroup }}
 
@@ -281,6 +282,10 @@ spec:
           {{- end }}
           {{- with .Values.readinessProbe }}
           readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.lifecycle }}
+          lifecycle:
             {{- toYaml . | nindent 12 }}
           {{- end }}
 
