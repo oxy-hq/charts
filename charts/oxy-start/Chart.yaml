@@ -8,7 +8,7 @@ maintainers:
   - name: Oxy Team
     url: https://oxy.tech
   - name: Luong Vo
-    url: https://github.com/luongvo
+    url: https://github.com/luong-komorebi
 keywords:
   - oxy
   - docker-in-docker

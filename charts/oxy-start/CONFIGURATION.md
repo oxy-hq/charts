@@ -11,7 +11,7 @@ Oxy with Docker-in-Docker — self-contained deployment using `oxy start` to man
 | Name | Email | Url |
 | ---- | ------ | --- |
 | Oxy Team |  | <https://oxy.tech> |
-| Luong Vo |  | <https://github.com/luongvo> |
+| Luong Vo |  | <https://github.com/luong-komorebi> |
 
 ## Source Code
 
