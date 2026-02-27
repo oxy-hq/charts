@@ -2,7 +2,7 @@ apiVersion: v2
 name: oxy-app
 description: A Helm chart for Oxy application deployment on kubernetes
 type: application
-version: 0.4.1
+version: 0.4.2
 appVersion: "0.5.19"
 keywords:
   - oxy
