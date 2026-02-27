@@ -30,7 +30,6 @@ A Helm chart for Oxy application deployment on kubernetes
 | app.internalHost | string | `""` |  |
 | app.internalPort | int | `3001` |  |
 | app.port | int | `3000` |  |
-| app.replicaCount | int | `1` |  |
 | clickhouse.database | string | `"otel"` |  |
 | clickhouse.enabled | bool | `false` |  |
 | clickhouse.existingSecret.name | string | `""` |  |
@@ -130,6 +129,7 @@ A Helm chart for Oxy application deployment on kubernetes
 | livenessProbe.initialDelaySeconds | int | `10` |  |
 | livenessProbe.periodSeconds | int | `30` |  |
 | livenessProbe.timeoutSeconds | int | `10` |  |
+| minReadySeconds | int | `0` |  |
 | name | string | `"oxy-app"` |  |
 | nodeSelector | string | `nil` |  |
 | otelCollector.clickhouse.asyncInsert | bool | `true` |  |
@@ -215,6 +215,11 @@ A Helm chart for Oxy application deployment on kubernetes
 | sshKey.knownHosts | string | `""` |  |
 | sshKey.privateKey | string | `""` |  |
 | sshKey.secretName | string | `""` |  |
+| startupProbe.failureThreshold | int | `30` |  |
+| startupProbe.httpGet.path | string | `"/"` |  |
+| startupProbe.httpGet.port | int | `3000` |  |
+| startupProbe.periodSeconds | int | `10` |  |
+| startupProbe.timeoutSeconds | int | `5` |  |
 | terminationGracePeriodSeconds | int | `30` |  |
 | tolerations | string | `nil` |  |
 

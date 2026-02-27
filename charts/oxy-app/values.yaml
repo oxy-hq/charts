@@ -8,7 +8,6 @@ app:
   image: ghcr.io/oxy-hq/oxy
   imageTag: ""
   port: 3000
-  replicaCount: 1
   imagePullPolicy: IfNotPresent
   # Optional override for the container command. When empty, the chart will
   # use the default shell wrapper that runs `oxy serve` (readonly if gitSync disabled).
@@ -138,14 +137,37 @@ readinessProbe:
   timeoutSeconds: 5
   failureThreshold: 3
 
+# startupProbe is automatically applied when gitSync or semanticEngine is enabled.
+# Provides a longer startup window (failureThreshold × periodSeconds seconds total)
+# before liveness/readiness probes begin — preventing premature restarts during
+# git clone completion or semantic engine initialization.
+# Total default budget: 30 × 10s = 5 minutes.
+startupProbe:
+  httpGet:
+    path: /
+    port: 3000
+  failureThreshold: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+
 # Lifecycle hooks
 lifecycle:
   preStop:
     exec:
+      # For zero-downtime deployments, increase this sleep to match your load balancer's
+      # connection-draining timeout (typically 15–30s). This gives the LB time to
+      # deregister the pod before connections are terminated.
       command: ["sleep", "5"]
 
 # Termination grace period (should be > preStop sleep + app shutdown time)
 terminationGracePeriodSeconds: 30
+
+# minReadySeconds: seconds a newly created Pod must be ready before the rolling update
+# is considered complete. Increase to 10–30s to confirm the new pod is truly healthy.
+# Note: with a single-replica StatefulSet + ReadWriteOnce PVC the new pod cannot start
+# until the old pod releases the PVC, so a brief gap is unavoidable. Minimize it by
+# increasing the preStop sleep and terminationGracePeriodSeconds above.
+minReadySeconds: 0
 
 # Security context
 securityContext:

@@ -1,6 +1,6 @@
 # oxy-start
 
-![Version: 0.2.0](https://img.shields.io/badge/Version-0.2.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.5.19](https://img.shields.io/badge/AppVersion-0.5.19-informational?style=flat-square)
+![Version: 0.2.1](https://img.shields.io/badge/Version-0.2.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.5.19](https://img.shields.io/badge/AppVersion-0.5.19-informational?style=flat-square)
 
 Oxy with Docker-in-Docker — self-contained deployment using `oxy start` to manage all services internally
 
@@ -29,7 +29,6 @@ Oxy with Docker-in-Docker — self-contained deployment using `oxy start` to man
 | app.internalHost | string | `""` |  |
 | app.internalPort | int | `3001` |  |
 | app.port | int | `3000` |  |
-| app.replicaCount | int | `1` |  |
 | configMap.data | object | `{}` |  |
 | configMap.enabled | bool | `false` |  |
 | dind.enabled | bool | `true` |  |
@@ -89,6 +88,7 @@ Oxy with Docker-in-Docker — self-contained deployment using `oxy start` to man
 | livenessProbe.initialDelaySeconds | int | `60` |  |
 | livenessProbe.periodSeconds | int | `30` |  |
 | livenessProbe.timeoutSeconds | int | `10` |  |
+| minReadySeconds | int | `0` |  |
 | name | string | `"oxy-start"` |  |
 | nameOverride | string | `""` |  |
 | nodeSelector | string | `nil` |  |
@@ -130,6 +130,11 @@ Oxy with Docker-in-Docker — self-contained deployment using `oxy start` to man
 | sshKey.knownHosts | string | `""` |  |
 | sshKey.privateKey | string | `""` |  |
 | sshKey.secretName | string | `""` |  |
+| startupProbe.failureThreshold | int | `60` |  |
+| startupProbe.httpGet.path | string | `"/"` |  |
+| startupProbe.httpGet.port | int | `3000` |  |
+| startupProbe.periodSeconds | int | `10` |  |
+| startupProbe.timeoutSeconds | int | `5` |  |
 | terminationGracePeriodSeconds | int | `30` |  |
 | tolerations | string | `nil` |  |
 

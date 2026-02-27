@@ -27,7 +27,10 @@ metadata:
     version: v1
 spec:
   serviceName: {{ include "oxy-app.fullname" . }}-headless
-  replicas: {{ .Values.app.replicaCount }}
+  replicas: 1
+  {{- if gt (int (.Values.minReadySeconds | default 0)) 0 }}
+  minReadySeconds: {{ .Values.minReadySeconds }}
+  {{- end }}
   updateStrategy:
     type: RollingUpdate
     rollingUpdate:
@@ -424,6 +427,12 @@ spec:
             {{- end }}
 
           # Health Checks
+          {{- if or .Values.gitSync.enabled .Values.semanticEngine.enabled }}
+          {{- with .Values.startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- end }}
           {{- with .Values.livenessProbe }}
           livenessProbe:
             {{- toYaml . | nindent 12 }}

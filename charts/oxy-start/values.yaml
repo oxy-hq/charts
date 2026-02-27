@@ -9,7 +9,6 @@ app:
   image: ghcr.io/oxy-hq/oxy
   imageTag: ""
   port: 3000
-  replicaCount: 1
   imagePullPolicy: IfNotPresent
   # Override the container command. When empty, the chart runs:
   #   oxy start [--enterprise] && oxy serve [--cloud]
@@ -135,14 +134,37 @@ readinessProbe:
   timeoutSeconds: 5
   failureThreshold: 5
 
+# startupProbe is automatically applied when dind is enabled.
+# Docker daemon initialization + `oxy start` (image pulls, PostgreSQL/ClickHouse container
+# startup) can take several minutes, especially on first run or with --enterprise mode.
+# Total default budget: 60 × 10s = 10 minutes. Increase failureThreshold for slow clusters
+# or enterprise mode where more images must be pulled.
+startupProbe:
+  httpGet:
+    path: /
+    port: 3000
+  failureThreshold: 60
+  periodSeconds: 10
+  timeoutSeconds: 5
+
 # Lifecycle hooks
 lifecycle:
   preStop:
     exec:
+      # For zero-downtime deployments, increase this sleep to match your load balancer's
+      # connection-draining timeout (typically 15–30s). This gives the LB time to
+      # deregister the pod before connections are terminated.
       command: ["sleep", "5"]
 
 # Termination grace period (should be > preStop sleep + app shutdown time)
 terminationGracePeriodSeconds: 30
+
+# minReadySeconds: seconds a newly created Pod must be ready before the rolling update
+# is considered complete. Increase to 10–30s to confirm the new pod is truly healthy.
+# Note: with a single-replica StatefulSet + ReadWriteOnce PVC the new pod cannot start
+# until the old pod releases the PVC, so a brief gap is unavoidable. Minimize it by
+# increasing the preStop sleep and terminationGracePeriodSeconds above.
+minReadySeconds: 0
 
 # Security context
 securityContext:
