@@ -19,14 +19,6 @@ app:
   internalPort: 3001
   internalHost: ""  # Set to "0.0.0.0" to enable internal API on all interfaces
 
-# Semantic Engine configuration
-semanticEngine:
-  enabled: false
-  image: ghcr.io/oxy-hq/oxy-semantic-engine
-  # imageTag defaults to app.imageTag if not specified
-  imageTag: ""
-  imagePullPolicy: IfNotPresent
-
 # Ingress configuration
 # Enable and configure Kubernetes Ingress for the application.
 ingress:
@@ -137,10 +129,10 @@ readinessProbe:
   timeoutSeconds: 5
   failureThreshold: 3
 
-# startupProbe is automatically applied when gitSync or semanticEngine is enabled.
+# startupProbe is automatically applied when gitSync is enabled.
 # Provides a longer startup window (failureThreshold × periodSeconds seconds total)
 # before liveness/readiness probes begin — preventing premature restarts during
-# git clone completion or semantic engine initialization.
+# git clone completion.
 # Total default budget: 30 × 10s = 5 minutes.
 startupProbe:
   httpGet:

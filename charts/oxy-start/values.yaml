@@ -42,7 +42,7 @@ dind:
 # inside the DinD sidecar via Docker socket (unix:///var/run/docker.sock)
 # Note: DinD needs ~10-15s to fully initialize before oxy start can pull images and create containers
 oxyStart:
-  # Run oxy start --enterprise (adds ClickHouse, OTel Collector, Cube.js)
+  # Run oxy start --enterprise (adds ClickHouse, OTel Collector)
   enterprise: false
   # Run oxy start --clean on every pod start (removes existing containers/volumes first)
   clean: false

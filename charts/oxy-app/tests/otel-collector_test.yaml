@@ -424,28 +424,23 @@ tests:
   # Integration with Other Sidecars
   # =======================
 
-  - it: should work with semantic-engine and otel-collector together
+  - it: should work with git-sync and otel-collector together
     template: statefulset.yaml
     set:
       gitSync:
         enabled: true
         repository: "git@github.com:example/repo.git"
-      semanticEngine:
-        enabled: true
       otelCollector:
         enabled: true
     asserts:
       - lengthEqual:
           path: spec.template.spec.containers
-          count: 3
+          count: 2
       - equal:
           path: spec.template.spec.containers[0].name
           value: oxy-app
       - equal:
           path: spec.template.spec.containers[1].name
-          value: semantic-engine
-      - equal:
-          path: spec.template.spec.containers[2].name
           value: otel-collector
 
   - it: should work with otel-collector and extraSidecars
