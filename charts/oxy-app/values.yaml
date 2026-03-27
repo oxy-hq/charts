@@ -17,7 +17,7 @@ app:
   # The internal API serves the same routes with authentication bypassed (auto-authenticated as internal user)
   # Leave internalHost empty to disable the internal API
   internalPort: 3001
-  internalHost: "" # Set to "0.0.0.0" to enable internal API on all interfaces
+  internalHost: ""  # Set to "0.0.0.0" to enable internal API on all interfaces
 
 # Ingress configuration
 # Enable and configure Kubernetes Ingress for the application.
@@ -63,7 +63,7 @@ configMap:
 # Service Account for IRSA
 serviceAccount:
   create: true
-  name: "" # If empty, will auto-generate using chart name
+  name: ""  # If empty, will auto-generate using chart name
   annotations: {}
   # Example: eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/oxy-app-role
 
@@ -198,9 +198,9 @@ externalSecrets:
 # Use `sshKey.secretName` to point to an existing Secret in production,
 # or provide `sshKey.privateKey` (inline) for development/testing only.
 sshKey:
-  secretName: "" # If empty, defaults to git.sshSecretName
-  privateKey: "" # Inline private SSH key (DO NOT commit to VCS)
-  knownHosts: "" # Optional known_hosts content (multiline)
+  secretName: ""  # If empty, defaults to git.sshSecretName
+  privateKey: ""  # Inline private SSH key (DO NOT commit to VCS)
+  knownHosts: ""  # Optional known_hosts content (multiline)
 
 # Git init container configuration — performs a shallow clone on pod start
 git:
@@ -218,10 +218,10 @@ git:
   sshSecretName: oxy-git-ssh
   # GitHub App credentials for HTTPS cloning
   githubApp:
-    secretName: "" # Optional: existing secret name containing GitHub App data
-    privateKey: "" # PEM private key contents for GitHub App (DO NOT commit in production)
-    applicationId: "" # GitHub App Application ID
-    installationId: "" # Installation ID for GitHub App auth
+    secretName: ""  # Optional: existing secret name containing GitHub App data
+    privateKey: ""  # PEM private key contents for GitHub App (DO NOT commit in production)
+    applicationId: ""  # GitHub App Application ID
+    installationId: ""  # Installation ID for GitHub App auth
     privateKeyKey: "github_app_private_key"
     applicationIdKey: "github_app_application_id"
     installationIdKey: "github_app_installation_id"
