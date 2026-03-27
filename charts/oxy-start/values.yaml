@@ -180,23 +180,27 @@ externalSecrets:
     name: ""
     kind: ""
 
-# SSH key configuration for git-sync
+# SSH key configuration for git
 sshKey:
   secretName: ""
   privateKey: ""
   knownHosts: ""
 
-# Git sync configuration
-gitSync:
-  period: 15s
+# Git init container configuration — performs a shallow clone on pod start
+git:
+  enabled: false
   repository: ""
   branch: main
-  sshSecretName: oxy-git-ssh
-  enabled: false
-  root: ""
-  link: ""
+  # Directory name inside persistence.mountPath to clone into
+  cloneDir: "repo"
+  # Optional subdirectory within cloneDir to use as the working directory
   workingDir: ""
+  image: alpine/git
+  imageTag: "latest"
   imagePullPolicy: IfNotPresent
+  # Default secret name used when sshKey.secretName is not set
+  sshSecretName: oxy-git-ssh
+  # GitHub App credentials for HTTPS cloning
   githubApp:
     secretName: ""
     privateKey: ""
@@ -206,7 +210,7 @@ gitSync:
     applicationIdKey: "github_app_application_id"
     installationIdKey: "github_app_installation_id"
 
-# HTTP authentication for git-sync
+# HTTP authentication for git cloning
 httpAuth:
   username: ""
   password: ""

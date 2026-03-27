@@ -11,7 +11,7 @@ A production-ready Helm chart for deploying the Oxy application on Kubernetes. T
 **Key features:**
 
 - PostgreSQL and ClickHouse database support
-- Git sync capabilities for configuration management
+- Git clone init container for configuration management
 - HTTP authentication and SSH secrets
 - OpenTelemetry collector integration
 - Ingress and service configuration

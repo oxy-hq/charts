@@ -10,14 +10,14 @@ app:
   port: 3000
   imagePullPolicy: IfNotPresent
   # Optional override for the container command. When empty, the chart will
-  # use the default shell wrapper that runs `oxy serve` (readonly if gitSync disabled).
+  # use the default shell wrapper that runs `oxy serve` (readonly if git disabled).
   # Example: ["/app/bin/oxy", "serve"]
   command: []
   # Internal API port configuration (optional)
   # The internal API serves the same routes with authentication bypassed (auto-authenticated as internal user)
   # Leave internalHost empty to disable the internal API
   internalPort: 3001
-  internalHost: ""  # Set to "0.0.0.0" to enable internal API on all interfaces
+  internalHost: "" # Set to "0.0.0.0" to enable internal API on all interfaces
 
 # Ingress configuration
 # Enable and configure Kubernetes Ingress for the application.
@@ -63,7 +63,7 @@ configMap:
 # Service Account for IRSA
 serviceAccount:
   create: true
-  name: ""  # If empty, will auto-generate using chart name
+  name: "" # If empty, will auto-generate using chart name
   annotations: {}
   # Example: eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/oxy-app-role
 
@@ -129,7 +129,7 @@ readinessProbe:
   timeoutSeconds: 5
   failureThreshold: 3
 
-# startupProbe is automatically applied when gitSync is enabled.
+# startupProbe is automatically applied when git or semanticEngine is enabled.
 # Provides a longer startup window (failureThreshold × periodSeconds seconds total)
 # before liveness/readiness probes begin — preventing premature restarts during
 # git clone completion.
@@ -203,65 +203,41 @@ externalSecrets:
 # Use `sshKey.secretName` to point to an existing Secret in production,
 # or provide `sshKey.privateKey` (inline) for development/testing only.
 sshKey:
-  secretName: ""  # If empty, defaults to gitSync.sshSecretName
-  privateKey: ""  # Inline private SSH key (DO NOT commit to VCS)
-  knownHosts: ""  # Optional known_hosts content (multiline)
+  secretName: "" # If empty, defaults to git.sshSecretName
+  privateKey: "" # Inline private SSH key (DO NOT commit to VCS)
+  knownHosts: "" # Optional known_hosts content (multiline)
 
-# Git sync sidecar configuration
-gitSync:
-  period: 15s
+# Git init container configuration — performs a shallow clone on pod start
+git:
+  enabled: false
   repository: ""
   branch: main
-  sshSecretName: oxy-git-ssh
-  enabled: false
-  # IMPORTANT: Per git-sync documentation, when using persistent volumes at filesystem root,
-  # the --root must be a SUB-DIRECTORY of the mount point to avoid conflicts with filesystem
-  # metadata like 'lost+found'. This value should be a DIRECTORY NAME (not an absolute path)
-  # that will be appended to persistence.mountPath. Defaults to "git" -> /workspace/git
-  root: ""
-  # Link directory name (not absolute path) for the symlink pointing to the latest synced
-  # revision. Will be appended to persistence.mountPath. Defaults to "current" -> /workspace/current
-  link: ""
-  # Working directory subdirectory (optional). When set, this subdirectory path will be
-  # appended to the git link directory to set as the container's workingDir.
-  # For example, if workingDir: "backend", the final working directory will be:
-  # /workspace/current/backend (assuming default link and mountPath values)
-  # Leave empty to use the root of the cloned repository.
+  # Directory name inside persistence.mountPath to clone into
+  cloneDir: "repo"
+  # Optional subdirectory within cloneDir to use as the working directory
   workingDir: ""
-  # Image pull policy for the git-sync init container. Valid values: Always, IfNotPresent, Never
+  image: alpine/git
+  imageTag: "latest"
   imagePullPolicy: IfNotPresent
-
-  # GitHub App authentication (optional)
-  # REQUIRED fields when using GitHub App authentication:
-  #   - privateKey: GitHub App PEM private key
-  #   - applicationId: GitHub App Application ID
-  #   - installationId: GitHub App Installation ID
-  #
-  # The private key file is passed via --github-app-private-key-file argument.
-  # Environment variables set: GITSYNC_GITHUB_APP_APPLICATION_ID, GITSYNC_GITHUB_APP_INSTALLATION_ID
+  # Default secret name used when sshKey.secretName is not set
+  sshSecretName: oxy-git-ssh
+  # GitHub App credentials for HTTPS cloning
   githubApp:
-    secretName: ""  # Optional: existing secret name containing GitHub App data (if set, inline values are ignored)
-    # Required fields (when not using secretName):
-    privateKey: ""  # REQUIRED: PEM private key contents for GitHub App (DO NOT commit in production)
-    applicationId: ""  # REQUIRED: GitHub App Application ID
-    installationId: ""  # REQUIRED: Installation ID for GitHub App auth
-    # Secret key names (used when creating secrets or reading from existing secrets):
-    privateKeyKey: "github_app_private_key"  # key name in secret for private key
-    applicationIdKey: "github_app_application_id"  # key name in secret for app id
-    installationIdKey: "github_app_installation_id"  # key name in secret for installation id
+    secretName: "" # Optional: existing secret name containing GitHub App data
+    privateKey: "" # PEM private key contents for GitHub App (DO NOT commit in production)
+    applicationId: "" # GitHub App Application ID
+    installationId: "" # Installation ID for GitHub App auth
+    privateKeyKey: "github_app_private_key"
+    applicationIdKey: "github_app_application_id"
+    installationIdKey: "github_app_installation_id"
 
-# HTTP authentication for git-sync (for HTTPS git repositories)
-# Use this when cloning from HTTPS URLs that require username/password authentication
+# HTTP authentication for git cloning (for HTTPS git repositories)
 httpAuth:
-  # Username for HTTP authentication
   username: ""
   # Inline password (for development/testing only - NOT RECOMMENDED for production)
-  # For production, use secretName to reference an existing secret
   password: ""
   # Reference to an existing Kubernetes secret containing the password
-  # The secret should have a key named 'password' (or specify passwordKey)
   secretName: ""
-  # Key name in the secret that contains the password (defaults to 'password')
   passwordKey: "password"
 
 database:

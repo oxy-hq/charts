@@ -1,20 +1,10 @@
 {{/*
-Define git sync paths
-Per git-sync documentation: when using persistent volumes (especially those at filesystem root),
-the --root flag must point to a subdirectory of the volume mount, NOT the mount point itself.
-This avoids conflicts with filesystem metadata like 'lost+found' in ext2/3/4 filesystems,
-which can cause git-sync to fail or leave directories empty.
-
-We ensure this by treating gitSync.root and gitSync.link as relative directory names that
-are always appended to the persistence.mountPath, preventing accidental misconfiguration.
+Define git clone paths
 */}}
-{{- $gitRootDir := default "git" .Values.gitSync.root -}}
-{{- $gitLinkDir := default "current" .Values.gitSync.link -}}
-{{- $gitRoot := printf "%s/%s" .Values.persistence.mountPath $gitRootDir -}}
-{{- $gitLink := printf "%s/%s" .Values.persistence.mountPath $gitLinkDir -}}
-{{- $workingDir := $gitLink -}}
-{{- if and .Values.gitSync.workingDir (ne .Values.gitSync.workingDir "") -}}
-  {{- $workingDir = printf "%s/%s" $gitLink .Values.gitSync.workingDir -}}
+{{- $gitCloneDir := printf "%s/%s" .Values.persistence.mountPath (default "repo" .Values.git.cloneDir) -}}
+{{- $workingDir := $gitCloneDir -}}
+{{- if and .Values.git.workingDir (ne .Values.git.workingDir "") -}}
+  {{- $workingDir = printf "%s/%s" $gitCloneDir .Values.git.workingDir -}}
 {{- end -}}
 
 apiVersion: apps/v1
@@ -56,7 +46,7 @@ spec:
       securityContext:
         fsGroup: {{ .Values.securityContext.fsGroup }}
 
-      {{- if or .Values.gitSync.enabled .Values.database.postgres.enabled .Values.database.clickhouse.enabled .Values.extraInitContainers }}
+      {{- if or .Values.git.enabled .Values.database.postgres.enabled .Values.database.clickhouse.enabled .Values.extraInitContainers }}
       initContainers:
         {{- if .Values.database.postgres.enabled }}
         # Wait for PostgreSQL to be ready
@@ -76,9 +66,9 @@ spec:
               PG_PORT="{{ .Values.database.postgres.port }}"
               MAX_RETRIES=60
               RETRY_COUNT=0
-              
+
               echo "Target: $PG_HOST:$PG_PORT"
-              
+
               # First, check DNS resolution
               echo "Checking DNS resolution..."
               while [ $RETRY_COUNT -lt 10 ]; do
@@ -90,10 +80,10 @@ spec:
                 RETRY_COUNT=$((RETRY_COUNT + 1))
                 sleep 2
               done
-              
+
               # Reset counter for pg_isready check
               RETRY_COUNT=0
-              
+
               # Now check PostgreSQL readiness
               while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
                 if pg_isready -h "$PG_HOST" -p "$PG_PORT" -t 5; then
@@ -104,7 +94,7 @@ spec:
                 RETRY_COUNT=$((RETRY_COUNT + 1))
                 sleep 5
               done
-              
+
               echo "ERROR: PostgreSQL did not become ready within the timeout period"
               exit 1
         {{- end }}
@@ -158,77 +148,105 @@ spec:
               echo "ERROR: ClickHouse did not become ready within the timeout period"
               exit 1
         {{- end }}
-        {{- if .Values.gitSync.enabled }}
-        # Git Clone Init Container
-        # One-time secure clone using kubernetes/git-sync. This creates a
-        # linked copy at /workspace/current that the long-running git-sync
-        # sidecar will keep up-to-date.
+        {{- if .Values.git.enabled }}
+        # Git Clone Init Container — performs a shallow clone on first run
         - name: git-clone
-          image: k8s.gcr.io/git-sync/git-sync:v4.4.3
-          imagePullPolicy: {{ .Values.gitSync.imagePullPolicy }}
-          args:
-            - --repo={{ .Values.gitSync.repository }}
-            - --branch={{ .Values.gitSync.branch }}
-            - --root={{ $gitRoot }}
-            - --link={{ $gitLink }}
-            - --one-time=true
-            - --depth=1
-            {{- if .Values.httpAuth.username }}
-            {{- /* HTTP authentication */}}
-            - --username={{ .Values.httpAuth.username }}
-            - --password-file=/etc/git-auth/password
-            {{- else if or .Values.gitSync.githubApp.secretName (and .Values.gitSync.githubApp.privateKey .Values.gitSync.githubApp.applicationId .Values.gitSync.githubApp.installationId) }}
-            {{- /* GitHub App authentication: use private key file arg + env vars for IDs and base URL */}}
-            - --github-app-private-key-file=/etc/github-app/{{ .Values.gitSync.githubApp.privateKeyKey }}
-            {{- else if .Values.sshKey.privateKey }}
-            - --ssh-key-file=/etc/git-secret/ssh
-            {{- if .Values.sshKey.knownHosts }}
-            - --ssh-known-hosts-file=/etc/git-secret/known_hosts
-            {{- end }}
-            {{- else }}
-            {{- /* No auth provided; rely on externally managed secrets or disabled gitSync */}}
-            {{- end }}
-            - --max-failures=5
-            - --verbose=1
-            - --one-time
-            - --git-gc=off
+          image: "{{ .Values.git.image }}:{{ .Values.git.imageTag }}"
+          imagePullPolicy: {{ .Values.git.imagePullPolicy }}
           env:
-            {{- if .Values.gitSync.githubApp.secretName }}
-            - name: GITSYNC_GITHUB_APP_APPLICATION_ID
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.gitSync.githubApp.secretName }}
-                  key: {{ .Values.gitSync.githubApp.applicationIdKey }}
-            - name: GITSYNC_GITHUB_APP_INSTALLATION_ID
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.gitSync.githubApp.secretName }}
-                  key: {{ .Values.gitSync.githubApp.installationIdKey }}
-            {{- else }}
-            {{- if .Values.gitSync.githubApp.applicationId }}
-            - name: GITSYNC_GITHUB_APP_APPLICATION_ID
-              value: {{ .Values.gitSync.githubApp.applicationId | quote }}
+            - name: GIT_REPO
+              value: {{ .Values.git.repository | quote }}
+            - name: GIT_BRANCH
+              value: {{ .Values.git.branch | quote }}
+            - name: CLONE_DIR
+              value: {{ $gitCloneDir | quote }}
+            {{- if .Values.httpAuth.username }}
+            - name: GIT_USERNAME
+              value: {{ .Values.httpAuth.username | quote }}
             {{- end }}
-            {{- if .Values.gitSync.githubApp.installationId }}
-            - name: GITSYNC_GITHUB_APP_INSTALLATION_ID
-              value: {{ .Values.gitSync.githubApp.installationId | quote }}
-            {{- end }}
-            {{- end }}
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+
+              if [ -d "$CLONE_DIR/.git" ]; then
+                echo "Repository already exists at $CLONE_DIR, skipping clone"
+                exit 0
+              fi
+
+              mkdir -p "$CLONE_DIR"
+
+              {{- if or .Values.git.githubApp.secretName (and .Values.git.githubApp.privateKey .Values.git.githubApp.applicationId .Values.git.githubApp.installationId) }}
+              # GitHub App authentication — generate an installation access token
+              apk add --no-cache curl openssl > /dev/null
+
+              APP_ID=$(cat /etc/github-app/{{ .Values.git.githubApp.applicationIdKey }})
+              INSTALL_ID=$(cat /etc/github-app/{{ .Values.git.githubApp.installationIdKey }})
+
+              NOW=$(date +%s)
+              IAT=$((NOW - 60))
+              EXP=$((NOW + 600))
+              HEADER=$(printf '{"alg":"RS256","typ":"JWT"}' | openssl base64 -A | tr -d '=' | tr '/+' '_-')
+              PAYLOAD=$(printf '{"iat":%d,"exp":%d,"iss":"%s"}' "$IAT" "$EXP" "$APP_ID" | openssl base64 -A | tr -d '=' | tr '/+' '_-')
+              SIG=$(printf '%s.%s' "$HEADER" "$PAYLOAD" | openssl dgst -sha256 -sign /etc/github-app/{{ .Values.git.githubApp.privateKeyKey }} -binary | openssl base64 -A | tr -d '=' | tr '/+' '_-')
+              JWT="${HEADER}.${PAYLOAD}.${SIG}"
+
+              RESPONSE=$(curl -s -X POST \
+                "https://api.github.com/app/installations/${INSTALL_ID}/access_tokens" \
+                -H "Authorization: Bearer $JWT" \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28")
+
+              TOKEN=$(printf '%s' "$RESPONSE" | sed -n 's/.*"token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+
+              if [ -z "$TOKEN" ]; then
+                echo "Error: failed to obtain GitHub App installation token"
+                echo "GitHub API response: $RESPONSE"
+                exit 1
+              fi
+
+              REPO_URL=$(echo "$GIT_REPO" | sed "s|https://github.com/|https://x-access-token:${TOKEN}@github.com/|")
+              git clone --branch "$GIT_BRANCH" --depth 1 "$REPO_URL" "$CLONE_DIR"
+
+              {{- else if .Values.httpAuth.username }}
+              # HTTP authentication
+              GIT_PASSWORD=$(cat /etc/git-auth/password)
+              REPO_URL=$(echo "$GIT_REPO" | sed "s|https://|https://${GIT_USERNAME}:${GIT_PASSWORD}@|")
+              git clone --branch "$GIT_BRANCH" --depth 1 "$REPO_URL" "$CLONE_DIR"
+
+              {{- else if or .Values.sshKey.privateKey .Values.sshKey.secretName }}
+              # SSH key authentication
+              mkdir -p /root/.ssh
+              chmod 700 /root/.ssh
+              cp /etc/git-secret/ssh /root/.ssh/id_rsa
+              chmod 600 /root/.ssh/id_rsa
+              if [ -f /etc/git-secret/known_hosts ]; then
+                cp /etc/git-secret/known_hosts /root/.ssh/known_hosts
+                chmod 644 /root/.ssh/known_hosts
+              else
+                touch /root/.ssh/known_hosts
+                HOSTNAME=$(echo "$GIT_REPO" | sed 's|.*@\([^:/]*\)[:/].*|\1|')
+                ssh-keyscan -H "$HOSTNAME" >> /root/.ssh/known_hosts 2>/dev/null || true
+              fi
+              git clone --branch "$GIT_BRANCH" --depth 1 "$GIT_REPO" "$CLONE_DIR"
+
+              {{- else }}
+              # No authentication (public repository)
+              git clone --branch "$GIT_BRANCH" --depth 1 "$GIT_REPO" "$CLONE_DIR"
+              {{- end }}
           volumeMounts:
             - name: workspace
               mountPath: {{ .Values.persistence.mountPath }}
             {{- if .Values.httpAuth.username }}
-            {{- /* HTTP authentication */}}
             - name: git-http-auth
               mountPath: /etc/git-auth
               readOnly: true
-            {{- else if or .Values.gitSync.githubApp.secretName (and .Values.gitSync.githubApp.privateKey .Values.gitSync.githubApp.applicationId .Values.gitSync.githubApp.installationId) }}
-            {{- /* Mount GitHub App secret (either user-provided or chart-created) */}}
+            {{- else if or .Values.git.githubApp.secretName (and .Values.git.githubApp.privateKey .Values.git.githubApp.applicationId .Values.git.githubApp.installationId) }}
             - name: github-app-secret
               mountPath: /etc/github-app
               readOnly: true
-            {{- else if .Values.sshKey.privateKey }}
-            {{- /* Single SSH key mount */}}
+            {{- else if or .Values.sshKey.privateKey .Values.sshKey.secretName }}
             - name: git-ssh
               mountPath: /etc/git-secret
               readOnly: true
@@ -255,9 +273,9 @@ spec:
             - sh
             - -c
             - |
-              exec oxy serve{{- if not .Values.gitSync.enabled }} --cloud{{- end }}{{- if .Values.app.internalHost }} --internal-host {{ .Values.app.internalHost }} --internal-port {{ .Values.app.internalPort }}{{- end }}
+              exec oxy serve{{- if not .Values.git.enabled }} --cloud{{- end }}{{- if .Values.app.internalHost }} --internal-host {{ .Values.app.internalHost }} --internal-port {{ .Values.app.internalPort }}{{- end }}
           {{- end }}
-          {{- if .Values.gitSync.enabled }}
+          {{- if .Values.git.enabled }}
           workingDir: {{ $workingDir }}
           {{- end }}
           ports:
@@ -295,11 +313,11 @@ spec:
               value: {{ .Values.database.external.connectionString | quote }}
             {{- else if .Values.database.external.enabled }}
             - name: OXY_DATABASE_URL
-              value: {{ printf "postgresql://%s:%s@%s:%v/%s" 
-                .Values.database.external.user 
-                .Values.database.external.password 
-                .Values.database.external.host 
-                .Values.database.external.port 
+              value: {{ printf "postgresql://%s:%s@%s:%v/%s"
+                .Values.database.external.user
+                .Values.database.external.password
+                .Values.database.external.host
+                .Values.database.external.port
                 .Values.database.external.database | quote }}
             {{- else if .Values.database.postgres.enabled }}
             - name: OXY_DATABASE_URL
@@ -327,6 +345,12 @@ spec:
               value: {{ $value | quote }}
             {{- end }}
             {{- end }}
+            {{- end }}
+
+            # Semantic Engine API URL (when git and semanticEngine are enabled)
+            {{- if and .Values.git.enabled .Values.semanticEngine.enabled }}
+            - name: CUBEJS_API_URL
+              value: "http://localhost:4000"
             {{- end }}
 
             # ClickHouse Configuration
@@ -421,7 +445,7 @@ spec:
             {{- end }}
 
           # Health Checks
-          {{- if .Values.gitSync.enabled }}
+          {{- if .Values.git.enabled }}
           {{- with .Values.startupProbe }}
           startupProbe:
             {{- toYaml . | nindent 12 }}
@@ -439,6 +463,20 @@ spec:
           lifecycle:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+
+        {{- if and .Values.git.enabled .Values.semanticEngine.enabled }}
+        - name: semantic-engine
+          image: "{{ .Values.semanticEngine.image }}:{{ default (default .Chart.AppVersion .Values.app.imageTag) .Values.semanticEngine.imageTag }}"
+          imagePullPolicy: {{ .Values.semanticEngine.imagePullPolicy }}
+          workingDir: {{ $workingDir }}
+          ports:
+            - containerPort: 4000
+              protocol: TCP
+              name: cubejs-port
+          volumeMounts:
+            - name: workspace
+              mountPath: {{ .Values.persistence.mountPath }}
+        {{- end }}
 
         {{- if .Values.otelCollector.enabled }}
         - name: otel-collector
@@ -506,7 +544,7 @@ spec:
 
       # Volume Definitions
       volumes:
-        {{- if .Values.gitSync.enabled }}
+        {{- if .Values.git.enabled }}
         {{- if .Values.httpAuth.username }}
         {{- /* HTTP authentication secret */}}
         {{- $httpAuthSecretName := "" }}
@@ -523,12 +561,11 @@ spec:
             items:
               - key: {{ .Values.httpAuth.passwordKey }}
                 path: password
-        {{- else if or .Values.gitSync.githubApp.secretName (and .Values.gitSync.githubApp.privateKey .Values.gitSync.githubApp.applicationId .Values.gitSync.githubApp.installationId) }}
-        {{- /* GitHub App secret: if user provided a secretName, mount entire secret; otherwise chart-created secret mounts only the private key file */}}
-        {{- if .Values.gitSync.githubApp.secretName }}
+        {{- else if or .Values.git.githubApp.secretName (and .Values.git.githubApp.privateKey .Values.git.githubApp.applicationId .Values.git.githubApp.installationId) }}
+        {{- if .Values.git.githubApp.secretName }}
         - name: github-app-secret
           secret:
-            secretName: {{ .Values.gitSync.githubApp.secretName }}
+            secretName: {{ .Values.git.githubApp.secretName }}
             defaultMode: 0400
             optional: false
         {{- else }}
@@ -537,14 +574,11 @@ spec:
             secretName: {{ printf "%s-github-app" (include "oxy-app.fullname" $) }}
             defaultMode: 0400
             optional: false
-            items:
-              - key: {{ .Values.gitSync.githubApp.privateKeyKey }}
-                path: {{ .Values.gitSync.githubApp.privateKeyKey }}
         {{- end }}
-        {{- else }}
+        {{- else if or .Values.sshKey.privateKey .Values.sshKey.secretName }}
         - name: git-ssh
           secret:
-            secretName: {{ default .Values.gitSync.sshSecretName .Values.sshKey.secretName }}
+            secretName: {{ default .Values.git.sshSecretName .Values.sshKey.secretName }}
             defaultMode: 0400
             optional: false
         {{- end }}
