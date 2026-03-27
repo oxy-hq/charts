@@ -1,26 +1,24 @@
-# Authentication methods for git-sync
+# Authentication methods for git clone
 
-This document explains the supported authentication methods for git operations in the oxy-app Helm chart's git-sync integration. It covers HTTPS/HTTP authentication (username + password / token), SSH keys (single-key workflow), and GitHub App authentication. For each method the doc explains inline vs secret-backed configuration, precedence rules, examples, security best practices, and troubleshooting.
+This document explains the supported authentication methods for git operations in the oxy-app Helm chart's git init container. It covers HTTPS/HTTP authentication (username + password / token), SSH keys, and GitHub App authentication. For each method the doc explains inline vs secret-backed configuration, precedence rules, examples, and security best practices.
 
 ## Overview
 
-The chart supports three main authentication methods for git-sync:
+The chart supports three authentication methods for cloning a git repository via the `git-clone` init container:
 
-- HTTP/HTTPS authentication (`httpAuth`) — use username + password (or personal access token) for HTTPS repository URLs.
-- SSH key authentication (`sshKey`) — single SSH private key matched with known_hosts for SSH repository URLs.
-- GitHub App authentication (`gitSync.githubApp`) — use a GitHub App private key with application/installation IDs for GitHub App auth (works with public GitHub and GitHub Enterprise).
+- **HTTP/HTTPS authentication** (`httpAuth`) — use username + password (or personal access token) for HTTPS repository URLs.
+- **SSH key authentication** (`sshKey`) — single SSH private key for SSH repository URLs.
+- **GitHub App authentication** (`git.githubApp`) — generate an installation access token from a GitHub App private key at clone time.
 
 Choose the method that best fits your environment. The chart supports both inline (chart-created secret) and secret-backed (user-provided secret) workflows for sensitive data.
 
 ## Priority
 
-The chart applies the following precedence when multiple authentication methods are present:
+The chart applies the following precedence when multiple authentication methods are configured:
 
-1. HTTP auth (`httpAuth`) takes highest precedence when `httpAuth.username` is set.
-2. GitHub App (`gitSync.githubApp`) is used when configured (private key or secretName present) for HTTPS GitHub repositories.
-3. SSH key (`sshKey`) is used when neither HTTP auth nor GitHub App are configured and an SSH private key is provided.
-
-If HTTP auth is configured it will be used and SSH keys are ignored.
+1. **HTTP auth** (`httpAuth.username`) — takes highest precedence.
+2. **GitHub App** (`git.githubApp`) — used when a private key or secretName is present.
+3. **SSH key** (`sshKey`) — used when neither HTTP auth nor GitHub App are configured.
 
 ## HTTP Authentication
 
@@ -29,7 +27,7 @@ Use HTTP(S) authentication when cloning via HTTPS URLs.
 Inline (chart creates secret, for development/testing):
 
 ```yaml
-gitSync:
+git:
   enabled: true
   repository: https://github.com/myorg/private-repo.git
   branch: main
@@ -47,7 +45,7 @@ kubectl create secret generic git-credentials \
 ```
 
 ```yaml
-gitSync:
+git:
   enabled: true
   repository: https://github.com/myorg/private-repo.git
   branch: main
@@ -60,46 +58,45 @@ httpAuth:
 
 How it works:
 
-- If `httpAuth.password` is present and `httpAuth.secretName` is empty the chart will create a secret `<release-name>-http-auth` and mount `/etc/git-auth/password` in the init-clone and git-sync sidecar.
-
-- If `httpAuth.secretName` is provided the chart mounts the provided secret and reads the passwordKey.
-
-- Flags passed to git-sync: `--username=<username> --password-file=/etc/git-auth/password`.
+- If `httpAuth.password` is present and `httpAuth.secretName` is empty, the chart creates a secret `<release-name>-http-auth` and mounts `/etc/git-auth/password` in the init container.
+- If `httpAuth.secretName` is provided, the chart mounts the provided secret and reads the `passwordKey`.
+- The init container embeds the credentials directly in the clone URL.
 
 Security notes:
 
 - Never commit inline passwords in `values.yaml` for production. Use external secrets or pre-created Kubernetes Secrets.
-
 - Use tokens with least privilege and rotate regularly.
 
-## SSH Key Authentication (single key)
-
-This chart supports a single SSH key via `sshKey` (the plural form `sshKeys` is not used anymore).
+## SSH Key Authentication
 
 Inline (chart creates a secret):
 
 ```yaml
-gitSync:
+git:
   enabled: true
   repository: git@github.com:myorg/private-repo.git
 
 sshKey:
-  privateKey: "|\n-----BEGIN OPENSSH PRIVATE KEY-----\n..." # only for testing
+  privateKey: |
+    -----BEGIN OPENSSH PRIVATE KEY-----
+    ...  # only for testing
 ```
 
 Secret-backed (recommended):
 
-Create a secret containing your private key (and optionally known_hosts):
+Create a secret containing your private key and optionally known_hosts:
 
 ```bash
 kubectl create secret generic my-git-ssh \
-  --from-file=ssh=./id_rsa --from-file=known_hosts=./known_hosts -n my-namespace
+  --from-file=ssh=./id_rsa \
+  --from-file=known_hosts=./known_hosts \
+  -n my-namespace
 ```
 
 Reference it in values:
 
 ```yaml
-gitSync:
+git:
   enabled: true
   repository: git@github.com:myorg/private-repo.git
   sshSecretName: my-git-ssh
@@ -110,46 +107,42 @@ sshKey:
 
 How it works:
 
-- If `sshKey.privateKey` is present and `sshKey.secretName` is empty the chart creates a secret (default name is `gitSync.sshSecretName`) and mounts `/etc/git-secret/ssh` and `/etc/git-secret/known_hosts` for the init clone and git-sync sidecar.
-
-- If `sshKey.secretName` is provided the chart mounts the provided secret.
-
-- Flags passed to git-sync: `--ssh-key-file=/etc/git-secret/ssh --ssh-known-hosts-file=/etc/git-secret/known_hosts`.
+- The init container copies the key to `/root/.ssh/id_rsa` (mode 600).
+- If `known_hosts` is present in the mounted secret, it is copied to `/root/.ssh/known_hosts`. Otherwise, `ssh-keyscan` runs against the remote host at clone time.
+- If `sshKey.privateKey` is provided inline, the chart creates a secret named `git.sshSecretName` (default: `oxy-git-ssh`).
+- If `sshKey.secretName` is provided, that secret is mounted directly and takes precedence over `git.sshSecretName`.
 
 Security notes:
 
 - Protect your private key with proper RBAC and rotation policies.
-
 - Prefer using external secret managers for production.
 
 ## GitHub App Authentication
 
-This chart supports GitHub App authentication for git-sync using the GitHub App private key and application/installation identifiers.
+The init container generates a short-lived installation access token at clone time using the GitHub App private key, then clones via HTTPS with that token.
 
 ### Required fields
 
-When using GitHub App authentication (not using an external secret via `secretName`), you **must** provide:
+When using GitHub App authentication without an external secret, you **must** provide:
 
-- `gitSync.githubApp.privateKey` — PEM private key contents for the GitHub App
-- `gitSync.githubApp.applicationId` — GitHub App Application ID (numeric)
-- `gitSync.githubApp.installationId` — Installation ID (numeric)
+- `git.githubApp.privateKey` — PEM private key for the GitHub App
+- `git.githubApp.applicationId` — GitHub App Application ID
+- `git.githubApp.installationId` — GitHub App Installation ID
 
 ### Secret key name fields
 
-These control the key names when reading from or creating secrets:
-
-- `gitSync.githubApp.privateKeyKey` — key name inside the Secret for the private key (default: `github_app_private_key`)
-- `gitSync.githubApp.applicationIdKey` — key name in secret for app id (default: `github_app_application_id`)
-- `gitSync.githubApp.installationIdKey` — key name in secret for installation id (default: `github_app_installation_id`)
+- `git.githubApp.privateKeyKey` — key name in the Secret for the private key (default: `github_app_private_key`)
+- `git.githubApp.applicationIdKey` — key name in the Secret for the app ID (default: `github_app_application_id`)
+- `git.githubApp.installationIdKey` — key name in the Secret for the installation ID (default: `github_app_installation_id`)
 
 ### External secret
 
-- `gitSync.githubApp.secretName` — optional: name of existing Secret containing all required keys and IDs
+- `git.githubApp.secretName` — name of an existing Secret containing all required keys
 
 Inline (chart creates secret, for development/testing only):
 
 ```yaml
-gitSync:
+git:
   enabled: true
   repository: https://github.com/myorg/private-repo.git
   githubApp:
@@ -157,13 +150,11 @@ gitSync:
       -----BEGIN PRIVATE KEY-----
       ...
       -----END PRIVATE KEY-----
-    applicationId: "123"  # Required
-    installationId: "456"  # Required
+    applicationId: "123"
+    installationId: "456"
 ```
 
 Secret-backed (recommended for production):
-
-Create a secret that contains the private key and IDs. The chart expects keys as configured in `*Key` fields. Example:
 
 ```bash
 kubectl create secret generic my-github-app-secret \
@@ -173,10 +164,8 @@ kubectl create secret generic my-github-app-secret \
   -n my-namespace
 ```
 
-Then reference it in values:
-
 ```yaml
-gitSync:
+git:
   enabled: true
   repository: https://github.com/myorg/private-repo.git
   githubApp:
@@ -188,49 +177,52 @@ gitSync:
 
 How it works in the chart:
 
-- When all three required inline fields (`privateKey`, `applicationId`, and `installationId`) are provided and `secretName` is empty, the chart creates a Secret named `<release-name>-github-app` containing the required keys. The template mounts only the private key file into `/etc/github-app/<privateKeyKey>` so git-sync can use the `--github-app-private-key-file` flag.
-
-- If `gitSync.githubApp.secretName` is provided, the chart mounts the provided Secret at `/etc/github-app` (full mount, no items filter), and reads all IDs via env `valueFrom.secretKeyRef` for `GITSYNC_GITHUB_APP_APPLICATION_ID` and `GITSYNC_GITHUB_APP_INSTALLATION_ID`.
-
-- Git-sync flags used: `--github-app-private-key-file=/etc/github-app/<privateKeyKey>`. Environment variables are set for the application and installation IDs.
-
-Notes on numeric values:
-
-- When supplying numeric IDs (applicationId, installationId) via `--set` on the CLI, convert them to strings or let Helm coerce them; the chart templates coerce values to strings when creating chart-generated Secrets to avoid b64 encoding errors.
+- The init container installs `curl` and `openssl` via `apk`, then constructs a JWT from the private key.
+- It exchanges the JWT for a GitHub App installation access token via the GitHub API.
+- The token is embedded in the HTTPS clone URL as `x-access-token`.
+- When inline fields are provided, the chart creates a Secret named `<release-name>-github-app`.
+- When `secretName` is provided, the chart mounts that Secret directly.
 
 Security notes:
 
-- Prefer using externally managed Secrets (or External Secrets Operator) and reference them via `gitSync.githubApp.secretName` in production.
-
+- Prefer externally managed Secrets (or External Secrets Operator) in production.
 - Keep private key files secure and rotate them regularly.
 
 ## Examples
 
-- GitHub App inline (only for testing):
+SSH clone with external secret:
 
 ```yaml
-gitSync:
+git:
   enabled: true
-  repository: https://github.com/myorg/repo.git
-  githubApp:
-    privateKey: |-
-      -----BEGIN PRIVATE KEY-----
-      ...
-    applicationId: "123"
-    installationId: "456"
+  repository: git@github.com:myorg/repo.git
+  sshSecretName: oxy-git-ssh
+
+sshKey:
+  secretName: oxy-git-ssh
 ```
 
-- GitHub App with pre-created secret (recommended):
+GitHub App with pre-created secret (recommended):
 
 ```yaml
-gitSync:
+git:
   enabled: true
   repository: https://github.com/myorg/repo.git
   githubApp:
     secretName: my-github-app-secret
-    privateKeyKey: my_private_key
-    applicationIdKey: my_app_id
-    installationIdKey: my_install_id
+    privateKeyKey: github_app_private_key
+    applicationIdKey: github_app_application_id
+    installationIdKey: github_app_installation_id
+```
+
+Custom clone directory with subdirectory working dir:
+
+```yaml
+git:
+  enabled: true
+  repository: git@github.com:myorg/repo.git
+  cloneDir: "myrepo"       # clones into <mountPath>/myrepo
+  workingDir: "backend"    # sets workingDir to <mountPath>/myrepo/backend
 ```
 
 ## Security Best Practices
@@ -249,57 +241,27 @@ Run unit tests with:
 helm unittest charts/oxy-app
 ```
 
-Tests cover:
-
-- Secret creation from inline values
-
-- Secret reference handling
-
-- Volume mount configuration
-
-- Git-sync argument generation for HTTP, SSH, GitHub App
-
-- Priority/precedence rules
-
 ## Troubleshooting
 
-### Authentication fails
+### Clone fails
 
-Check git-sync logs:
+Check init container logs:
 
 ```bash
-kubectl logs <pod-name> -c git-sync
+kubectl logs <pod-name> -c git-clone
 ```
 
 ### Secret not found or missing keys
 
-Verify your secret exists and contains the keys expected by your configuration:
+Verify your secret exists and contains the expected keys:
 
 ```bash
 kubectl get secret <secret-name> -n <namespace> -o yaml
 kubectl get secret <secret-name> -n <namespace> -o jsonpath='{.data}' | jq
 ```
 
-If using `gitSync.githubApp.secretName`, ensure the secret contains the required keys matching the configured `*Key` fields:
+For GitHub App secrets, the following keys are required by default:
 
-- `github_app_private_key` (required)
-- `github_app_application_id` (required)
-- `github_app_installation_id` (required)
-
-## Migration notes
-
-To migrate from SSH to HTTP/GitHub App:
-To migrate from SSH to HTTP/GitHub App:
-
-1. Change `gitSync.repository` to HTTPS format.
-
-2. Add `httpAuth` or `gitSync.githubApp` configuration.
-
-3. Remove `sshKey` (if present).
-
-4. Run `helm upgrade` with your new values.
-
----
-
-If you want this doc copied or referenced from `docs/http-auth.md` or surfaced in another user-facing location (README or top-level docs), tell me where and I will update those files or add cross-links.
-
+- `github_app_private_key`
+- `github_app_application_id`
+- `github_app_installation_id`

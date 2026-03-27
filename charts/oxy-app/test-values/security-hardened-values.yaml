@@ -82,7 +82,7 @@ readinessProbe:
   failureThreshold: 3
 
 # Disable features for security baseline
-gitSync:
+git:
   enabled: false
 
 database:

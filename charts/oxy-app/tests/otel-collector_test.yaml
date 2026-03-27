@@ -427,7 +427,7 @@ tests:
   - it: should work with semantic-engine and otel-collector together
     template: statefulset.yaml
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
       semanticEngine:
