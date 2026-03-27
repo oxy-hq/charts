@@ -231,6 +231,13 @@ git:
     applicationIdKey: "github_app_application_id"
     installationIdKey: "github_app_installation_id"
 
+# Semantic Engine sidecar — runs alongside the main container when git is enabled
+semanticEngine:
+  enabled: false
+  image: ghcr.io/oxy-hq/oxy-semantic-engine
+  imageTag: ""
+  imagePullPolicy: IfNotPresent
+
 # HTTP authentication for git cloning (for HTTPS git repositories)
 httpAuth:
   username: ""
