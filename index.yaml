@@ -3,6 +3,33 @@ entries:
   oxy-app:
   - apiVersion: v2
     appVersion: 0.5.31
+    created: "2026-03-27T08:10:23.946578515Z"
+    dependencies:
+    - condition: database.postgres.enabled
+      name: postgres
+      repository: https://groundhog2k.github.io/helm-charts/
+      version: 1.6.1
+    - alias: clickhouseSubchart
+      condition: database.clickhouse.enabled
+      name: clickhouse
+      repository: oci://registry-1.docker.io/bitnamicharts
+      version: 9.4.4
+    description: A Helm chart for Oxy application deployment on kubernetes
+    digest: 09c174f3f5795cd6492ebd94c4ad090e0c1a0a52d30b93eab0968b618b4b6397
+    keywords:
+    - oxy
+    maintainers:
+    - email: hello@oxy.tech
+      name: Oxy Team
+    - email: luong@oxy.tech
+      name: Luong Vo
+    name: oxy-app
+    type: application
+    urls:
+    - https://github.com/oxy-hq/charts/releases/download/oxy-app-0.4.6/oxy-app-0.4.6.tgz
+    version: 0.4.6
+  - apiVersion: v2
+    appVersion: 0.5.31
     created: "2026-03-27T04:52:28.008031313Z"
     dependencies:
     - condition: database.postgres.enabled
@@ -919,6 +946,29 @@ entries:
   oxy-start:
   - apiVersion: v2
     appVersion: 0.5.31
+    created: "2026-03-27T08:10:24.118156934Z"
+    description: Oxy with Docker-in-Docker — self-contained deployment using `oxy
+      start` to manage all services internally
+    digest: 810a9afcf9d3c17da47c9ffd7eac6cfbed458435e1cbcc6d487714d937462655
+    home: https://oxy.tech
+    keywords:
+    - oxy
+    - docker-in-docker
+    - dind
+    maintainers:
+    - name: Oxy Team
+      url: https://oxy.tech
+    - name: Luong Vo
+      url: https://github.com/luong-komorebi
+    name: oxy-start
+    sources:
+    - https://github.com/oxy-hq/charts
+    type: application
+    urls:
+    - https://github.com/oxy-hq/charts/releases/download/oxy-start-0.2.6/oxy-start-0.2.6.tgz
+    version: 0.2.6
+  - apiVersion: v2
+    appVersion: 0.5.31
     created: "2026-03-27T04:52:28.207128906Z"
     description: Oxy with Docker-in-Docker — self-contained deployment using `oxy
       start` to manage all services internally
@@ -1170,4 +1220,4 @@ entries:
     urls:
     - https://github.com/oxy-hq/charts/releases/download/oxy-start-0.1.0/oxy-start-0.1.0.tgz
     version: 0.1.0
-generated: "2026-03-27T04:52:28.207567464Z"
+generated: "2026-03-27T08:10:24.118623955Z"
