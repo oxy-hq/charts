@@ -48,7 +48,7 @@ nodeSelector: {}
 tolerations: []
 
 # Git synchronization disabled for testing
-gitSync:
+git:
   enabled: false
 
 # External secrets disabled for basic testing

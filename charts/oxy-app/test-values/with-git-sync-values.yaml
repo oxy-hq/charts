@@ -1,16 +1,14 @@
-# Example configuration for Git sync with SSH keys
-# This demonstrates how to enable git synchronization with SSH authentication
+# Example configuration for git clone with SSH keys
 
-# Enable Git sync
-gitSync:
+# Enable git clone init container
+git:
   enabled: true
   repository: "git@github.com:example/repo.git"  # Replace with your repository
   branch: main
-  period: 30s
+  cloneDir: "repo"
   # The secret name where SSH keys are stored (defaults to oxy-git-ssh if not specified)
   sshSecretName: oxy-git-ssh
   # Optional: Set a subdirectory within the cloned repo as the working directory
-  # Example: workingDir: "backend" will set workingDir to /workspace/current/backend
   # Leave empty to use the root of the cloned repository
   workingDir: ""
 
@@ -19,14 +17,14 @@ gitSync:
 # Instead, create the secret manually or use External Secrets Operator.
 # This example is for development/testing only.
 sshKey:
-  # Optional: Override the secret name (defaults to gitSync.sshSecretName)
+  # Optional: Override the secret name (defaults to git.sshSecretName)
   # secretName: "my-custom-ssh-secret"
   # For development only: provide SSH private key directly
   # In production, leave these empty and create the secret externally
   privateKey: ""  # Base64 encoded SSH private key
-  knownHosts: ""  # Optional: Custom known_hosts content. If empty, uses default for GitHub/GitLab/Bitbucket
+  knownHosts: ""  # Optional: Custom known_hosts content. If empty, ssh-keyscan runs at clone time
 
-# Persistence is required for git sync
+# Persistence is required for git clone
 persistence:
   enabled: true
   size: 20Gi
@@ -37,5 +35,5 @@ persistence:
 #      --from-file=ssh=/path/to/private/key \
 #      --from-file=known_hosts=/path/to/known_hosts
 #
-# 2. Reference the secret name in gitSync.sshSecretName (above)
+# 2. Reference the secret name in git.sshSecretName (above)
 # 3. Keep sshKey.privateKey empty (as shown above)

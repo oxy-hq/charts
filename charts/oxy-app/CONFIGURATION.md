@@ -1,6 +1,6 @@
 # oxy-app
 
-![Version: 0.4.1](https://img.shields.io/badge/Version-0.4.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.5.19](https://img.shields.io/badge/AppVersion-0.5.19-informational?style=flat-square)
+![Version: 0.4.2](https://img.shields.io/badge/Version-0.4.2-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.5.31](https://img.shields.io/badge/AppVersion-0.5.31-informational?style=flat-square)
 
 A Helm chart for Oxy application deployment on kubernetes
 
@@ -92,22 +92,22 @@ A Helm chart for Oxy application deployment on kubernetes
 | externalSecrets.storeRef.name | string | `""` |  |
 | extraInitContainers | list | `[]` |  |
 | extraSidecars | list | `[]` |  |
-| gitSync.branch | string | `"main"` |  |
-| gitSync.enabled | bool | `false` |  |
-| gitSync.githubApp.applicationId | string | `""` |  |
-| gitSync.githubApp.applicationIdKey | string | `"github_app_application_id"` |  |
-| gitSync.githubApp.installationId | string | `""` |  |
-| gitSync.githubApp.installationIdKey | string | `"github_app_installation_id"` |  |
-| gitSync.githubApp.privateKey | string | `""` |  |
-| gitSync.githubApp.privateKeyKey | string | `"github_app_private_key"` |  |
-| gitSync.githubApp.secretName | string | `""` |  |
-| gitSync.imagePullPolicy | string | `"IfNotPresent"` |  |
-| gitSync.link | string | `""` |  |
-| gitSync.period | string | `"15s"` |  |
-| gitSync.repository | string | `""` |  |
-| gitSync.root | string | `""` |  |
-| gitSync.sshSecretName | string | `"oxy-git-ssh"` |  |
-| gitSync.workingDir | string | `""` |  |
+| git.branch | string | `"main"` |  |
+| git.cloneDir | string | `"repo"` |  |
+| git.enabled | bool | `false` |  |
+| git.githubApp.applicationId | string | `""` |  |
+| git.githubApp.applicationIdKey | string | `"github_app_application_id"` |  |
+| git.githubApp.installationId | string | `""` |  |
+| git.githubApp.installationIdKey | string | `"github_app_installation_id"` |  |
+| git.githubApp.privateKey | string | `""` |  |
+| git.githubApp.privateKeyKey | string | `"github_app_private_key"` |  |
+| git.githubApp.secretName | string | `""` |  |
+| git.image | string | `"alpine/git"` |  |
+| git.imagePullPolicy | string | `"IfNotPresent"` |  |
+| git.imageTag | string | `"latest"` |  |
+| git.repository | string | `""` |  |
+| git.sshSecretName | string | `"oxy-git-ssh"` |  |
+| git.workingDir | string | `""` |  |
 | headlessService.enabled | bool | `true` |  |
 | httpAuth.password | string | `""` |  |
 | httpAuth.passwordKey | string | `"password"` |  |

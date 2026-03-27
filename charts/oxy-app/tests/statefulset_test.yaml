@@ -40,7 +40,7 @@ tests:
     asserts:
       - equal:
           path: spec.replicas
-          value: 3
+          value: 1
 
   # =======================
   # Container Configuration
@@ -50,7 +50,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: "ghcr.io/oxy-hq/oxy:0.5.19"
+          value: "ghcr.io/oxy-hq/oxy:0.5.31"
       - contains:
           path: spec.template.spec.containers[0].ports
           content:
@@ -290,7 +290,7 @@ tests:
 
   - it: should not have init containers by default
     set:
-      gitSync:
+      git:
         enabled: false
       database:
         postgres:
@@ -321,7 +321,7 @@ tests:
 
   - it: should create git clone init container when git sync enabled
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
       semanticEngine:
@@ -345,7 +345,7 @@ tests:
         userDatabase:
           user:
             value: "testuser"
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
       semanticEngine:
@@ -383,7 +383,7 @@ tests:
 
   - it: should have single container when git sync disabled
     set:
-      gitSync:
+      git:
         enabled: false
     asserts:
       - lengthEqual:
@@ -395,7 +395,7 @@ tests:
 
   - it: should include readonly flag when git sync disabled
     set:
-      gitSync:
+      git:
         enabled: false
     asserts:
       - matchRegex:
@@ -408,7 +408,7 @@ tests:
 
   - it: should not include internal port flags by default
     set:
-      gitSync:
+      git:
         enabled: false
     asserts:
       - notMatchRegex:
@@ -442,7 +442,7 @@ tests:
 
   - it: should include internal port flags in command when enabled
     set:
-      gitSync:
+      git:
         enabled: false
       app:
         internalHost: "0.0.0.0"
@@ -457,7 +457,7 @@ tests:
 
   - it: should support custom internal host and port
     set:
-      gitSync:
+      git:
         enabled: false
       app:
         internalHost: "127.0.0.1"
@@ -481,7 +481,7 @@ tests:
 
   - it: should work with both git sync and internal port
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
       app:
@@ -508,7 +508,7 @@ tests:
 
   - it: should have two containers when git sync enabled (includes semantic engine)
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
       semanticEngine:
@@ -528,7 +528,7 @@ tests:
 
   - it: should not include readonly flag when git sync enabled
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
       semanticEngine:
@@ -540,97 +540,72 @@ tests:
           path: spec.template.spec.containers[0].command[2]
           pattern: ".*--cloud.*"
 
-
-
   - it: should configure git clone init container correctly
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:test/repo.git"
-      semanticEngine:
-        enabled: true
         branch: "main"
       persistence:
         enabled: true
     asserts:
       - equal:
           path: spec.template.spec.initContainers[0].image
-          value: "k8s.gcr.io/git-sync/git-sync:v4.4.3"
+          value: "alpine/git:latest"
       - contains:
-          path: spec.template.spec.initContainers[0].args
-          content: "--repo=git@github.com:test/repo.git"
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: GIT_REPO
+            value: "git@github.com:test/repo.git"
       - contains:
-          path: spec.template.spec.initContainers[0].args
-          content: "--branch=main"
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: GIT_BRANCH
+            value: "main"
       - contains:
-          path: spec.template.spec.initContainers[0].args
-          content: "--one-time=true"
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: CLONE_DIR
+            value: "/workspace/repo"
 
   # =======================
-  # Git Sync Path Configuration (Subdirectory Safety)
+  # Git Clone Path Configuration
   # =======================
 
-  - it: should use default git-sync paths as subdirectories of mount path
+  - it: should use default clone dir as subdirectory of mount path
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
       persistence:
         enabled: true
         mountPath: "/workspace"
     asserts:
-      # Init container should use subdirectories
       - contains:
-          path: spec.template.spec.initContainers[0].args
-          content: "--root=/workspace/git"
-      - contains:
-          path: spec.template.spec.initContainers[0].args
-          content: "--link=/workspace/current"
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: CLONE_DIR
+            value: "/workspace/repo"
 
-
-  - it: should allow custom git-sync directory names while maintaining subdirectory structure
+  - it: should allow custom cloneDir
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
-        root: "myrepo"
-        link: "latest"
+        cloneDir: "myrepo"
       persistence:
         enabled: true
         mountPath: "/data"
     asserts:
-      # Should append custom names to mount path
       - contains:
-          path: spec.template.spec.initContainers[0].args
-          content: "--root=/data/myrepo"
-      - contains:
-          path: spec.template.spec.initContainers[0].args
-          content: "--link=/data/latest"
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: CLONE_DIR
+            value: "/data/myrepo"
 
-  - it: should ensure git-sync paths avoid volume root to prevent lost+found conflicts
+  - it: should set workingDir to clone dir for main container
     set:
-      gitSync:
-        enabled: true
-        repository: "git@github.com:example/repo.git"
-      persistence:
-        enabled: true
-        mountPath: "/mnt/data"
-    asserts:
-      # Verify paths are NOT at volume root
-      - notContains:
-          path: spec.template.spec.initContainers[0].args
-          content: "--root=/mnt/data"
-      # Verify paths ARE in subdirectories
-      - contains:
-          path: spec.template.spec.initContainers[0].args
-          content: "--root=/mnt/data/git"
-      - contains:
-          path: spec.template.spec.initContainers[0].args
-          content: "--link=/mnt/data/current"
-
-  - it: should set workingDir to git link path for main container
-    set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
       persistence:
@@ -639,21 +614,21 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].workingDir
-          value: "/workspace/current"
+          value: "/workspace/repo"
 
-  - it: should set workingDir with custom link directory
+  - it: should set workingDir with subdirectory when workingDir is set
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
-        link: "active"
+        workingDir: "backend"
       persistence:
         enabled: true
         mountPath: "/data"
     asserts:
       - equal:
           path: spec.template.spec.containers[0].workingDir
-          value: "/data/active"
+          value: "/data/repo/backend"
 
   # =======================
   # Sidecar Containers
@@ -674,7 +649,7 @@ tests:
 
   - it: should work with git sync, semantic engine, and sidecars together
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
       semanticEngine:
@@ -738,7 +713,7 @@ tests:
 
   - it: should share workspace volume between containers
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
       semanticEngine:
@@ -766,7 +741,7 @@ tests:
 
   - it: should mount SSH secret when git sync enabled
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
         sshSecretName: "my-git-ssh"
@@ -792,11 +767,9 @@ tests:
 
   - it: should use custom SSH secret name when sshKey.secretName is set
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
-      semanticEngine:
-        enabled: true
         sshSecretName: "default-ssh-secret"
       sshKey:
         secretName: "custom-ssh-secret"
@@ -812,14 +785,15 @@ tests:
               defaultMode: 0400
               optional: false
 
-  - it: should fall back to gitSync.sshSecretName when sshKey.secretName is empty
+  - it: should fall back to git.sshSecretName when sshKey.secretName is empty
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
         sshSecretName: "my-git-ssh"
       sshKey:
         secretName: ""
+        privateKey: "fake-key"
       persistence:
         enabled: true
     asserts:
@@ -953,13 +927,11 @@ tests:
   # HTTP Auth Tests
   # =======================
 
-  - it: should add HTTP auth arguments when username and password provided
+  - it: should add HTTP auth env vars when username and password provided
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "https://github.com/example/repo.git"
-      semanticEngine:
-        enabled: true
       httpAuth:
         username: "myuser"
         password: "mypass"
@@ -967,15 +939,14 @@ tests:
         enabled: true
     asserts:
       - contains:
-          path: spec.template.spec.initContainers[?(@.name == "git-clone")].args
-          content: "--username=myuser"
-      - contains:
-          path: spec.template.spec.initContainers[?(@.name == "git-clone")].args
-          content: "--password-file=/etc/git-auth/password"
+          path: spec.template.spec.initContainers[?(@.name == "git-clone")].env
+          content:
+            name: GIT_USERNAME
+            value: "myuser"
 
   - it: should mount HTTP auth secret when username provided
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "https://github.com/example/repo.git"
       semanticEngine:
@@ -995,7 +966,7 @@ tests:
 
   - it: should create HTTP auth volume with inline password
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "https://github.com/example/repo.git"
       semanticEngine:
@@ -1020,7 +991,7 @@ tests:
 
   - it: should use custom secret name when httpAuth.secretName is provided
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "https://github.com/example/repo.git"
       semanticEngine:
@@ -1046,7 +1017,7 @@ tests:
 
   - it: should not use SSH keys when HTTP auth is enabled
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "https://github.com/example/repo.git"
       semanticEngine:
@@ -1068,9 +1039,9 @@ tests:
           content:
             name: git-ssh
 
-  - it: should add github app args/env when githubApp inline values provided
+  - it: should mount github app secret when githubApp inline values provided
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "https://github.com/example/repo.git"
         githubApp:
@@ -1081,17 +1052,23 @@ tests:
         enabled: true
     asserts:
       - contains:
-          path: spec.template.spec.initContainers[?(@.name == "git-clone")].args
-          content: "--github-app-private-key-file=/etc/github-app/github_app_private_key"
-      - contains:
-          path: spec.template.spec.initContainers[?(@.name == "git-clone")].env
+          path: spec.template.spec.initContainers[?(@.name == "git-clone")].volumeMounts
           content:
-            name: GITSYNC_GITHUB_APP_APPLICATION_ID
-            value: "123"
+            name: github-app-secret
+            mountPath: /etc/github-app
+            readOnly: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: github-app-secret
+            secret:
+              secretName: RELEASE-NAME-oxy-app-github-app
+              defaultMode: 0400
+              optional: false
 
   - it: should mount provided github app secret when secretName set
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "https://github.com/example/repo.git"
         githubApp:
@@ -1117,7 +1094,7 @@ tests:
 
   - it: should not deploy semantic engine when git sync disabled
     set:
-      gitSync:
+      git:
         enabled: false
     asserts:
       - lengthEqual:
@@ -1129,7 +1106,7 @@ tests:
 
   - it: should deploy semantic engine when git sync enabled
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
       semanticEngine:
@@ -1149,7 +1126,7 @@ tests:
 
   - it: should use default semantic engine image with app imageTag
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
       semanticEngine:
@@ -1168,7 +1145,7 @@ tests:
 
   - it: should use custom semantic engine image
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
       semanticEngine:
@@ -1184,7 +1161,7 @@ tests:
 
   - it: should use semantic engine imageTag over app imageTag
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
       app:
@@ -1201,7 +1178,7 @@ tests:
 
   - it: should use custom imagePullPolicy for semantic engine
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
       semanticEngine:
@@ -1216,7 +1193,7 @@ tests:
 
   - it: should configure semantic engine ports correctly
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
       semanticEngine:
@@ -1233,7 +1210,7 @@ tests:
 
   - it: should configure semantic engine without custom environment variables
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
       semanticEngine:
@@ -1250,7 +1227,7 @@ tests:
 
   - it: should mount workspace volume in semantic engine
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
       semanticEngine:
@@ -1267,7 +1244,7 @@ tests:
 
   - it: should use container default CMD and set working directory
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
       semanticEngine:
@@ -1279,14 +1256,14 @@ tests:
       # Should not override command - uses container's built-in script
       - isNull:
           path: spec.template.spec.containers[1].command
-      # Should set workingDir to git-synced directory
+      # Should set workingDir to git clone directory
       - equal:
           path: spec.template.spec.containers[1].workingDir
-          value: "/workspace/current"
+          value: "/workspace/repo"
 
   - it: should work with git sync and semantic engine and extra sidecars together
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
       semanticEngine:
@@ -1312,7 +1289,7 @@ tests:
 
   - it: should add CUBEJS_API_URL to main container when git sync enabled
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
       semanticEngine:
@@ -1328,7 +1305,7 @@ tests:
 
   - it: should not add CUBEJS_API_URL when git sync disabled
     set:
-      gitSync:
+      git:
         enabled: false
     asserts:
       - notContains:
@@ -1338,7 +1315,7 @@ tests:
 
   - it: should set working directory with custom mountPath
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
         link: "repo"
@@ -1354,7 +1331,7 @@ tests:
 
   - it: should deploy semantic engine with SSH authentication
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
       semanticEngine:
@@ -1370,7 +1347,7 @@ tests:
 
   - it: should deploy semantic engine with HTTP authentication
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "https://github.com/example/repo.git"
       semanticEngine:
@@ -1387,7 +1364,7 @@ tests:
 
   - it: should deploy semantic engine with GitHub App authentication
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "https://github.com/example/repo.git"
       semanticEngine:
@@ -1405,7 +1382,7 @@ tests:
 
   - it: should ensure semantic engine has access to workspace with different persistence settings
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
       semanticEngine:
@@ -1426,11 +1403,11 @@ tests:
             mountPath: "/custom/path"
       - equal:
           path: spec.template.spec.containers[1].workingDir
-          value: "/custom/path/current"
+          value: "/custom/path/repo"
 
   - it: should deploy semantic engine with PostgreSQL subchart
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
       semanticEngine:
@@ -1451,7 +1428,7 @@ tests:
 
   - it: should deploy semantic engine with external database
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
       semanticEngine:
@@ -1469,7 +1446,7 @@ tests:
 
   - it: should ensure semantic engine works with resource limits
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
       semanticEngine:
@@ -1493,7 +1470,7 @@ tests:
 
   - it: should ensure CUBEJS_API_URL is set for main container when semantic engine is deployed
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
       semanticEngine:
@@ -1514,7 +1491,7 @@ tests:
 
   - it: should ensure semantic engine port matches CUBEJS_API_URL port
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
       semanticEngine:
@@ -1536,7 +1513,7 @@ tests:
 
   - it: should verify semantic engine configuration is complete
     set:
-      gitSync:
+      git:
         enabled: true
         repository: "git@github.com:example/repo.git"
       semanticEngine:
@@ -1561,7 +1538,7 @@ tests:
       # Working directory
       - equal:
           path: spec.template.spec.containers[1].workingDir
-          value: "/workspace/current"
+          value: "/workspace/repo"
       # Port configuration
       - contains:
           path: spec.template.spec.containers[1].ports
