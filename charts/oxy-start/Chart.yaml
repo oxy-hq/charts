@@ -2,8 +2,8 @@ apiVersion: v2
 name: oxy-start
 description: Oxy with Docker-in-Docker — self-contained deployment using `oxy start` to manage all services internally
 type: application
-version: 0.2.2
-appVersion: "0.5.19"
+version: 0.2.3
+appVersion: "0.5.31"
 maintainers:
   - name: Oxy Team
     url: https://oxy.tech

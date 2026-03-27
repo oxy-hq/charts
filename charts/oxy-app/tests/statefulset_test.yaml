@@ -50,7 +50,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: "ghcr.io/oxy-hq/oxy:0.5.19"
+          value: "ghcr.io/oxy-hq/oxy:0.5.31"
       - contains:
           path: spec.template.spec.containers[0].ports
           content:
@@ -539,8 +539,6 @@ tests:
       - notMatchRegex:
           path: spec.template.spec.containers[0].command[2]
           pattern: ".*--cloud.*"
-
-
 
   - it: should configure git clone init container correctly
     set:
