@@ -347,12 +347,6 @@ spec:
             {{- end }}
             {{- end }}
 
-            # Semantic Engine API URL (when git and semanticEngine are enabled)
-            {{- if and .Values.git.enabled .Values.semanticEngine.enabled }}
-            - name: CUBEJS_API_URL
-              value: "http://localhost:4000"
-            {{- end }}
-
             # ClickHouse Configuration
             # Preference order:
             # 1) Embedded subchart (database.clickhouse.enabled = true)
@@ -445,7 +439,7 @@ spec:
             {{- end }}
 
           # Health Checks
-          {{- if or .Values.git.enabled .Values.semanticEngine.enabled }}
+          {{- if .Values.git.enabled }}
           {{- with .Values.startupProbe }}
           startupProbe:
             {{- toYaml . | nindent 12 }}
@@ -463,20 +457,6 @@ spec:
           lifecycle:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-
-        {{- if and .Values.git.enabled .Values.semanticEngine.enabled }}
-        - name: semantic-engine
-          image: "{{ .Values.semanticEngine.image }}:{{ default (default .Chart.AppVersion .Values.app.imageTag) .Values.semanticEngine.imageTag }}"
-          imagePullPolicy: {{ .Values.semanticEngine.imagePullPolicy }}
-          workingDir: {{ $workingDir }}
-          ports:
-            - containerPort: 4000
-              protocol: TCP
-              name: cubejs-port
-          volumeMounts:
-            - name: workspace
-              mountPath: {{ .Values.persistence.mountPath }}
-        {{- end }}
 
         {{- if .Values.otelCollector.enabled }}
         - name: otel-collector

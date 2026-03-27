@@ -200,10 +200,6 @@ A Helm chart for Oxy application deployment on kubernetes
 | resources.requests.cpu | string | `"250m"` |  |
 | resources.requests.memory | string | `"512Mi"` |  |
 | securityContext.fsGroup | int | `1000` |  |
-| semanticEngine.enabled | bool | `false` |  |
-| semanticEngine.image | string | `"ghcr.io/oxy-hq/oxy-semantic-engine"` |  |
-| semanticEngine.imagePullPolicy | string | `"IfNotPresent"` |  |
-| semanticEngine.imageTag | string | `""` |  |
 | service.internalPort | int | `3001` |  |
 | service.name | string | `""` |  |
 | service.port | int | `80` |  |
