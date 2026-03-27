@@ -558,6 +558,85 @@ tests:
             value: "/workspace/repo"
 
   # =======================
+  # Git Pull (repo exists) Tests
+  # =======================
+
+  - it: should pull latest changes when repo exists (no auth)
+    set:
+      git:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      persistence:
+        enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: ".*git fetch origin.*"
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: ".*git reset --hard FETCH_HEAD.*"
+
+  - it: should update remote url and pull when repo exists with http auth
+    set:
+      git:
+        enabled: true
+        repository: "https://github.com/example/repo.git"
+      httpAuth:
+        username: "user"
+        password: "pass"
+      persistence:
+        enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: ".*git remote set-url origin.*"
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: ".*git fetch origin.*"
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: ".*git reset --hard FETCH_HEAD.*"
+
+  - it: should update remote url and pull when repo exists with github app auth
+    set:
+      git:
+        enabled: true
+        repository: "https://github.com/example/repo.git"
+        githubApp:
+          privateKey: "pem-key"
+          applicationId: "123"
+          installationId: "456"
+      persistence:
+        enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: ".*git remote set-url origin.*"
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: ".*git fetch origin.*"
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: ".*git reset --hard FETCH_HEAD.*"
+
+  - it: should pull latest changes when repo exists with ssh auth
+    set:
+      git:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      sshKey:
+        privateKey: "fake-key"
+      persistence:
+        enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: ".*git fetch origin.*"
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: ".*git reset --hard FETCH_HEAD.*"
+
+  # =======================
   # Git Clone Path Configuration
   # =======================
 
