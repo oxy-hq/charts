@@ -50,7 +50,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
-          value: "ghcr.io/oxy-hq/oxy:0.5.31"
+          value: "ghcr.io/oxy-hq/oxy:0.5.33"
       - contains:
           path: spec.template.spec.containers[0].ports
           content:
@@ -389,12 +389,15 @@ tests:
           path: spec.template.spec.containers[0].name
           value: oxy-app
 
-  - it: should include readonly flag when git sync disabled
+  - it: should not include local flag when git sync disabled
     set:
       git:
         enabled: false
     asserts:
-      - matchRegex:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--local.*"
+      - notMatchRegex:
           path: spec.template.spec.containers[0].command[2]
           pattern: ".*--cloud.*"
 
@@ -486,9 +489,9 @@ tests:
       persistence:
         enabled: true
     asserts:
-      - notMatchRegex:
+      - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: ".*--cloud.*"
+          pattern: ".*--local.*"
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
           pattern: ".*--internal-host 0\\.0\\.0\\.0.*"
@@ -517,7 +520,7 @@ tests:
           path: spec.template.spec.containers[0].name
           value: oxy-app
 
-  - it: should not include readonly flag when git sync enabled
+  - it: should include local flag when git sync enabled
     set:
       git:
         enabled: true
@@ -525,9 +528,9 @@ tests:
       persistence:
         enabled: true
     asserts:
-      - notMatchRegex:
+      - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: ".*--cloud.*"
+          pattern: ".*--local.*"
 
   - it: should configure git clone init container correctly
     set:

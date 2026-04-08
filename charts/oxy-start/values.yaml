@@ -11,13 +11,13 @@ app:
   port: 3000
   imagePullPolicy: IfNotPresent
   # Override the container command. When empty, the chart runs:
-  #   oxy start [--enterprise] && oxy serve [--cloud]
+  #   oxy start [--enterprise] && oxy serve [--local if git.enabled]
   command: []
   # Internal API port configuration (optional)
   # The internal API serves the same routes with authentication bypassed (auto-authenticated as internal user)
   # Leave internalHost empty to disable the internal API
   internalPort: 3001
-  internalHost: ""  # Set to "0.0.0.0" to enable internal API on all interfaces
+  internalHost: "" # Set to "0.0.0.0" to enable internal API on all interfaces
 
 # Docker-in-Docker sidecar configuration
 dind:
