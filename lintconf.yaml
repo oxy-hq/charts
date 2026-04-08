@@ -13,7 +13,6 @@ rules:
   new-line-at-end-of-file: disable
   line-length:
     max: 120
-  comments:
-    min-spaces-from-content: 1
+  comments: disable
   comments-indentation: disable
   document-start: disable

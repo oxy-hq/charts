@@ -15,5 +15,6 @@ validate-maintainers: false
 helm-dependency-extra-args: --skip-refresh
 # Additional validation
 validate-yaml: true
+lint-conf: lintconf.yaml
 # Check for security issues
 check-version-increment: true

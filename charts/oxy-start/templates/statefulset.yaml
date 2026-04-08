@@ -262,7 +262,7 @@ spec:
 
               {{- end }}
               # Run the main server
-              exec oxy serve{{- if not .Values.git.enabled }} --cloud{{- end }}{{- if .Values.app.internalHost }} --internal-host {{ .Values.app.internalHost }} --internal-port {{ .Values.app.internalPort }}{{- end }}
+                exec oxy serve{{- if .Values.git.enabled }} --local{{- end }}{{- if .Values.app.internalHost }} --internal-host {{ .Values.app.internalHost }} --internal-port {{ .Values.app.internalPort }}{{- end }}
           {{- end }}
           {{- if .Values.git.enabled }}
           workingDir: {{ $workingDir }}

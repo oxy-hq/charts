@@ -11,7 +11,7 @@ app:
   port: 3000
   imagePullPolicy: IfNotPresent
   # Override the container command. When empty, the chart runs:
-  #   oxy start [--enterprise] && oxy serve [--cloud]
+  #   oxy start [--enterprise] && oxy serve [--local if git.enabled]
   command: []
   # Internal API port configuration (optional)
   # The internal API serves the same routes with authentication bypassed (auto-authenticated as internal user)
