@@ -467,6 +467,9 @@ spec:
               mountPath: /secrets/files/{{ $fileSecret.name }}
               readOnly: true
             {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
 
           # Health Checks
           {{- if .Values.git.enabled }}
@@ -613,6 +616,13 @@ spec:
           configMap:
             name: {{ include "oxy-app.fullname" . }}-otel-collector
         {{- end }}
+        {{- if not .Values.persistence.enabled }}
+        - name: workspace
+          emptyDir: {}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
 
       # Node Selection and Tolerations
       {{- with .Values.nodeSelector }}
@@ -629,6 +639,7 @@ spec:
       {{- end }}
 
   # Persistent Volume Claim Templates
+  {{- if .Values.persistence.enabled }}
   volumeClaimTemplates:
     - metadata:
         name: workspace
@@ -656,3 +667,4 @@ spec:
         resources:
           requests:
             storage: {{ .Values.persistence.size }}
+  {{- end }}

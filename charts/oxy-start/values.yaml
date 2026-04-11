@@ -217,9 +217,11 @@ httpAuth:
   secretName: ""
   passwordKey: "password"
 
-# Extra containers
+# Extra containers and volumes
 extraInitContainers: []
 extraSidecars: []
+extraVolumes: []
+extraVolumeMounts: []
 
 # PodDisruptionBudget
 pdb:

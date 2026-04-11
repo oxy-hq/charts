@@ -765,17 +765,81 @@ tests:
           path: spec.volumeClaimTemplates[0].spec.storageClassName
           value: fast-ssd
 
-  - it: should always create workspace volume claim template
+  - it: should omit workspace volumeClaimTemplate when persistence is disabled
     set:
       persistence:
         enabled: false
     asserts:
-      - lengthEqual:
+      - notExists:
           path: spec.volumeClaimTemplates
-          count: 1
-      - equal:
-          path: spec.volumeClaimTemplates[0].metadata.name
-          value: workspace
+
+  - it: should add emptyDir workspace volume when persistence is disabled
+    set:
+      persistence:
+        enabled: false
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: workspace
+            emptyDir: {}
+
+  - it: should mount extraVolumes into the pod
+    set:
+      extraVolumes:
+        - name: s3files
+          persistentVolumeClaim:
+            claimName: my-s3files-pvc
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: s3files
+            persistentVolumeClaim:
+              claimName: my-s3files-pvc
+
+  - it: should add extraVolumeMounts to the main container
+    set:
+      extraVolumeMounts:
+        - name: s3files
+          mountPath: /workspace/oxy_data
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: s3files
+            mountPath: /workspace/oxy_data
+
+  - it: should support extraVolumes and extraVolumeMounts together with persistence disabled
+    set:
+      persistence:
+        enabled: false
+      extraVolumes:
+        - name: oxy-state-s3files
+          persistentVolumeClaim:
+            claimName: oxy-app-s3files-pvc
+      extraVolumeMounts:
+        - name: oxy-state-s3files
+          mountPath: /workspace/oxy_data
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: workspace
+            emptyDir: {}
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: oxy-state-s3files
+            persistentVolumeClaim:
+              claimName: oxy-app-s3files-pvc
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: oxy-state-s3files
+            mountPath: /workspace/oxy_data
+      - notExists:
+          path: spec.volumeClaimTemplates
 
   - it: should mount workspace volume in main container
     set:

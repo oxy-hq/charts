@@ -398,6 +398,8 @@ extraInitContainers: []
 #       - name: workspace
 #         mountPath: /workspace
 extraSidecars: []
+extraVolumes: []
+extraVolumeMounts: []
 
 # OpenTelemetry Collector sidecar configuration
 # Collects traces/metrics and exports to ClickHouse or other backends

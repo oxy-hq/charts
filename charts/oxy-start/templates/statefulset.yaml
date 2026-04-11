@@ -343,6 +343,9 @@ spec:
               mountPath: /secrets/files/{{ $fileSecret.name }}
               readOnly: true
             {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
 
           {{- if .Values.dind.enabled }}
           {{- with .Values.startupProbe }}
@@ -472,6 +475,14 @@ spec:
             optional: true
         {{- end }}
 
+        {{- if not .Values.persistence.enabled }}
+        - name: workspace
+          emptyDir: {}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -487,6 +498,7 @@ spec:
 
   # ─── Persistent Volume Claim Templates ───
   volumeClaimTemplates:
+    {{- if .Values.persistence.enabled }}
     - metadata:
         name: workspace
         {{- with .Values.persistence.annotations }}
@@ -513,6 +525,7 @@ spec:
         resources:
           requests:
             storage: {{ .Values.persistence.size }}
+    {{- end }}
     {{- if .Values.dind.enabled }}
     - metadata:
         name: dind-storage

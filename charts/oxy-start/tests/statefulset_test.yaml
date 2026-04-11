@@ -191,10 +191,10 @@ tests:
         enabled: true
     asserts:
       - matchRegex:
-          path: spec.template.spec.initContainers[0].command[2]
+          path: spec.template.spec.initContainers[1].command[2]
           pattern: ".*git fetch origin.*"
       - matchRegex:
-          path: spec.template.spec.initContainers[0].command[2]
+          path: spec.template.spec.initContainers[1].command[2]
           pattern: ".*git reset --hard FETCH_HEAD.*"
 
   - it: should update remote url and pull when repo exists with http auth
@@ -209,13 +209,13 @@ tests:
         enabled: true
     asserts:
       - matchRegex:
-          path: spec.template.spec.initContainers[0].command[2]
+          path: spec.template.spec.initContainers[1].command[2]
           pattern: ".*git remote set-url origin.*"
       - matchRegex:
-          path: spec.template.spec.initContainers[0].command[2]
+          path: spec.template.spec.initContainers[1].command[2]
           pattern: ".*git fetch origin.*"
       - matchRegex:
-          path: spec.template.spec.initContainers[0].command[2]
+          path: spec.template.spec.initContainers[1].command[2]
           pattern: ".*git reset --hard FETCH_HEAD.*"
 
   - it: should update remote url and pull when repo exists with github app auth
@@ -231,13 +231,13 @@ tests:
         enabled: true
     asserts:
       - matchRegex:
-          path: spec.template.spec.initContainers[0].command[2]
+          path: spec.template.spec.initContainers[1].command[2]
           pattern: ".*git remote set-url origin.*"
       - matchRegex:
-          path: spec.template.spec.initContainers[0].command[2]
+          path: spec.template.spec.initContainers[1].command[2]
           pattern: ".*git fetch origin.*"
       - matchRegex:
-          path: spec.template.spec.initContainers[0].command[2]
+          path: spec.template.spec.initContainers[1].command[2]
           pattern: ".*git reset --hard FETCH_HEAD.*"
 
   - it: should pull latest changes when repo exists with ssh auth
@@ -251,10 +251,10 @@ tests:
         enabled: true
     asserts:
       - matchRegex:
-          path: spec.template.spec.initContainers[0].command[2]
+          path: spec.template.spec.initContainers[1].command[2]
           pattern: ".*git fetch origin.*"
       - matchRegex:
-          path: spec.template.spec.initContainers[0].command[2]
+          path: spec.template.spec.initContainers[1].command[2]
           pattern: ".*git reset --hard FETCH_HEAD.*"
 
   - it: should work with both git clone and internal port
@@ -389,3 +389,87 @@ tests:
       - equal:
           path: spec.volumeClaimTemplates[1].spec.resources.requests.storage
           value: 40Gi
+
+  - it: should omit workspace volumeClaimTemplate when persistence is disabled
+    set:
+      persistence:
+        enabled: false
+    asserts:
+      - lengthEqual:
+          path: spec.volumeClaimTemplates
+          count: 1
+      - equal:
+          path: spec.volumeClaimTemplates[0].metadata.name
+          value: dind-storage
+
+  - it: should add emptyDir workspace volume when persistence is disabled
+    set:
+      persistence:
+        enabled: false
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: workspace
+            emptyDir: {}
+
+  - it: should mount extraVolumes into the pod
+    set:
+      extraVolumes:
+        - name: s3files
+          persistentVolumeClaim:
+            claimName: my-s3files-pvc
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: s3files
+            persistentVolumeClaim:
+              claimName: my-s3files-pvc
+
+  - it: should add extraVolumeMounts to the main container
+    set:
+      extraVolumeMounts:
+        - name: s3files
+          mountPath: /workspace/oxy_data
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: s3files
+            mountPath: /workspace/oxy_data
+
+  - it: should support extraVolumes and extraVolumeMounts together with persistence disabled
+    set:
+      persistence:
+        enabled: false
+      extraVolumes:
+        - name: oxy-state-s3files
+          persistentVolumeClaim:
+            claimName: oxy-start-s3files-pvc
+      extraVolumeMounts:
+        - name: oxy-state-s3files
+          mountPath: /workspace/oxy_data
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: workspace
+            emptyDir: {}
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: oxy-state-s3files
+            persistentVolumeClaim:
+              claimName: oxy-start-s3files-pvc
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: oxy-state-s3files
+            mountPath: /workspace/oxy_data
+      - lengthEqual:
+          path: spec.volumeClaimTemplates
+          count: 1
+      - equal:
+          path: spec.volumeClaimTemplates[0].metadata.name
+          value: dind-storage
