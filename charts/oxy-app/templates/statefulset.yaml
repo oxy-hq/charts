@@ -413,7 +413,15 @@ spec:
               value: {{ .Values.clickhouse.url | quote }}
             - name: OXY_CLICKHOUSE_DATABASE
               value: {{ .Values.clickhouse.database | quote }}
-            {{- if and .Values.clickhouse.existingSecret .Values.clickhouse.existingSecret.name }}
+            {{- if .Values.clickhouse.passwordExistingSecret }}
+            - name: OXY_CLICKHOUSE_USER
+              value: {{ .Values.clickhouse.username | quote }}
+            - name: OXY_CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.clickhouse.passwordExistingSecret }}
+                  key: {{ default "password" .Values.clickhouse.passwordSecretKey }}
+            {{- else if and .Values.clickhouse.existingSecret .Values.clickhouse.existingSecret.name }}
             - name: OXY_CLICKHOUSE_USER
               valueFrom:
                 secretKeyRef:
@@ -508,18 +516,27 @@ spec:
             - containerPort: {{ .Values.otelCollector.ports.metrics }}
               protocol: TCP
               name: metrics
-          {{- if or (and .Values.database.clickhouse.enabled .Values.clickhouseSubchart.auth.existingSecret) (and .Values.clickhouse.existingSecret .Values.clickhouse.existingSecret.name) }}
+          {{- if or (and .Values.database.clickhouse.enabled .Values.clickhouseSubchart.auth.existingSecret) .Values.clickhouse.passwordExistingSecret (and .Values.clickhouse.existingSecret .Values.clickhouse.existingSecret.name) }}
           env:
+            {{- if and .Values.database.clickhouse.enabled .Values.clickhouseSubchart.auth.existingSecret }}
             - name: CLICKHOUSE_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  {{- if and .Values.database.clickhouse.enabled .Values.clickhouseSubchart.auth.existingSecret }}
                   name: {{ .Values.clickhouseSubchart.auth.existingSecret }}
                   key: {{ .Values.clickhouseSubchart.auth.existingSecretPasswordKey | default "password" }}
-                  {{- else }}
+            {{- else if .Values.clickhouse.passwordExistingSecret }}
+            - name: OXY_CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.clickhouse.passwordExistingSecret }}
+                  key: {{ default "password" .Values.clickhouse.passwordSecretKey }}
+            {{- else }}
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
                   name: {{ .Values.clickhouse.existingSecret.name }}
                   key: {{ default "password" .Values.clickhouse.existingSecret.passwordKey }}
-                  {{- end }}
+            {{- end }}
           {{- end }}
           volumeMounts:
             - name: otel-collector-config

@@ -374,6 +374,10 @@ clickhouse:
   username: "default"
   # Password can be provided inline (dev only) or via existingSecret
   password: ""
+  # Source only the password from an existing Kubernetes secret. Takes precedence
+  # over existingSecret below. Leave empty to fall back to existingSecret or inline password.
+  passwordExistingSecret: ""
+  passwordSecretKey: "password"
   # Use existing secret for credentials (recommended for production)
   # The secret should contain keys for username and password
   existingSecret:
