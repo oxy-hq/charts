@@ -3,7 +3,7 @@ nameOverride: "test-production"
 fullnameOverride: "test-production"
 
 app:
-  image: "ghcr.io/oxy-hq/oxy"  # Use nginx for testing instead of real app
+  image: "ghcr.io/oxy-hq/oxygen"  # Use nginx for testing instead of real app
   imageTag: "0.4.0"
   imagePullPolicy: "IfNotPresent"
   replicaCount: 1

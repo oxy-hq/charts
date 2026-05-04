@@ -1,6 +1,6 @@
 # oxy-start
 
-![Version: 0.2.7](https://img.shields.io/badge/Version-0.2.7-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.5.33](https://img.shields.io/badge/AppVersion-0.5.33-informational?style=flat-square)
+![Version: 0.2.7](https://img.shields.io/badge/Version-0.2.7-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.5.49](https://img.shields.io/badge/AppVersion-0.5.49-informational?style=flat-square)
 
 Oxy with Docker-in-Docker — self-contained deployment using `oxy start` to manage all services internally
 
@@ -23,7 +23,7 @@ Oxy with Docker-in-Docker — self-contained deployment using `oxy start` to man
 |-----|------|---------|-------------|
 | affinity | object | `{}` |  |
 | app.command | list | `[]` |  |
-| app.image | string | `"ghcr.io/oxy-hq/oxy"` |  |
+| app.image | string | `"ghcr.io/oxy-hq/oxygen"` |  |
 | app.imagePullPolicy | string | `"IfNotPresent"` |  |
 | app.imageTag | string | `""` |  |
 | app.internalHost | string | `""` |  |

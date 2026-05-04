@@ -6,7 +6,7 @@
 name: oxy-start
 
 app:
-  image: ghcr.io/oxy-hq/oxy
+  image: ghcr.io/oxy-hq/oxygen
   imageTag: ""
   port: 3000
   imagePullPolicy: IfNotPresent

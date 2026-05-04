@@ -3,7 +3,7 @@ nameOverride: "oxy-test-persist"
 fullnameOverride: "oxy-test-persist"
 
 app:
-  image: "ghcr.io/oxy-hq/oxy"
+  image: "ghcr.io/oxy-hq/oxygen"
   imageTag: "0.4.0"
   imagePullPolicy: "IfNotPresent"
   replicaCount: 1

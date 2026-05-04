@@ -1,6 +1,6 @@
 # oxy-app
 
-![Version: 0.4.7](https://img.shields.io/badge/Version-0.4.7-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.5.33](https://img.shields.io/badge/AppVersion-0.5.33-informational?style=flat-square)
+![Version: 0.4.7](https://img.shields.io/badge/Version-0.4.7-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.5.49](https://img.shields.io/badge/AppVersion-0.5.49-informational?style=flat-square)
 
 A Helm chart for Oxy application deployment on kubernetes
 
@@ -24,7 +24,7 @@ A Helm chart for Oxy application deployment on kubernetes
 |-----|------|---------|-------------|
 | affinity | object | `{}` |  |
 | app.command | list | `[]` |  |
-| app.image | string | `"ghcr.io/oxy-hq/oxy"` |  |
+| app.image | string | `"ghcr.io/oxy-hq/oxygen"` |  |
 | app.imagePullPolicy | string | `"IfNotPresent"` |  |
 | app.imageTag | string | `""` |  |
 | app.internalHost | string | `""` |  |
