@@ -19,6 +19,19 @@ app:
   internalPort: 3001
   internalHost: ""  # Set to "0.0.0.0" to enable internal API on all interfaces
 
+# HTTP server (`oxy serve`) tunables.
+# Use this stanza to pair the StatefulSet HTTP fleet with a separate
+# worker fleet (see `worker.*`) — when disableInprocessWorkers is true the
+# HTTP server runs as HTTP-only (`--no-workers`) and standalone
+# `oxy worker` pods drain the durable task queue.
+appServer:
+  # When true, append `--no-workers` to the `oxy serve` command and set
+  # OXY_DISABLE_INPROCESS_WORKERS=1 so the HTTP server skips startup
+  # recovery and the in-process driver loop. Required when a standalone
+  # worker fleet is handling agentic execution. Default false so existing
+  # deployments are unaffected on upgrade.
+  disableInprocessWorkers: false
+
 # Ingress configuration
 # Enable and configure Kubernetes Ingress for the application.
 ingress:
