@@ -70,6 +70,16 @@ This doc tries to focus only on chart-specific, differential behavior you won't 
 - External secrets
   - `externalSecrets.envSecretNames` copies secret keys & values as env vars
   - `externalSecrets.fileSecrets` copies secret keys as files into the workspace.
+- Standalone worker fleet (`oxy worker`)
+  - Opt-in: set `worker.enabled: true` to render a separate Deployment
+    that drains the `agentic_task_queue` table out-of-process. Pair with
+    `appServer.disableInprocessWorkers: true` on the HTTP StatefulSet so
+    only one fleet is draining the queue.
+  - Off by default, so existing deployments are unaffected on upgrade.
+  - See [docs/worker-fleet.md](docs/worker-fleet.md) for the topology,
+    HPA wiring (Prometheus + queue-depth custom metric), and the
+    `--skip-migrations` rationale. Background design lives in
+    oxy-hq/oxygen-internal#2409.
 
 ## Validation & Testing
 
