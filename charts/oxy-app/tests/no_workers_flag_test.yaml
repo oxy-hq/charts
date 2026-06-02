@@ -1,0 +1,59 @@
+suite: --no-workers flag on the HTTP StatefulSet
+templates:
+  - statefulset.yaml
+
+tests:
+  - it: does NOT pass --no-workers by default (single-process mode)
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "--no-workers"
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_DISABLE_INPROCESS_WORKERS
+            value: "1"
+
+  - it: appends --no-workers to the serve command when appServer.disableInprocessWorkers is true
+    set:
+      appServer:
+        disableInprocessWorkers: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "exec oxy serve.*--no-workers"
+
+  - it: also sets OXY_DISABLE_INPROCESS_WORKERS=1 as a belt-and-suspenders
+    set:
+      appServer:
+        disableInprocessWorkers: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_DISABLE_INPROCESS_WORKERS
+            value: "1"
+
+  - it: composes --no-workers alongside the existing --internal-host flag
+    set:
+      appServer:
+        disableInprocessWorkers: true
+      app:
+        internalHost: "0.0.0.0"
+        internalPort: 3001
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "--internal-host 0.0.0.0 --internal-port 3001 --no-workers"
+
+  - it: composes --no-workers alongside --local when git is enabled
+    set:
+      appServer:
+        disableInprocessWorkers: true
+      git:
+        enabled: true
+        repository: "https://github.com/example/repo.git"
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "exec oxy serve --local.*--no-workers"
