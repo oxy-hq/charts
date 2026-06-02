@@ -1,0 +1,52 @@
+{{- if and .Values.worker.enabled .Values.worker.hpa.enabled }}
+{{- /*
+HorizontalPodAutoscaler for the worker fleet.
+
+Off by default because it depends on a Prometheus + prometheus-postgres-exporter
+metric named `worker.hpa.metricName` (default `oxy_agentic_task_queue_depth`)
+that runs the canonical query:
+
+  SELECT count(*) FROM agentic_task_queue WHERE queue_status = 'queued';
+
+Wire that through your cluster's external-metrics adapter, then flip
+`worker.hpa.enabled: true` and tune `queueDepthThreshold`.
+
+Trigger scale-up well below the reaper's visibility-timeout so the queue
+doesn't back up faster than scale events fire.
+*/}}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "oxy-app.fullname" . }}-worker-hpa
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "oxy-app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "oxy-app.fullname" . }}-worker
+  minReplicas: {{ .Values.worker.hpa.minReplicas }}
+  maxReplicas: {{ .Values.worker.hpa.maxReplicas }}
+  metrics:
+    - type: External
+      external:
+        metric:
+          name: {{ .Values.worker.hpa.metricName | quote }}
+        target:
+          type: AverageValue
+          averageValue: {{ .Values.worker.hpa.queueDepthThreshold | quote }}
+    {{- if and .Values.worker.hpa.cpuUtilization (gt (int .Values.worker.hpa.cpuUtilization) 0) }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.worker.hpa.cpuUtilization }}
+    {{- end }}
+  {{- with .Values.worker.hpa.behavior }}
+  behavior:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}
