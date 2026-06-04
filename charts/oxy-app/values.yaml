@@ -19,6 +19,19 @@ app:
   internalPort: 3001
   internalHost: ""  # Set to "0.0.0.0" to enable internal API on all interfaces
 
+# HTTP server (`oxy serve`) tunables.
+# Use this stanza to pair the StatefulSet HTTP fleet with a separate
+# worker fleet (see `worker.*`) — when disableInprocessWorkers is true the
+# HTTP server runs as HTTP-only (`--no-workers`) and standalone
+# `oxy worker` pods drain the durable task queue.
+appServer:
+  # When true, append `--no-workers` to the `oxy serve` command and set
+  # OXY_DISABLE_INPROCESS_WORKERS=1 so the HTTP server skips startup
+  # recovery and the in-process driver loop. Required when a standalone
+  # worker fleet is handling agentic execution. Default false so existing
+  # deployments are unaffected on upgrade.
+  disableInprocessWorkers: false
+
 # Ingress configuration
 # Enable and configure Kubernetes Ingress for the application.
 ingress:
@@ -488,3 +501,148 @@ pdb:
   maxUnavailable: ""
   # Optional selector labels to narrow the PDB selector. Merges with chart selectorLabels when provided.
   selector: {}
+
+# ---------------------------------------------------------------------------
+# Standalone worker fleet (`oxy worker`)
+# ---------------------------------------------------------------------------
+# Opt-in deployment of the standalone `oxy worker` process introduced in
+# oxygen-internal#2409 (`feat/worker-fleet-separation`). When
+# `worker.enabled: false` (default) NO worker resources are rendered, so
+# existing deployments upgrade with zero impact.
+#
+# Topology when enabled:
+#   - HTTP fleet (StatefulSet): run with `appServer.disableInprocessWorkers: true`
+#     so the HTTP server skips in-process workers and is HTTP-only.
+#   - Worker fleet (Deployment, this stanza): N replicas drain the
+#     `agentic_task_queue` table via `SELECT ... FOR UPDATE SKIP LOCKED`.
+#   - Both point at the SAME Postgres (`OXY_DATABASE_URL`).
+#
+# Operational requirements live in oxygen-internal `internal-docs/worker-fleet.md`.
+worker:
+  enabled: false
+  # Number of worker pods. Scale independently of the HTTP fleet.
+  replicaCount: 2
+  # Image: inherits from .Values.app.image / .Values.app.imageTag when left empty.
+  # Override here only when you intentionally want the worker fleet to pin
+  # to a different tag (e.g. canary rollouts).
+  image:
+    repository: ""
+    tag: ""
+    pullPolicy: ""
+  # Override the container command. When empty, the chart uses
+  #   exec oxy worker --health-port <healthPort> [--skip-migrations]
+  command: []
+  # Worker process tunables. These mirror the `oxy worker` env vars / flags
+  # documented in oxygen-internal `internal-docs/worker-fleet.md`.
+  env:
+    # Concurrent task cap per worker process.
+    OXY_WORKER_MAX_INFLIGHT: "32"
+    # Cadence of the recovery loop (reaper pre-pass) in seconds.
+    OXY_WORKER_RECOVERY_INTERVAL_SECS: "30"
+  # Port the worker binds `/healthz` and `/readyz` on. Used by both probes
+  # and the worker `ClusterIP` Service. Stays inside the cluster — no
+  # ingress / public exposure.
+  healthPort: 8081
+  # When true, pass `--skip-migrations` to `oxy worker`. The HTTP StatefulSet
+  # is the canonical migrator on rollout; workers must skip so they don't
+  # race the HTTP fleet on the same schema changes. Leave true unless you
+  # know you've moved migrations out to a dedicated Job.
+  skipMigrations: true
+  # Pod-level extras
+  serviceAccountName: ""  # If empty, falls back to the main chart serviceAccount
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  # Extra env entries appended to the worker container after the defaults
+  # above. Format: list of EnvVar objects (name/value or name/valueFrom).
+  extraEnv: []
+  # Extra envFrom entries (configMapRef / secretRef) for the worker container.
+  extraEnvFrom: []
+  # Resources. Defaults sized for a single worker process with the default
+  # max-inflight of 32. Bump CPU / memory before bumping replicaCount when
+  # individual workers are pegged.
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  # Liveness probe: `/healthz` — 200 once the process is up.
+  livenessProbe:
+    httpGet:
+      path: /healthz
+      port: 8081
+    initialDelaySeconds: 5
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  # Readiness probe: `/readyz` — 200 only when router_connected + recovery_alive.
+  # Flips to 503 during graceful shutdown so k8s yanks the pod out of the
+  # Service before in-flight tasks drain.
+  readinessProbe:
+    httpGet:
+      path: /readyz
+      port: 8081
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 5
+    failureThreshold: 3
+  # Graceful shutdown takes up to 35s (30s recovery drain + 5s health server drain).
+  # Bump if you raise OXY_WORKER_RECOVERY_INTERVAL_SECS materially.
+  terminationGracePeriodSeconds: 40
+  # Optional preStop hook. Empty by default — the worker's own SIGTERM
+  # handler flips /readyz to 503 and drives the drain.
+  lifecycle: {}
+  # securityContext block applied to the worker pod.
+  securityContext:
+    fsGroup: 1000
+  # Worker container securityContext (e.g. runAsNonRoot, readOnlyRootFilesystem).
+  containerSecurityContext: {}
+  # ClusterIP service that fronts the worker pods on `healthPort`. Useful
+  # for in-cluster scrapers / debugging; not required for queue drainage
+  # (workers are driven by Postgres LISTEN/NOTIFY, not HTTP).
+  service:
+    enabled: true
+    type: ClusterIP
+    port: 8081
+    annotations: {}
+  # PodDisruptionBudget. Bounds voluntary disruption so a fleet of 2+
+  # workers doesn't drain to zero during a node rollout.
+  pdb:
+    enabled: true
+    # minAvailable wins over maxUnavailable when both are set.
+    minAvailable: 1
+    maxUnavailable: ""
+  # HorizontalPodAutoscaler. OFF by default because it requires a custom
+  # Prometheus + prometheus-postgres-exporter metric pipeline reading queue
+  # depth from `agentic_task_queue WHERE queue_status='queued'`. When you
+  # have that wired, flip `enabled: true` and tune
+  # `queueDepthThreshold` — see WORKER_FLEET.md for the exporter query.
+  #
+  # The chart renders a v2 HPA with an `External` metric named
+  # `oxy_agentic_task_queue_depth` (override via `metricName`). Adapt to
+  # your cluster's metrics adapter as needed.
+  hpa:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 10
+    metricName: oxy_agentic_task_queue_depth
+    queueDepthThreshold: 100
+    # Optional fallback Resource metric (CPU) — paired with the external
+    # metric so the HPA still has a signal when the queue exporter is down.
+    cpuUtilization: 0  # 0 = disabled. Set to e.g. 70 to enable.
+    # Optional scale behavior block. Leave empty for the controller defaults.
+    behavior: {}
+  # Extra sidecar containers for the worker pod.
+  extraSidecars: []
+  # Extra volumes / mounts.
+  extraVolumes: []
+  extraVolumeMounts: []
+  # Inherit external secret env mounts from the top-level
+  # externalSecrets.envSecretNames so workers see the same DB / LLM keys
+  # as the HTTP fleet. Disable if your worker pods use a different secret
+  # surface.
+  inheritExternalSecrets: true

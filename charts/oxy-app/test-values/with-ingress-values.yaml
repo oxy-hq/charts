@@ -4,7 +4,7 @@ fullnameOverride: "oxy-test-ingress"
 
 app:
   image: "ghcr.io/oxy-hq/oxygen"
-  imageTag: "0.4.0"
+  imageTag: "0.5.49"
   imagePullPolicy: "IfNotPresent"
 
 replicaCount: 1
@@ -29,12 +29,12 @@ ingress:
 # Disable external dependencies
 database:
   postgres:
-    enabled: false
+    enabled: true
 
 resources:
   limits:
-    cpu: 100m
-    memory: 128Mi
+    cpu: "500m"
+    memory: "512Mi"
   requests:
-    cpu: 50m
-    memory: 64Mi
+    cpu: "500m"
+    memory: "512Mi"

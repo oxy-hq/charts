@@ -1,6 +1,8 @@
 {{/*
 Define git clone paths
 */}}
+{{- /* Fail fast if the worker topology is misconfigured. See _worker-validation.tpl. */}}
+{{- include "oxy-app.validateWorkerTopology" . -}}
 {{- $gitCloneDir := printf "%s/%s" .Values.persistence.mountPath (default "repo" .Values.git.cloneDir) -}}
 {{- $workingDir := $gitCloneDir -}}
 {{- if and .Values.git.workingDir (ne .Values.git.workingDir "") -}}
@@ -303,7 +305,7 @@ spec:
             - sh
             - -c
             - |
-              exec oxy serve{{- if .Values.git.enabled }} --local{{- end }}{{- if .Values.app.internalHost }} --internal-host {{ .Values.app.internalHost }} --internal-port {{ .Values.app.internalPort }}{{- end }}
+              exec oxy serve{{- if .Values.git.enabled }} --local{{- end }}{{- if .Values.app.internalHost }} --internal-host {{ .Values.app.internalHost }} --internal-port {{ .Values.app.internalPort }}{{- end }}{{- if .Values.appServer.disableInprocessWorkers }} --no-workers{{- end }}
           {{- end }}
           {{- if .Values.git.enabled }}
           workingDir: {{ $workingDir }}
@@ -327,6 +329,14 @@ spec:
             {{- else }}
             - name: OXY_STATE_DIR
               value: {{ printf "%s/%s" .Values.persistence.mountPath .Values.persistence.folder | quote }}
+            {{- end }}
+
+            # Belt-and-suspenders for the --no-workers CLI flag: HTTP-only fleets
+            # paired with a standalone `oxy worker` deployment must skip the
+            # in-process workers so they don't double-drive the queue.
+            {{- if .Values.appServer.disableInprocessWorkers }}
+            - name: OXY_DISABLE_INPROCESS_WORKERS
+              value: "1"
             {{- end }}
 
             # Database URL Configuration

@@ -1,0 +1,27 @@
+{{- if and .Values.worker.enabled .Values.worker.pdb.enabled }}
+{{- /*
+PodDisruptionBudget for the worker fleet — bounds voluntary disruption
+during node rollouts. Graceful shutdown can take up to 35s per worker.
+*/}}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "oxy-app.fullname" . }}-worker-pdb
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "oxy-app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  selector:
+    matchLabels:
+      {{- include "oxy-app.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: worker
+  {{- if .Values.worker.pdb.minAvailable }}
+  minAvailable: {{ .Values.worker.pdb.minAvailable }}
+  {{- else if .Values.worker.pdb.maxUnavailable }}
+  maxUnavailable: {{ .Values.worker.pdb.maxUnavailable }}
+  {{- else }}
+  # Default to minAvailable: 1 when neither is set.
+  minAvailable: 1
+  {{- end }}
+{{- end }}

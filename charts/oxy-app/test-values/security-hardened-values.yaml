@@ -4,7 +4,7 @@ fullnameOverride: "oxy-test-secure"
 
 app:
   image: "ghcr.io/oxy-hq/oxygen"
-  imageTag: "0.4.0"
+  imageTag: "0.5.49"
   imagePullPolicy: "Always"  # Always pull for security
   replicaCount: 1
   port: 3000
@@ -12,11 +12,11 @@ app:
 # Minimal resources for security testing
 resources:
   requests:
-    cpu: "50m"
-    memory: "64Mi"
+    cpu: "500m"
+    memory: "512Mi"
   limits:
-    cpu: "100m"
-    memory: "128Mi"
+    cpu: "500m"
+    memory: "512Mi"
 
 # Secure environment
 env:
@@ -87,7 +87,7 @@ git:
 
 database:
   postgres:
-    enabled: false
+    enabled: true
 
 externalSecrets:
   create: false

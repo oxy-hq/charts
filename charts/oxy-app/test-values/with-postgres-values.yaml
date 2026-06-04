@@ -4,7 +4,10 @@ fullnameOverride: "oxy-test-postgres"
 
 app:
   image: "ghcr.io/oxy-hq/oxygen"
-  imageTag: "0.4.0"
+  # Match Chart.appVersion. The previous 0.4.0 pin pre-dates the
+  # chart's DB-URL handling refactor and caused silent startup
+  # failures.
+  imageTag: "0.5.49"
   imagePullPolicy: "IfNotPresent"
 
 replicaCount: 1
@@ -33,8 +36,8 @@ postgres:
 
 resources:
   limits:
-    cpu: 100m
-    memory: 128Mi
+    cpu: 500m
+    memory: 512Mi
   requests:
-    cpu: 50m
-    memory: 64Mi
+    cpu: 100m
+    memory: 256Mi

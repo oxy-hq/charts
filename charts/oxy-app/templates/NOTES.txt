@@ -1,0 +1,56 @@
+{{/* See `templates/_worker-validation.tpl` for the corresponding fail-fast
+     guard against misconfigured topologies. */}}
+================================================================================
+oxy-app {{ .Chart.AppVersion }} — release {{ .Release.Name }}
+================================================================================
+
+HTTP fleet:
+  StatefulSet:        {{ include "oxy-app.fullname" . }}
+  Replicas:           {{ .Values.replicaCount }}
+{{- if .Values.appServer.disableInprocessWorkers }}
+  Mode:               HTTP-only (`--no-workers` + OXY_DISABLE_INPROCESS_WORKERS=1)
+                      The in-process worker AND the in-process recovery driver
+                      are disabled. The standalone `oxy worker` Deployment is
+                      the sole consumer of `agentic_task_queue`.
+{{- else }}
+  Mode:               single-process (workers run inside the HTTP server)
+                      This is the default and preserves the legacy behavior.
+                      Long-running compute and HTTP request handling share the
+                      same pod. Safe for local dev and single-node prod.
+{{- end }}
+
+Worker fleet:
+{{- if .Values.worker.enabled }}
+  Deployment:         {{ include "oxy-app.fullname" . }}-worker
+  Replicas:           {{ .Values.worker.replicaCount }} (or HPA bounds when enabled)
+  Health port:        {{ .Values.worker.healthPort | default 8081 }}
+  Liveness contract:  /healthz on the worker pod returns 200 while the durable
+                      transport + router + reaper are all alive.
+{{- if not .Values.appServer.disableInprocessWorkers }}
+
+  ⚠  Both fleets are draining the same queue.
+     `worker.enabled=true` AND `appServer.disableInprocessWorkers=false`
+     means BOTH the standalone worker fleet AND the in-process worker in
+     the HTTP StatefulSet are pulling from `agentic_task_queue`. This is
+     safe (SKIP-LOCKED prevents double-execution) but wasteful. Flip
+     `appServer.disableInprocessWorkers=true` once the worker fleet is
+     proven so the HTTP pods can drop the worker workload.
+{{- end }}
+{{- else }}
+  Status:             disabled (no resources rendered)
+                      Set `worker.enabled=true` and
+                      `appServer.disableInprocessWorkers=true` to scale the
+                      worker fleet independently of HTTP. Until then, agentic
+                      runs / builder pipelines / airway pipelines / preagg
+                      cycles execute inside the HTTP StatefulSet pod.
+{{- end }}
+
+Coordination surface:
+  Both fleets must point at the SAME Postgres. `OXY_DATABASE_URL` flows
+  through the existing `app.env.OXY_DATABASE_URL` / external-secret pipeline
+  for both the StatefulSet and the worker Deployment.
+
+References:
+  - chart guide:        charts/oxy-app/docs/worker-fleet.md
+  - upstream design:    oxygen-internal#2409
+  - operator runbook:   oxygen-internal `internal-docs/worker-fleet.md`
