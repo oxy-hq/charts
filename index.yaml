@@ -3,6 +3,33 @@ entries:
   oxy-app:
   - apiVersion: v2
     appVersion: 0.5.49
+    created: "2026-06-04T14:45:42.097343115Z"
+    dependencies:
+    - condition: database.postgres.enabled
+      name: postgres
+      repository: https://groundhog2k.github.io/helm-charts/
+      version: 1.6.1
+    - alias: clickhouseSubchart
+      condition: database.clickhouse.enabled
+      name: clickhouse
+      repository: oci://registry-1.docker.io/bitnamicharts
+      version: 9.4.4
+    description: A Helm chart for Oxy application deployment on kubernetes
+    digest: 8ff46c13762ad2e845931ef169e2ef1f5e2cf77c7de35b6aa5e54e0308c38040
+    keywords:
+    - oxy
+    maintainers:
+    - email: hello@oxy.tech
+      name: Oxy Team
+    - email: luong@oxy.tech
+      name: Luong Vo
+    name: oxy-app
+    type: application
+    urls:
+    - https://github.com/oxy-hq/charts/releases/download/oxy-app-0.5.1/oxy-app-0.5.1.tgz
+    version: 0.5.1
+  - apiVersion: v2
+    appVersion: 0.5.49
     created: "2026-05-04T06:43:14.772387375Z"
     dependencies:
     - condition: database.postgres.enabled
@@ -1397,4 +1424,4 @@ entries:
     urls:
     - https://github.com/oxy-hq/charts/releases/download/oxy-start-0.1.0/oxy-start-0.1.0.tgz
     version: 0.1.0
-generated: "2026-05-04T06:43:14.948358718Z"
+generated: "2026-06-04T14:45:42.097686105Z"
