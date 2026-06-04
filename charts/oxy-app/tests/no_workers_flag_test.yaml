@@ -16,6 +16,10 @@ tests:
 
   - it: appends --no-workers to the serve command when appServer.disableInprocessWorkers is true
     set:
+      # The topology guard requires worker.enabled=true whenever the HTTP
+      # fleet drops in-process workers. See _worker-validation.tpl.
+      worker:
+        enabled: true
       appServer:
         disableInprocessWorkers: true
     asserts:
@@ -25,6 +29,8 @@ tests:
 
   - it: also sets OXY_DISABLE_INPROCESS_WORKERS=1 as a belt-and-suspenders
     set:
+      worker:
+        enabled: true
       appServer:
         disableInprocessWorkers: true
     asserts:
@@ -36,6 +42,8 @@ tests:
 
   - it: composes --no-workers alongside the existing --internal-host flag
     set:
+      worker:
+        enabled: true
       appServer:
         disableInprocessWorkers: true
       app:
@@ -48,6 +56,8 @@ tests:
 
   - it: composes --no-workers alongside --local when git is enabled
     set:
+      worker:
+        enabled: true
       appServer:
         disableInprocessWorkers: true
       git:

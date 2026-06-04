@@ -1,0 +1,49 @@
+suite: worker topology fail-fast guard
+templates:
+  - statefulset.yaml
+
+tests:
+  - it: refuses to render when --no-workers is set but worker.enabled is false
+    set:
+      appServer:
+        disableInprocessWorkers: true
+      worker:
+        enabled: false
+    asserts:
+      - failedTemplate:
+          errorMessage: "[oxy-app] Invalid worker topology: appServer.disableInprocessWorkers=true but worker.enabled=false. The HTTP fleet is configured to skip in-process workers, so nothing will drain the agentic_task_queue. Either set worker.enabled=true to render the standalone oxy worker Deployment, or set appServer.disableInprocessWorkers=false to keep the in-process worker."
+
+  - it: allows the legacy single-process default (workers run in-process)
+    # No `set` block — pure defaults: disableInprocessWorkers=false,
+    # worker.enabled=false. The statefulset must render normally.
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: StatefulSet
+
+  - it: allows the split-fleet topology (HTTP-only + standalone worker)
+    set:
+      appServer:
+        disableInprocessWorkers: true
+      worker:
+        enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: StatefulSet
+
+  - it: allows the redundant-drain topology (both fleets enabled)
+    # Wasteful but safe. The guard is INTENTIONALLY narrow — it only
+    # catches the silent-stall case where nothing drains the queue.
+    set:
+      appServer:
+        disableInprocessWorkers: false
+      worker:
+        enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: StatefulSet

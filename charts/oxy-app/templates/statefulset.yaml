@@ -1,6 +1,8 @@
 {{/*
 Define git clone paths
 */}}
+{{- /* Fail fast if the worker topology is misconfigured. See _worker-validation.tpl. */}}
+{{- include "oxy-app.validateWorkerTopology" . -}}
 {{- $gitCloneDir := printf "%s/%s" .Values.persistence.mountPath (default "repo" .Values.git.cloneDir) -}}
 {{- $workingDir := $gitCloneDir -}}
 {{- if and .Values.git.workingDir (ne .Values.git.workingDir "") -}}
