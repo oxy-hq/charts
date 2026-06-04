@@ -4,7 +4,7 @@ fullnameOverride: "test-production"
 
 app:
   image: "ghcr.io/oxy-hq/oxygen"  # Use nginx for testing instead of real app
-  imageTag: "0.4.0"
+  imageTag: "0.5.49"
   imagePullPolicy: "IfNotPresent"
   replicaCount: 1
 
@@ -29,11 +29,11 @@ env:
 # Resource configuration similar to production but smaller for CI
 resources:
   requests:
-    cpu: "100m"
-    memory: "128Mi"
+    cpu: "500m"
+    memory: "512Mi"
   limits:
-    cpu: "200m"
-    memory: "256Mi"
+    cpu: "500m"
+    memory: "512Mi"
 
 # Test persistence with smaller size
 persistence:
@@ -72,7 +72,7 @@ ingress:
 # Disable external database dependency for this test
 database:
   postgres:
-    enabled: false
+    enabled: true
 
 # Enable PodDisruptionBudget in this production-like test values
 pdb:

@@ -1,10 +1,25 @@
 # Integration test with default minimal configuration
+#
+# Smallest helm-install shape that the chart will actually start. Modern
+# oxy serve requires OXY_DATABASE_URL — there is no sqlite fallback
+# (intentional, see statefulset.yaml comment on the OXY_DATABASE_URL
+# branch). So "default" here means "minimal viable production-ish
+# install": the postgres subchart plus the oxy server.
+#
+# Previously this file disabled the postgres subchart and pinned image
+# 0.4.0, which silently broke the integration suite when the chart's
+# DB-URL fallback was removed. The CI failure surfaced as a 3-minute
+# "StatefulSet not ready" timeout with no pod-level cause printed.
+# `scripts/test.sh` now dumps kubectl describe + pod logs on failure
+# so future regressions are visible at a glance.
 nameOverride: "oxy-test-default"
 fullnameOverride: "oxy-test-default"
 
 app:
   image: "ghcr.io/oxy-hq/oxygen"
-  imageTag: "0.4.0"
+  # Match Chart.appVersion so we exercise the binary that ships with the
+  # chart, not a half-year-old tag.
+  imageTag: "0.5.49"
   imagePullPolicy: "IfNotPresent"
 
 replicaCount: 1
@@ -14,16 +29,31 @@ service:
   port: 80
   targetPort: 3000
 
-# Disable external dependencies for testing
+# Enable the postgres subchart so OXY_DATABASE_URL is wired and the oxy
+# server can start. Test config mirrors with-postgres-values.yaml so the
+# default test is a strict subset of the postgres-specific test.
 database:
   postgres:
-    enabled: false
+    enabled: true
 
-# Use minimal resources for CI
+postgres:
+  fullnameOverride: "test-default-db"
+  userDatabase:
+    name:
+      value: "testdb"
+    user:
+      value: "testuser"
+    password:
+      value: "testpass"
+
+# Bumped from 128Mi → 512Mi. The Rust binary plus startup migrations
+# need headroom; 128Mi was tight enough that pods spent the full 3min
+# install timeout in OOMKilled / CrashLoop without ever passing
+# readiness. CPU stays modest because kind nodes are constrained.
 resources:
   limits:
-    cpu: 100m
-    memory: 128Mi
+    cpu: 500m
+    memory: 512Mi
   requests:
-    cpu: 50m
-    memory: 64Mi
+    cpu: 100m
+    memory: 256Mi

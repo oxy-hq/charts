@@ -41,6 +41,43 @@ log_section() {
     echo -e "${BLUE}=== $1 ===${NC}"
 }
 
+# Dump every signal that diagnoses a failed helm install / pod-not-ready.
+# Without a release selector, dumps the entire test namespace — used
+# from the trap on script-exit so a 5m timeout on the StatefulSet no
+# longer prints just "InProgress, Ready: 0/1". kubectl describe +
+# events + pod logs land in the CI log alongside the error.
+dump_failure_diagnostics() {
+    local selector_args=()
+    if [[ -n "${1:-}" ]]; then
+        selector_args=(-l "app.kubernetes.io/instance=$1")
+        log_warn "Dumping cluster diagnostics for release '$1'..."
+    else
+        log_warn "Dumping cluster diagnostics for namespace '$NAMESPACE'..."
+    fi
+    echo "--- pods ---"
+    kubectl get pods -n "$NAMESPACE" "${selector_args[@]}" -o wide || true
+    echo "--- pvcs ---"
+    kubectl get pvc -n "$NAMESPACE" || true
+    echo "--- events (last 30, by lastTimestamp) ---"
+    kubectl get events -n "$NAMESPACE" --sort-by=.lastTimestamp 2>/dev/null | tail -30 || true
+    echo "--- describe pods ---"
+    kubectl describe pods -n "$NAMESPACE" "${selector_args[@]}" 2>/dev/null \
+        | sed -n '1,300p' || true
+    echo "--- logs (current container) ---"
+    kubectl logs -n "$NAMESPACE" "${selector_args[@]}" \
+        --all-containers=true --tail=200 --prefix=true 2>/dev/null || true
+    echo "--- logs (previous container, if any) ---"
+    kubectl logs -n "$NAMESPACE" "${selector_args[@]}" \
+        --all-containers=true --tail=200 --previous --prefix=true 2>/dev/null || true
+}
+
+# Install the failure-diagnostic dump as an ERR trap so EVERY helm
+# install / kubectl wait failure produces describe + logs alongside
+# the cryptic "context deadline exceeded" message. Without this the
+# integration suite was silently broken for a month before anyone
+# could see why.
+trap 'rc=$?; if [[ $rc -ne 0 && -n "${NAMESPACE:-}" ]]; then dump_failure_diagnostics; fi; exit $rc' ERR
+
 show_usage() {
     cat <<EOF
 Usage: $0 [OPTIONS]
@@ -262,7 +299,7 @@ test_default_deployment() {
     helm install test-default "$CHART_PATH" \
         -f "$CHART_PATH/test-values/default-values.yaml" \
         -n "$NAMESPACE" \
-        --wait --timeout=3m
+        --wait --timeout=5m
 
     # Wait for pods to be ready
     kubectl wait --for=condition=ready pod \
@@ -305,7 +342,7 @@ test_ingress_deployment() {
     helm install test-ingress "$CHART_PATH" \
         -f "$CHART_PATH/test-values/with-ingress-values.yaml" \
         -n "$NAMESPACE" \
-        --wait --timeout=3m
+        --wait --timeout=5m
 
     # Wait for pods to be ready
     kubectl wait --for=condition=ready pod \
@@ -339,7 +376,7 @@ test_postgres_deployment() {
     if ! helm install test-postgres "$CHART_PATH" \
         -f "$CHART_PATH/test-values/with-postgres-values.yaml" \
         -n "$NAMESPACE" \
-        --wait --timeout=3m; then
+        --wait --timeout=5m; then
         log_error "Helm install failed"
         log_info "Getting pod status:"
         kubectl get pods -n "$NAMESPACE" -o wide || true
@@ -414,7 +451,7 @@ test_persistence_deployment() {
     if helm install test-persist "$CHART_PATH" \
         -f "$CHART_PATH/test-values/with-persistence-values.yaml" \
         -n "$NAMESPACE" \
-        --wait --timeout=3m; then
+        --wait --timeout=5m; then
         log_info "Helm install succeeded"
     else
         log_error "Helm install failed"
@@ -547,7 +584,7 @@ test_production_like_deployment() {
     helm install test-production "$CHART_PATH" \
         -f "$CHART_PATH/test-values/production-like-values.yaml" \
         -n "$NAMESPACE" \
-        --wait --timeout=3m
+        --wait --timeout=5m
 
     # Debug: Check pod and PVC status immediately after install
     log_info "Checking pod and PVC status after install..."
@@ -626,13 +663,13 @@ test_upgrade_scenarios() {
     helm install upgrade-test "$CHART_PATH" \
         -f "$CHART_PATH/test-values/default-values.yaml" \
         -n "$NAMESPACE" \
-        --wait --timeout=3m
+        --wait --timeout=5m
 
     # Upgrade with ingress enabled
     helm upgrade upgrade-test "$CHART_PATH" \
         -f "$CHART_PATH/test-values/with-ingress-values.yaml" \
         -n "$NAMESPACE" \
-        --wait --timeout=3m
+        --wait --timeout=5m
 
     # Verify upgrade worked
     kubectl wait --for=condition=ready pod \
