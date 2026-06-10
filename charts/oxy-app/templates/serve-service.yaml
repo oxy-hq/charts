@@ -1,0 +1,24 @@
+{{- if .Values.serveFleet.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "oxy-app.fullname" . }}-serve
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "oxy-app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: serve
+  {{- with .Values.serveFleet.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.serveFleet.service.type }}
+  selector:
+    {{- include "oxy-app.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: serve
+  ports:
+    - name: http
+      port: {{ .Values.serveFleet.service.port }}
+      targetPort: {{ .Values.serveFleet.service.targetPort }}
+      protocol: TCP
+{{- end }}

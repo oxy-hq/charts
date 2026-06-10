@@ -1,0 +1,115 @@
+{{- if .Values.serveFleet.enabled }}
+{{- /*
+Stateless oxy-serve fleet — see oxygen-internal `internal-docs/2026-06-06-compile-boundary-design.md`
+and the simplification doc at `2026-06-10-compile-boundary-simplification.md`.
+
+This Deployment serves Postgres-backed reads (customer-apps, external API,
+admin, chat list, and the Slice 4 runtime read paths as their per-surface
+`compile_*_use_postgres` flags flip on). No PVC, no workspace files — the
+StatefulSet remains the singleton owner of working copies.
+
+Both fleets share the SAME Postgres (`OXY_DATABASE_URL`). The StatefulSet
+is the canonical migrator; oxy-serve pods skip migrations and assume the
+schema is already in place.
+*/}}
+{{- $serveImageRepo := default .Values.app.image .Values.serveFleet.image.repository -}}
+{{- $serveImageTag := default (default .Chart.AppVersion .Values.app.imageTag) .Values.serveFleet.image.tag -}}
+{{- $serveImagePullPolicy := default .Values.app.imagePullPolicy .Values.serveFleet.image.pullPolicy -}}
+{{- $serveSa := default (include "oxy-app.serviceAccountName" .) .Values.serveFleet.serviceAccountName -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "oxy-app.fullname" . }}-serve
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "oxy-app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: serve
+spec:
+  replicas: {{ .Values.serveFleet.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "oxy-app.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: serve
+  strategy:
+    {{- toYaml .Values.serveFleet.strategy | nindent 4 }}
+  template:
+    metadata:
+      labels:
+        {{- include "oxy-app.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: serve
+        {{- with .Values.serveFleet.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.serveFleet.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- if ne $serveSa "" }}
+      serviceAccountName: {{ $serveSa | quote }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.serveFleet.terminationGracePeriodSeconds }}
+      {{- with .Values.serveFleet.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.serveFleet.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.serveFleet.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.serveFleet.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: serve
+          image: "{{ $serveImageRepo }}:{{ $serveImageTag }}"
+          imagePullPolicy: {{ $serveImagePullPolicy }}
+          {{- with .Values.serveFleet.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if and .Values.serveFleet.command (gt (len .Values.serveFleet.command) 0) }}
+          command:
+            {{- range .Values.serveFleet.command }}
+            - {{ . | quote }}
+            {{- end }}
+          {{- else }}
+          # Default: HTTP-only, no in-process workers, no workspace FS.
+          # Migrations are owned by the StatefulSet.
+          command:
+            - "sh"
+            - "-c"
+            - "exec oxy serve --no-workers"
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          env:
+            - name: OXY_DISABLE_INPROCESS_WORKERS
+              value: "1"
+            - name: OXY_SKIP_MIGRATIONS
+              value: "1"
+            {{- range $k, $v := .Values.serveFleet.env }}
+            - name: {{ $k | quote }}
+              value: {{ $v | quote }}
+            {{- end }}
+            {{- with .Values.serveFleet.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.serveFleet.extraEnvFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.serveFleet.resources | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.serveFleet.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.serveFleet.readinessProbe | nindent 12 }}
+{{- end }}

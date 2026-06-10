@@ -1,7 +1,10 @@
 {{- if .Values.ingress.enabled -}}
 {{- $fullName := include "oxy-app.fullname" . -}}
 {{- $svcName := default (include "oxy-app.fullname" .) .Values.service.name -}}
+{{- $serveSvcName := printf "%s-serve" $fullName -}}
 {{- $root := . -}}
+{{- $serveEnabled := .Values.serveFleet.enabled -}}
+{{- $servePaths := default (list) .Values.serveFleet.ingressPaths -}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -25,6 +28,26 @@ spec:
     - host: {{ $host.host | quote }}
       http:
         paths:
+          {{- /*
+            HA split routing. When `serveFleet.enabled: true`, the chart
+            renders one Ingress rule per path in `serveFleet.ingressPaths`
+            FIRST (more specific), pointing them at the stateless
+            oxy-serve Service. The catch-all path below then routes
+            everything else to the singleton StatefulSet (oxy-ide). Path
+            matching is order-dependent in most ingress controllers; we
+            list the specific paths before the catch-all explicitly.
+          */}}
+          {{- if $serveEnabled }}
+          {{- range $servePaths }}
+          - path: {{ . | quote }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $serveSvcName }}
+                port:
+                  number: {{ $root.Values.serveFleet.service.port }}
+          {{- end }}
+          {{- end }}
           {{- if $host.paths }}
           {{- range $p := $host.paths }}
           - path: {{ $p.path | default $.Values.ingress.path | quote }}
