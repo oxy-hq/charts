@@ -322,6 +322,13 @@ spec:
 
           # Environment Variables
           env:
+            # Role classification — oxygen-internal PR #2505 routing guardrail.
+            # IDE singleton: owns the workspace working copy + .git tree.
+            # Accepts every route (IdeOnly + FleetOk) on this pod. When
+            # serveFleet is enabled, the path-based ingress routes the
+            # write-heavy IDE surface here while stateless reads go to oxy-serve.
+            - name: OXY_ROLE
+              value: "ide"
             # State Directory Configuration
             {{- if and .Values.env.OXY_STATE_DIR (ne .Values.env.OXY_STATE_DIR "") }}
             - name: OXY_STATE_DIR

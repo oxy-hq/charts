@@ -91,6 +91,13 @@ spec:
               containerPort: 3000
               protocol: TCP
           env:
+            # Role classification — oxygen-internal PR #2505 routing guardrail.
+            # Stateless fleet replica with no workspace volume mounted.
+            # FS-touching routes (IDE pages, file CRUD, git, compile,
+            # onboarding) 421 with X-Oxy-Required-Role: ide instead of
+            # silently 500ing.
+            - name: OXY_ROLE
+              value: "serve"
             - name: OXY_DISABLE_INPROCESS_WORKERS
               value: "1"
             - name: OXY_SKIP_MIGRATIONS

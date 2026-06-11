@@ -91,6 +91,11 @@ spec:
               containerPort: {{ .Values.worker.healthPort }}
               protocol: TCP
           env:
+            # Role classification — oxygen-internal PR #2505 routing guardrail.
+            # Queue drainer; no inbound customer HTTP. /healthz still works
+            # under this role because FleetOk routes are accepted by Worker.
+            - name: OXY_ROLE
+              value: "worker"
             # Database URL Configuration — mirrors the HTTP StatefulSet
             # precedence so both fleets agree on the same Postgres.
             {{- if and .Values.env.OXY_DATABASE_URL (ne .Values.env.OXY_DATABASE_URL "") }}
