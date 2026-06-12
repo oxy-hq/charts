@@ -35,6 +35,18 @@ spec:
       labels:
         {{- include "oxy-app.selectorLabels" . | nindent 8 }}
         version: v1
+        {{- /*
+          HA-split routing anchor. When serveFleet is enabled, the main Service
+          selects on this label so the catch-all `/` route reaches ONLY this
+          singleton (which owns the working copy + drives compiles) — not the
+          stateless serve pods (component=serve) nor the worker pods
+          (component=worker), both of which also carry the bare
+          name+instance selectorLabels. Gated so serveFleet-off deployments
+          keep their exact current pod template (no rollout on upgrade).
+        */}}
+        {{- if .Values.serveFleet.enabled }}
+        app.kubernetes.io/component: ide
+        {{- end }}
       {{- if .Values.otelCollector.enabled }}
       annotations:
         checksum/otel-config: {{ include (print $.Template.BasePath "/otel-configmap.yaml") . | sha256sum }}

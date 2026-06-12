@@ -623,20 +623,33 @@ serveFleet:
     limits:
       cpu: 1
       memory: 1Gi
-  # Container env. The chart injects OXY_DATABASE_URL automatically from
-  # the shared Postgres config (same as the StatefulSet).
+  # Ephemeral state dir for the stateless fleet (no PVC). Backed by an
+  # emptyDir mount; holds the parquet result cache + generated charts —
+  # per-pod scratch that's safe to lose on restart.
+  stateDir: /var/lib/oxy
+  # Container env. The chart injects OXY_DATABASE_URL + the shared `.Values.env`
+  # (minus OXY_STATE_DIR / OXY_DATABASE_URL / OXY_INPROC_GLOBAL_WORKER) + the
+  # externalSecrets envFrom automatically — same Postgres + secrets as the
+  # StatefulSet. Use this map only for serve-fleet-specific overrides.
   env: {}
   extraEnv: []
   extraEnvFrom: []
+  # Probes hit the REAL endpoints, which live under the /api nest
+  # (public.rs → nested at /api). /api/live is an unconditional 200 (process
+  # up — won't crashloop on a transient DB blip); /api/ready returns 503 unless
+  # Postgres is reachable, so a replica that can't read compiled definitions is
+  # pulled from the Service endpoints instead of serving 500s. NB: top-level
+  # /health and /ready do NOT exist — they fall through to the SPA and would
+  # mask an unhealthy pod with a 200.
   livenessProbe:
     httpGet:
-      path: /health
+      path: /api/live
       port: 3000
     initialDelaySeconds: 15
     periodSeconds: 10
   readinessProbe:
     httpGet:
-      path: /ready
+      path: /api/ready
       port: 3000
     initialDelaySeconds: 5
     periodSeconds: 5
