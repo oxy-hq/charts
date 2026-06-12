@@ -8,6 +8,17 @@ metadata:
 spec:
   selector:
     {{- include "oxy-app.selectorLabels" . | nindent 4 }}
+    {{- /*
+      HA split: when the stateless serve fleet is enabled, pin this Service
+      (the ingress catch-all `/` backend) to the StatefulSet singleton via its
+      component=ide anchor. Without this, the bare name+instance selector also
+      matches the serve (component=serve) and worker (component=worker) pods,
+      so IDE/editing traffic would round-robin onto pods that 421 or don't
+      serve it. Gated so serveFleet-off deployments keep the current selector.
+    */}}
+    {{- if .Values.serveFleet.enabled }}
+    app.kubernetes.io/component: ide
+    {{- end }}
   ports:
   - port: {{ .Values.service.port }}
     targetPort: {{ .Values.service.targetPort }}
