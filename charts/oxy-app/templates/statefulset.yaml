@@ -346,6 +346,21 @@ spec:
               value: "1"
             {{- end }}
 
+            # Compile-boundary global driver: drive the Global task queue
+            # (incl. TaskSpec::Compile) in-process. The StatefulSet is the only
+            # node with the working copy, so compiles can ONLY run here. Inert
+            # under --no-workers, so gate on both.
+            {{- if and .Values.appServer.inprocGlobalWorker (not .Values.appServer.disableInprocessWorkers) }}
+            - name: OXY_INPROC_GLOBAL_WORKER
+              value: "1"
+            {{- end }}
+            # Compile-boundary S3 offload (semantic blobs + local-DuckDB mirror).
+            # This is the compile WRITER, so it needs the bucket to upload.
+            {{- if .Values.compileBoundary.blobS3Bucket }}
+            - name: OXY_COMPILE_BLOB_S3_BUCKET
+              value: {{ .Values.compileBoundary.blobS3Bucket | quote }}
+            {{- end }}
+
             # Database URL Configuration
             # Preference order (sqlite fallback intentionally omitted):
             # 1) Explicit value provided by caller via values.env.OXY_DATABASE_URL

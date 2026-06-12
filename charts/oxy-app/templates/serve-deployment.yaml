@@ -4,13 +4,21 @@ Stateless oxy-serve fleet — see oxygen-internal `internal-docs/2026-06-06-comp
 and the simplification doc at `2026-06-10-compile-boundary-simplification.md`.
 
 This Deployment serves Postgres-backed reads (customer-apps, external API,
-admin, chat list, and the Slice 4 runtime read paths as their per-surface
-`compile_*_use_postgres` flags flip on). No PVC, no workspace files — the
-StatefulSet remains the singleton owner of working copies.
+admin, chat list, and the runtime read paths — apps, procedures, agents,
+semantic). The compile boundary is always-on (no per-surface flags); each
+read falls back to the filesystem only when the workspace isn't compiled —
+which a stateless replica can't do, so a workspace must be compiled before
+this fleet serves it. No PVC, no workspace files — the StatefulSet remains
+the singleton owner of working copies.
 
 Both fleets share the SAME Postgres (`OXY_DATABASE_URL`). The StatefulSet
 is the canonical migrator; oxy-serve pods skip migrations and assume the
 schema is already in place.
+
+IMPORTANT: compiles only run on a node that has the working copy AND drives
+the global task queue — i.e. the StatefulSet with `OXY_INPROC_GLOBAL_WORKER=1`.
+If nothing drives compiles, this fleet has no promoted revisions to serve.
+See the `serveFleet` notes in values.yaml.
 */}}
 {{- $serveImageRepo := default .Values.app.image .Values.serveFleet.image.repository -}}
 {{- $serveImageTag := default (default .Chart.AppVersion .Values.app.imageTag) .Values.serveFleet.image.tag -}}
@@ -102,6 +110,12 @@ spec:
               value: "1"
             - name: OXY_SKIP_MIGRATIONS
               value: "1"
+            # Compile-boundary S3 reads (semantic blobs + DuckDB mirror). Must
+            # match the bucket the StatefulSet compile writer uploads to.
+            {{- if .Values.compileBoundary.blobS3Bucket }}
+            - name: OXY_COMPILE_BLOB_S3_BUCKET
+              value: {{ .Values.compileBoundary.blobS3Bucket | quote }}
+            {{- end }}
             {{- range $k, $v := .Values.serveFleet.env }}
             - name: {{ $k | quote }}
               value: {{ $v | quote }}

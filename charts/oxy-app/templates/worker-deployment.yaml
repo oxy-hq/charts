@@ -96,6 +96,12 @@ spec:
             # under this role because FleetOk routes are accepted by Worker.
             - name: OXY_ROLE
               value: "worker"
+            # Compile-boundary S3 reads: a worker executing an agentic run can
+            # read semantic blobs from S3, so it needs the same bucket.
+            {{- if .Values.compileBoundary.blobS3Bucket }}
+            - name: OXY_COMPILE_BLOB_S3_BUCKET
+              value: {{ .Values.compileBoundary.blobS3Bucket | quote }}
+            {{- end }}
             # Database URL Configuration — mirrors the HTTP StatefulSet
             # precedence so both fleets agree on the same Postgres.
             {{- if and .Values.env.OXY_DATABASE_URL (ne .Values.env.OXY_DATABASE_URL "") }}
