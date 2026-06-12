@@ -1,0 +1,136 @@
+{{- if .Values.serveFleet.enabled }}
+{{- /*
+Stateless oxy-serve fleet — see oxygen-internal `internal-docs/2026-06-06-compile-boundary-design.md`
+and the simplification doc at `2026-06-10-compile-boundary-simplification.md`.
+
+This Deployment serves Postgres-backed reads (customer-apps, external API,
+admin, chat list, and the runtime read paths — apps, procedures, agents,
+semantic). The compile boundary is always-on (no per-surface flags); each
+read falls back to the filesystem only when the workspace isn't compiled —
+which a stateless replica can't do, so a workspace must be compiled before
+this fleet serves it. No PVC, no workspace files — the StatefulSet remains
+the singleton owner of working copies.
+
+Both fleets share the SAME Postgres (`OXY_DATABASE_URL`). The StatefulSet
+is the canonical migrator; oxy-serve pods skip migrations and assume the
+schema is already in place.
+
+IMPORTANT: compiles only run on a node that has the working copy AND drives
+the global task queue — i.e. the StatefulSet with `OXY_INPROC_GLOBAL_WORKER=1`.
+If nothing drives compiles, this fleet has no promoted revisions to serve.
+See the `serveFleet` notes in values.yaml.
+*/}}
+{{- $serveImageRepo := default .Values.app.image .Values.serveFleet.image.repository -}}
+{{- $serveImageTag := default (default .Chart.AppVersion .Values.app.imageTag) .Values.serveFleet.image.tag -}}
+{{- $serveImagePullPolicy := default .Values.app.imagePullPolicy .Values.serveFleet.image.pullPolicy -}}
+{{- $serveSa := default (include "oxy-app.serviceAccountName" .) .Values.serveFleet.serviceAccountName -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "oxy-app.fullname" . }}-serve
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "oxy-app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: serve
+spec:
+  replicas: {{ .Values.serveFleet.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "oxy-app.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: serve
+  strategy:
+    {{- toYaml .Values.serveFleet.strategy | nindent 4 }}
+  template:
+    metadata:
+      labels:
+        {{- include "oxy-app.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: serve
+        {{- with .Values.serveFleet.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.serveFleet.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- if ne $serveSa "" }}
+      serviceAccountName: {{ $serveSa | quote }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.serveFleet.terminationGracePeriodSeconds }}
+      {{- with .Values.serveFleet.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.serveFleet.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.serveFleet.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.serveFleet.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: serve
+          image: "{{ $serveImageRepo }}:{{ $serveImageTag }}"
+          imagePullPolicy: {{ $serveImagePullPolicy }}
+          {{- with .Values.serveFleet.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if and .Values.serveFleet.command (gt (len .Values.serveFleet.command) 0) }}
+          command:
+            {{- range .Values.serveFleet.command }}
+            - {{ . | quote }}
+            {{- end }}
+          {{- else }}
+          # Default: HTTP-only, no in-process workers, no workspace FS.
+          # Migrations are owned by the StatefulSet.
+          command:
+            - "sh"
+            - "-c"
+            - "exec oxy serve --no-workers"
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          env:
+            # Role classification — oxygen-internal PR #2505 routing guardrail.
+            # Stateless fleet replica with no workspace volume mounted.
+            # FS-touching routes (IDE pages, file CRUD, git, compile,
+            # onboarding) 421 with X-Oxy-Required-Role: ide instead of
+            # silently 500ing.
+            - name: OXY_ROLE
+              value: "serve"
+            - name: OXY_DISABLE_INPROCESS_WORKERS
+              value: "1"
+            - name: OXY_SKIP_MIGRATIONS
+              value: "1"
+            # Compile-boundary S3 reads (semantic blobs + DuckDB mirror). Must
+            # match the bucket the StatefulSet compile writer uploads to.
+            {{- if .Values.compileBoundary.blobS3Bucket }}
+            - name: OXY_COMPILE_BLOB_S3_BUCKET
+              value: {{ .Values.compileBoundary.blobS3Bucket | quote }}
+            {{- end }}
+            {{- range $k, $v := .Values.serveFleet.env }}
+            - name: {{ $k | quote }}
+              value: {{ $v | quote }}
+            {{- end }}
+            {{- with .Values.serveFleet.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.serveFleet.extraEnvFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.serveFleet.resources | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.serveFleet.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.serveFleet.readinessProbe | nindent 12 }}
+{{- end }}

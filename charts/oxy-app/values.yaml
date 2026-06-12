@@ -32,6 +32,35 @@ appServer:
   # deployments are unaffected on upgrade.
   disableInprocessWorkers: false
 
+  # Drive the GLOBAL task queue (incl. TaskSpec::Compile) in-process on the
+  # StatefulSet by setting OXY_INPROC_GLOBAL_WORKER=1.
+  #
+  # REQUIRED for the compile boundary: a compile can only run on a node that
+  # has the working copy AND drives the global queue — that's the StatefulSet
+  # (oxy-ide). With this off, Compile tasks enqueue but never drain, no
+  # workspace promotes, and a stateless `serveFleet` 503s every request.
+  #
+  # Only effective when in-process workers are running (i.e. NOT
+  # `disableInprocessWorkers`); under `--no-workers` the StatefulSet can't
+  # drive compiles, and the standalone `oxy worker` fleet can't either (no
+  # working copy — per-worker clone-on-demand is a later phase). So to use the
+  # compile boundary today, keep `disableInprocessWorkers: false` and set this
+  # `true`. Default false so existing deployments are unaffected on upgrade.
+  inprocGlobalWorker: false
+
+# Compile-boundary cross-cutting config. The runtime serves workspace
+# definitions from Postgres (always-on, no feature flags); these knobs tune the
+# optional S3 offload. See oxygen-internal `internal-docs/compile-boundary.md`.
+compileBoundary:
+  # S3 bucket for (a) semantic view/topic blob offload and (b) the local-file
+  # DuckDB → S3 mirror. Injected as OXY_COMPILE_BLOB_S3_BUCKET on the
+  # StatefulSet (the compile WRITER), the serve fleet and the worker (READERS)
+  # — writer and readers must agree on the same bucket. Empty = disabled:
+  # semantic bodies stay in Postgres JSONB (works, just larger) and local-file
+  # DuckDB warehouses are NOT servable by the stateless fleet. The pod IAM role
+  # needs s3:PutObject (writer) / s3:GetObject (readers) on this bucket.
+  blobS3Bucket: ""
+
 # Ingress configuration
 # Enable and configure Kubernetes Ingress for the application.
 ingress:
@@ -518,6 +547,129 @@ pdb:
 #   - Both point at the SAME Postgres (`OXY_DATABASE_URL`).
 #
 # Operational requirements live in oxygen-internal `internal-docs/worker-fleet.md`.
+
+# ---------------------------------------------------------------------------
+# Stateless `oxy-serve` fleet (HA split)
+# ---------------------------------------------------------------------------
+# Opt-in stateless HTTP Deployment that serves the compile-boundary read
+# paths (customer-apps, external API, runtime serving) without touching
+# the workspace filesystem. The existing StatefulSet stays as the
+# singleton `oxy-ide` that owns working copies + file CRUD + git ops +
+# the IDE Compile button. The two fleets share the same Postgres.
+#
+# Topology when enabled:
+#   - oxy-ide (StatefulSet, replicas=1): IDE / files / git / compile
+#   - oxy-serve (Deployment, this stanza, replicas=N): everything that
+#     only needs Postgres — customer-apps, external API, chat, admin, and
+#     the runtime read paths (apps, procedures, agents, semantic). The
+#     compile boundary is always-on (no per-surface flags).
+#   - oxy-worker (Deployment, see `worker` stanza): TaskSpec consumers.
+#
+# Set `serveFleet.enabled: false` (default) to render no oxy-serve
+# resources and preserve existing single-StatefulSet behaviour.
+#
+# Ingress routing: when `serveFleet.enabled: true` AND `ingress.enabled:
+# true`, the chart renders a SECOND Ingress entry that routes
+# `serveFleet.ingressPaths` to the oxy-serve Service. The default paths
+# list keeps IDE / files / git / compile on the StatefulSet and routes
+# everything else to oxy-serve.
+#
+# ── REQUIRED config for the compile boundary ───────────────────────────
+# The stateless fleet can ONLY serve a workspace that has been compiled (it
+# has no working copy to fall back to). So compiles MUST drain — set
+# `appServer.inprocGlobalWorker: true` (keep `disableInprocessWorkers: false`)
+# so the StatefulSet drives them. The `oxy worker` fleet does NOT compile (no
+# working copy; per-worker clone-on-demand is a later phase). For S3 offload +
+# DuckDB-on-fleet, set `compileBoundary.blobS3Bucket`. After deploy, compile
+# existing workspaces once via the admin "Compile all uncompiled" backfill.
+serveFleet:
+  enabled: false
+  # Number of stateless pods. HPA-friendly — these have no PVC, no in-
+  # memory state to drain on rollout.
+  replicaCount: 2
+  # Image: inherits from .Values.app.image / .Values.app.imageTag when
+  # left empty. Override only when you intentionally want the serve
+  # fleet pinned to a different tag (e.g. canary).
+  image:
+    repository: ""
+    tag: ""
+    pullPolicy: ""
+  # Override the container command. When empty, the chart uses
+  #   exec oxy serve --no-workers
+  command: []
+  # Service surface. ClusterIP only — exposure happens via the chart's
+  # main Ingress when `ingress.enabled` is on.
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 3000
+    annotations: {}
+  # Ingress path prefixes that should route to oxy-serve. Anything NOT
+  # in this list keeps going to the singleton StatefulSet (oxy-ide).
+  # Add the runtime read surfaces (e.g. /apps, agent/procedure runs) here
+  # once you've compiled + backfilled and verified the fleet serves them.
+  ingressPaths:
+    - /admin
+    - /threads
+    - /workspaces
+    - /external/api
+    - /auth
+    - /api/auth
+    - /webhooks
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1
+      memory: 1Gi
+  # Container env. The chart injects OXY_DATABASE_URL automatically from
+  # the shared Postgres config (same as the StatefulSet).
+  env: {}
+  extraEnv: []
+  extraEnvFrom: []
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 3000
+    initialDelaySeconds: 15
+    periodSeconds: 10
+  readinessProbe:
+    httpGet:
+      path: /ready
+      port: 3000
+    initialDelaySeconds: 5
+    periodSeconds: 5
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector: {}
+  tolerations: []
+  # By default, prefer to spread oxy-serve pods across nodes so a node
+  # failure can only take one replica at a time.
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: serve
+  serviceAccountName: ""
+  securityContext: {}
+  containerSecurityContext: {}
+  terminationGracePeriodSeconds: 30
+  # Strategy: rolling update with at-least-one alive. These are stateless
+  # so we can be aggressive about maxSurge to speed cutover.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: "50%"
+
 worker:
   enabled: false
   # Number of worker pods. Scale independently of the HTTP fleet.

@@ -322,6 +322,13 @@ spec:
 
           # Environment Variables
           env:
+            # Role classification — oxygen-internal PR #2505 routing guardrail.
+            # IDE singleton: owns the workspace working copy + .git tree.
+            # Accepts every route (IdeOnly + FleetOk) on this pod. When
+            # serveFleet is enabled, the path-based ingress routes the
+            # write-heavy IDE surface here while stateless reads go to oxy-serve.
+            - name: OXY_ROLE
+              value: "ide"
             # State Directory Configuration
             {{- if and .Values.env.OXY_STATE_DIR (ne .Values.env.OXY_STATE_DIR "") }}
             - name: OXY_STATE_DIR
@@ -337,6 +344,21 @@ spec:
             {{- if .Values.appServer.disableInprocessWorkers }}
             - name: OXY_DISABLE_INPROCESS_WORKERS
               value: "1"
+            {{- end }}
+
+            # Compile-boundary global driver: drive the Global task queue
+            # (incl. TaskSpec::Compile) in-process. The StatefulSet is the only
+            # node with the working copy, so compiles can ONLY run here. Inert
+            # under --no-workers, so gate on both.
+            {{- if and .Values.appServer.inprocGlobalWorker (not .Values.appServer.disableInprocessWorkers) }}
+            - name: OXY_INPROC_GLOBAL_WORKER
+              value: "1"
+            {{- end }}
+            # Compile-boundary S3 offload (semantic blobs + local-DuckDB mirror).
+            # This is the compile WRITER, so it needs the bucket to upload.
+            {{- if .Values.compileBoundary.blobS3Bucket }}
+            - name: OXY_COMPILE_BLOB_S3_BUCKET
+              value: {{ .Values.compileBoundary.blobS3Bucket | quote }}
             {{- end }}
 
             # Database URL Configuration
