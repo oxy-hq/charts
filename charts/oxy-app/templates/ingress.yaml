@@ -5,6 +5,17 @@
 {{- $root := . -}}
 {{- $serveEnabled := .Values.serveFleet.enabled -}}
 {{- $servePaths := default (list) .Values.serveFleet.ingressPaths -}}
+{{- $ideRoutes := default (list) .Values.ideRoutes -}}
+{{- /*
+  Inverse routing kicks in when serveFleet.enabled is true AND
+  ideRoutes is non-empty: the catch-all flips to the serve fleet, and
+  only the listed IdeOnly patterns peel off to the singleton StatefulSet
+  (oxy-ide). Otherwise the chart stays in the legacy additive shape
+  (catch-all → StatefulSet, serveFleet.ingressPaths peeled to serve).
+  Default ideRoutes ships pre-populated in values.yaml so the workload
+  does not need to track the role-manifest list.
+*/}}
+{{- $inverseMode := and $serveEnabled (gt (len $ideRoutes) 0) -}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -29,15 +40,37 @@ spec:
       http:
         paths:
           {{- /*
-            HA split routing. When `serveFleet.enabled: true`, the chart
-            renders one Ingress rule per path in `serveFleet.ingressPaths`
-            FIRST (more specific), pointing them at the stateless
-            oxy-serve Service. The catch-all path below then routes
-            everything else to the singleton StatefulSet (oxy-ide). Path
-            matching is order-dependent in most ingress controllers; we
-            list the specific paths before the catch-all explicitly.
+            (1) IdeOnly patterns. Most specific, listed first. Only
+            rendered in inverse mode — when the serve fleet is off,
+            everything already lands on the StatefulSet via the
+            catch-all, so emitting these entries would create 15
+            redundant ALB rules.
+            Default pathType ImplementationSpecific is what the AWS ALB
+            Ingress Controller passes through unmodified, so mid-segment
+            wildcards (the asterisk in /api/WORKSPACE/files) reach the
+            ALB as a native path pattern. Override per-entry with
+            pathType Prefix for left-anchored paths.
           */}}
-          {{- if $serveEnabled }}
+          {{- if $inverseMode }}
+          {{- range $r := $ideRoutes }}
+          - path: {{ $r.path | quote }}
+            pathType: {{ default "ImplementationSpecific" $r.pathType }}
+            backend:
+              service:
+                name: {{ $svcName }}
+                port:
+                  number: {{ $root.Values.service.port }}
+          {{- end }}
+          {{- end }}
+          {{- /*
+            (2) Legacy additive list (serveFleet.ingressPaths). Only
+            useful in legacy mode where the catch-all goes to the
+            StatefulSet — these prefixes peel specific paths to the
+            serve fleet. In inverse mode the catch-all already lands
+            on the serve fleet, so re-emitting these would create
+            duplicate ALB rules; skip them.
+          */}}
+          {{- if and $serveEnabled (not $inverseMode) }}
           {{- range $servePaths }}
           - path: {{ . | quote }}
             pathType: Prefix
@@ -48,7 +81,21 @@ spec:
                   number: {{ $root.Values.serveFleet.service.port }}
           {{- end }}
           {{- end }}
-          {{- if $host.paths }}
+          {{- /*
+            (3) Catch-all. Inverse mode points it at the serve fleet;
+            otherwise it stays on the StatefulSet (legacy behavior,
+            preserved when ideRoutes is empty so existing deployments
+            upgrade byte-identical).
+          */}}
+          {{- if $inverseMode }}
+          - path: {{ $.Values.ingress.path | quote }}
+            pathType: {{ $.Values.ingress.pathType }}
+            backend:
+              service:
+                name: {{ $serveSvcName }}
+                port:
+                  number: {{ $root.Values.serveFleet.service.port }}
+          {{- else if $host.paths }}
           {{- range $p := $host.paths }}
           - path: {{ $p.path | default $.Values.ingress.path | quote }}
             pathType: {{ $p.pathType | default $.Values.ingress.pathType }}
