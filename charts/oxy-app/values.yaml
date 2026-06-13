@@ -568,11 +568,21 @@ pdb:
 # Set `serveFleet.enabled: false` (default) to render no oxy-serve
 # resources and preserve existing single-StatefulSet behaviour.
 #
-# Ingress routing: when `serveFleet.enabled: true` AND `ingress.enabled:
-# true`, the chart renders a SECOND Ingress entry that routes
-# `serveFleet.ingressPaths` to the oxy-serve Service. The default paths
-# list keeps IDE / files / git / compile on the StatefulSet and routes
-# everything else to oxy-serve.
+# Ingress routing:
+#   - Legacy (additive) mode: `ideRoutes` empty → catch-all `/` stays on
+#     the StatefulSet and `serveFleet.ingressPaths` peel off to oxy-serve.
+#     Used during the initial HA-split rollout; safest, smallest blast
+#     radius, but blocked from reaching the workspace-scoped tree
+#     because `/api/{workspace_id}/...` can't be peeled by prefix match.
+#   - Inverse mode: `ideRoutes` non-empty → catch-all `/` flips to
+#     oxy-serve, and only the IdeOnly patterns in `ideRoutes` peel off
+#     to the StatefulSet. This is the path to reach the original goal of
+#     "only filesystem-touching surfaces live on oxy-ide". Patterns use
+#     `pathType: ImplementationSpecific` so mid-segment wildcards like
+#     `/api/*/files` work natively on AWS ALB. See `ideRoutes` below.
+# The app-layer `OXY_ROLE` guardrail (returns 421 + `X-Oxy-Required-Role`
+# when a request lands on the wrong fleet) is the actual safety net;
+# ingress routing is an optimization on top.
 #
 # ── REQUIRED config for the compile boundary ───────────────────────────
 # The stateless fleet can ONLY serve a workspace that has been compiled (it
@@ -582,6 +592,57 @@ pdb:
 # working copy; per-worker clone-on-demand is a later phase). For S3 offload +
 # DuckDB-on-fleet, set `compileBoundary.blobS3Bucket`. After deploy, compile
 # existing workspaces once via the admin "Compile all uncompiled" backfill.
+# ── IdeOnly route override (inverse routing) ─────────────────────────────
+# When `serveFleet.enabled: true` AND this list is non-empty, the
+# Ingress flips: catch-all `/` → oxy-serve, and ONLY the patterns below
+# peel off to the singleton StatefulSet (oxy-ide). The default list
+# mirrors the `IdeOnly` entries in `crates/app/src/server/role_manifest.rs`
+# — surfaces that touch the workspace filesystem or `.git`. Operators
+# normally do NOT need to set this from the workload values file; bump
+# the chart `appVersion` when the role manifest changes upstream.
+#
+# Each entry: `{path, pathType?}`. `pathType` defaults to
+# `ImplementationSpecific` so mid-segment wildcards work on AWS ALB;
+# override with `Prefix` for left-anchored paths if you prefer.
+#
+# Set `ideRoutes: []` from the workload values to fall back to legacy
+# additive routing (catch-all → StatefulSet; `serveFleet.ingressPaths`
+# peeled to serve fleet).
+#
+# Caveats — both benign in practice because the app-layer `OXY_ROLE`
+# guardrail catches misroutes with a 421:
+#   - ALB wildcards are greedy across slashes, so `/api/?/files` (with
+#     the asterisk pattern) also matches `/api/a/b/files`. No such
+#     paths exist today.
+#   - A handful of GETs under an IdeOnly subtree (e.g.
+#     `GET /api/{ws}/compile/status`) are FleetOk in the manifest but
+#     land on `ide` here. Harmless — `ide` accepts FleetOk.
+ideRoutes:
+  # Pages — full IDE SPA.
+  - path: /ide
+  - path: /ide/*
+  # Workspace-scoped file tree + per-file CRUD.
+  - path: /api/*/files
+  - path: /api/*/files/*
+  # Compile dispatcher (POST). The status GET is FleetOk in the
+  # manifest but lands on ide here; harmless.
+  - path: /api/*/compile
+  - path: /api/*/compile/*
+  # Working-copy git operations.
+  - path: /api/*/git
+  - path: /api/*/git/*
+  # Workspace onboarding subtree (clones + scaffolds).
+  - path: /api/*/onboarding
+  - path: /api/*/onboarding/*
+  # Modeling / Airform dbt projects live on disk.
+  - path: /api/*/modeling/*
+  # Branch switch — moves HEAD on the working copy.
+  - path: /api/*/switch-branch
+  # Org-scoped workspace creation (clones the repo into a new workspace).
+  - path: /api/orgs/*/onboarding/demo
+  - path: /api/orgs/*/onboarding/new
+  - path: /api/orgs/*/onboarding/github
+
 serveFleet:
   enabled: false
   # Number of stateless pods. HPA-friendly — these have no PVC, no in-
