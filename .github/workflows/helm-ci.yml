@@ -60,6 +60,14 @@ jobs:
           if [[ -n "$changed" ]]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
+          # The integration harness lives in scripts/, not the chart. A
+          # scripts-only change leaves `ct list-changed` empty and would
+          # silently SKIP the kind cluster + integration tests — so the
+          # green check would not actually exercise the harness change.
+          # Treat any scripts/ change as "changed" too.
+          if ! git diff --quiet "origin/${{ github.event.repository.default_branch }}...HEAD" -- scripts/; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Make scripts executable
         run: |
