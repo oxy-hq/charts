@@ -628,16 +628,37 @@ ideRoutes:
   # manifest but lands on ide here; harmless.
   - path: /api/*/compile
   - path: /api/*/compile/*
-  # Working-copy git operations.
-  - path: /api/*/git
-  - path: /api/*/git/*
-  # Workspace onboarding subtree (clones + scaffolds).
+  # Working-copy git operations. These are mounted FLAT in the router
+  # (no `/git/` segment), so each must be listed explicitly — must stay
+  # in lock-step with IDE_ONLY_PATTERNS in
+  # crates/app/src/server/role_manifest.rs (build_git_routes). A
+  # `/api/*/git/*` wildcard would match NONE of them.
+  - path: /api/*/branches
+  - path: /api/*/branches/*
+  - path: /api/*/switch-branch
+  - path: /api/*/pull-changes
+  - path: /api/*/fetch
+  - path: /api/*/push-changes
+  - path: /api/*/force-push
+  - path: /api/*/discard-all
+  - path: /api/*/abort-rebase
+  - path: /api/*/continue-rebase
+  - path: /api/*/resolve-conflict-file
+  - path: /api/*/unresolve-conflict-file
+  - path: /api/*/resolve-conflict-with-content
+  - path: /api/*/reset-to-commit
+  - path: /api/*/recent-commits
+  - path: /api/*/revision-info
+  # Data repositories — git checkouts under modeling/ (build_data_repo_routes).
+  - path: /api/*/repositories
+  - path: /api/*/repositories/*
+  # Workspace onboarding subtree (clones + scaffolds), incl. the flat
+  # onboarding-readiness route (reads config.yml from the working copy).
   - path: /api/*/onboarding
   - path: /api/*/onboarding/*
+  - path: /api/*/onboarding-readiness
   # Modeling / Airform dbt projects live on disk.
   - path: /api/*/modeling/*
-  # Branch switch — moves HEAD on the working copy.
-  - path: /api/*/switch-branch
   # Org-scoped workspace creation (clones the repo into a new workspace).
   - path: /api/orgs/*/onboarding/demo
   - path: /api/orgs/*/onboarding/new
