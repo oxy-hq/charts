@@ -91,6 +91,23 @@ jobs:
           cluster_name: helm-integration-test
           config: ./kind-config.yaml
 
+      # Pre-load the oxy app image into the kind node BEFORE running the
+      # integration tests. The image is large; a cold pull inside the pod
+      # routinely runs past the `helm install --wait` timeout, leaving the
+      # StatefulSet stuck in ContainerCreating ("context deadline exceeded").
+      # `docker pull` once on the runner + `kind load` makes the image local,
+      # so (with imagePullPolicy: IfNotPresent) every test pod starts without
+      # pulling. Tag comes from Chart.yaml appVersion — all test-values pin
+      # the same ghcr.io/oxy-hq/oxygen:<appVersion> image.
+      - name: Pre-load oxy app image into kind
+        if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
+        run: |
+          APP_VERSION=$(grep '^appVersion:' charts/oxy-app/Chart.yaml | awk '{print $2}' | tr -d '"')
+          IMAGE="ghcr.io/oxy-hq/oxygen:${APP_VERSION}"
+          echo "Pre-pulling ${IMAGE}"
+          docker pull "${IMAGE}"
+          kind load docker-image "${IMAGE}" --name helm-integration-test
+
       - name: Install NGINX Ingress Controller
         if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
         run: |

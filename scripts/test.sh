@@ -207,7 +207,7 @@ test_default() {
     helm install test-default "$CHART_PATH" \
         -f "$CHART_PATH/test-values/default-values.yaml" \
         $(shared_db_args db_default) \
-        -n "$ns" --wait --timeout=120s
+        -n "$ns" --wait --timeout=180s
 
     log_info "[default] checking service connectivity..."
     kubectl port-forward service/oxy-test-default 18080:80 -n "$ns" >/dev/null 2>&1 &
@@ -229,7 +229,7 @@ test_ingress() {
     helm install test-ingress "$CHART_PATH" \
         -f "$CHART_PATH/test-values/with-ingress-values.yaml" \
         $(shared_db_args db_ingress) \
-        -n "$ns" --wait --timeout=120s
+        -n "$ns" --wait --timeout=180s
 
     if kubectl get ingress oxy-test-ingress -n "$ns" -o jsonpath='{.spec.rules[0].host}' | grep -q "test-oxy-app.local"; then
         log_info "[ingress] passed!"
@@ -295,17 +295,17 @@ test_upgrade() {
     # shellcheck disable=SC2086
     helm install upgrade-test "$CHART_PATH" \
         -f "$CHART_PATH/test-values/default-values.yaml" \
-        $db_args -n "$ns" --wait --timeout=120s
+        $db_args -n "$ns" --wait --timeout=180s
 
     # shellcheck disable=SC2086
     helm upgrade upgrade-test "$CHART_PATH" \
         -f "$CHART_PATH/test-values/with-ingress-values.yaml" \
-        $db_args -n "$ns" --wait --timeout=120s
+        $db_args -n "$ns" --wait --timeout=180s
 
     kubectl get ingress -l app.kubernetes.io/instance=upgrade-test -n "$ns" >/dev/null 2>&1 \
         || { log_error "[upgrade] ingress not created on upgrade"; return 1; }
 
-    helm rollback upgrade-test 1 -n "$ns" --wait --timeout=120s
+    helm rollback upgrade-test 1 -n "$ns" --wait --timeout=180s
 
     # Rollback to the ingress-less revision should remove the ingress object.
     if kubectl get ingress oxy-test-ingress -n "$ns" >/dev/null 2>&1; then
