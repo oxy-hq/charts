@@ -180,6 +180,19 @@ spec:
             {{- end }}
             {{- end }}
 
+            # Self-routing (#2526): forward IdeOnly routes (IDE pages, file
+            # CRUD, git, compile, onboarding, modeling) to the singleton IDE
+            # pod instead of 421-ing — required for inverse mode (catch-all →
+            # serve) to be safe. The main Service (oxy-app.fullname) selects
+            # component=ide when serveFleet is enabled, so this targets ONLY
+            # the StatefulSet, satisfying ide_proxy's loop guard (a serve-
+            # targeted upstream would ping-pong). Empty = legacy 421. Inert on
+            # images without PR #2526.
+            {{- if .Values.serveFleet.ideUpstream }}
+            - name: OXY_IDE_UPSTREAM
+              value: {{ tpl .Values.serveFleet.ideUpstream . | quote }}
+            {{- end }}
+
             # Per-fleet overrides win over shared env (listed last).
             {{- range $k, $v := .Values.serveFleet.env }}
             - name: {{ $k | quote }}
