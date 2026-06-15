@@ -663,6 +663,18 @@ ideRoutes:
   - path: /api/orgs/*/onboarding/demo
   - path: /api/orgs/*/onboarding/new
   - path: /api/orgs/*/onboarding/github
+  # Legacy workflow / agentic-task LIVE SSE. These stream via a process-local
+  # BROADCASTER (crates/app/src/server/api/{run,task,world_model}.rs), so the
+  # producing run lives on a DIFFERENT process (the worker, or the ide pod) —
+  # a worker-less serve replica's broadcaster is empty and the stream
+  # truncates silently. Pin them to the ide singleton even though they are
+  # FleetOk in the role manifest. NB: the MODERN agentic runs under
+  # /api/*/analytics, /api/*/agentic-workflows, /api/*/agentic-airway stream
+  # via the cross-process Postgres task router (LISTEN/NOTIFY) and ARE
+  # fleet-safe — deliberately NOT listed here.
+  - path: /api/*/events
+  - path: /api/*/events/*
+  - path: /api/*/world-model/events
 
 serveFleet:
   enabled: false
@@ -698,6 +710,17 @@ serveFleet:
     - /auth
     - /api/auth
     - /webhooks
+  # IDE upstream for serve-fleet self-routing (#2526). When set, a serve
+  # replica reverse-proxies IdeOnly routes (IDE pages, file CRUD, git, compile,
+  # onboarding, modeling) to this upstream instead of returning 421 — which is
+  # what lets inverse mode (catch-all → serve) front the whole surface safely.
+  # MUST resolve to ide-ONLY pods or the in-binary loop guard rejects it; the
+  # main Service (oxy-app.fullname) already selects component=ide when
+  # serveFleet is enabled, so point it there. Rendered through `tpl`, e.g.
+  #   ideUpstream: "http://{{ include \"oxy-app.fullname\" . }}:{{ .Values.service.port }}"
+  # Empty = legacy 421 (self-routing off). Requires an image with PR #2526
+  # (OXY_IDE_UPSTREAM is inert on older images, so IdeOnly would hard-421).
+  ideUpstream: ""
   resources:
     requests:
       cpu: 100m
