@@ -309,20 +309,6 @@ database:
     # If enabled, the external DB may rely on secrets managed by the user.
     # Use `externalSecrets.envSecretNames` and `externalSecrets.fileSecrets` to
     # declare and mount any required secrets into the pod.
-    storeRef:
-      name: ""
-      kind: SecretStore
-
-    envSecret:
-      backend: ""
-      path: ""
-      key: ""
-
-    dataWarehouseSecret:
-      backend: ""
-      path: ""
-      key: ""
-
     # Optional connection details for an external database. Leave empty to
     # let callers supply a full connection string via `connectionString` or
     # rely on mounted secrets.
