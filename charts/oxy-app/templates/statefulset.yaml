@@ -377,6 +377,13 @@ spec:
             - name: OXY_INPROC_GLOBAL_WORKER
               value: "1"
             {{- end }}
+            # The pre-upgrade migrate Job owns schema migrations; the StatefulSet
+            # (the canonical migrator) stands down so it doesn't re-run them on
+            # boot. The serve fleet already sets this unconditionally.
+            {{- if .Values.migrations.enabled }}
+            - name: OXY_SKIP_MIGRATIONS
+              value: "1"
+            {{- end }}
             # Compile-boundary S3 offload (semantic blobs + local-DuckDB mirror).
             # This is the compile WRITER, so it needs the bucket to upload.
             {{- if .Values.compileBoundary.blobS3Bucket }}
