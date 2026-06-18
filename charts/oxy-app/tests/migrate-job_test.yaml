@@ -1,0 +1,82 @@
+suite: pre-install/pre-upgrade DB migration Job
+templates:
+  - migrate-job.yaml
+
+tests:
+  - it: does NOT render when migrations.enabled is false
+    set:
+      migrations:
+        enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders a Job with the pre-install/pre-upgrade hook annotations
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: pre-install,pre-upgrade
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "-5"
+      - equal:
+          path: metadata.annotations["helm.sh/hook-delete-policy"]
+          value: before-hook-creation,hook-succeeded
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: migrate
+
+  - it: runs `oxy migrate` once and never restarts
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "exec oxy migrate"
+      - equal:
+          path: spec.template.spec.restartPolicy
+          value: Never
+      - equal:
+          path: spec.backoffLimit
+          value: 3
+
+  - it: injects OXY_DATABASE_URL from env override (top precedence)
+    set:
+      env:
+        OXY_DATABASE_URL: "postgresql://u:p@host:5432/db"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_DATABASE_URL
+            value: "postgresql://u:p@host:5432/db"
+      # The migrator must NOT carry the serving/state knobs.
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_SKIP_MIGRATIONS
+            value: "1"
+
+  - it: inherits the app image by default
+    set:
+      app:
+        image: ghcr.io/oxy-hq/oxygen
+        imageTag: "9.9.9"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "ghcr.io/oxy-hq/oxygen:9.9.9"
+
+  - it: mounts the configMap + external secrets via envFrom when enabled
+    set:
+      configMap:
+        enabled: true
+      externalSecrets:
+        envSecretNames:
+          - my-db-secret
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].envFrom
+          content:
+            secretRef:
+              name: my-db-secret

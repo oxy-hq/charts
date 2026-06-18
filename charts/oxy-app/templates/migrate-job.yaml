@@ -1,0 +1,114 @@
+{{- /*
+Pre-install / pre-upgrade database migration Job.
+
+Runs the FULL migrator (`oxy migrate` → every domain migrator under the
+process-serialising advisory lock) ONCE, before any app pod rolls. With this in
+place the StatefulSet + serve fleet boot with `OXY_SKIP_MIGRATIONS=1` instead of
+each racing the migrator on startup.
+
+A failed migration fails the hook, which BLOCKS the upgrade — pods are never
+rolled against an unmigrated schema. Disable (`migrations.enabled: false`) for
+single-node / dev where the in-process migrator on boot is fine.
+*/}}
+{{- if .Values.migrations.enabled }}
+{{- $migrateImageRepo := default .Values.app.image .Values.migrations.image.repository -}}
+{{- $migrateImageTag := default (default .Chart.AppVersion .Values.app.imageTag) .Values.migrations.image.tag -}}
+{{- $migrateImagePullPolicy := default .Values.app.imagePullPolicy .Values.migrations.image.pullPolicy -}}
+{{- $migrateSa := default (include "oxy-app.serviceAccountName" .) .Values.migrations.serviceAccountName -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "oxy-app.fullname" . }}-migrate
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "oxy-app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migrate
+  annotations:
+    # Weight -5 → runs before the StatefulSet/Deployment (default weight 0).
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-5"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.migrations.backoffLimit | default 3 }}
+  template:
+    metadata:
+      labels:
+        {{- include "oxy-app.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: migrate
+    spec:
+      restartPolicy: Never
+      {{- if ne $migrateSa "" }}
+      serviceAccountName: {{ $migrateSa | quote }}
+      {{- end }}
+      {{- with .Values.migrations.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: migrate
+          image: "{{ $migrateImageRepo }}:{{ $migrateImageTag }}"
+          imagePullPolicy: {{ $migrateImagePullPolicy }}
+          command:
+            - "sh"
+            - "-c"
+            - "exec oxy migrate"
+          env:
+            # Database URL — the SAME shared Postgres + same precedence as the
+            # StatefulSet and serve fleet (verbatim from serve-deployment.yaml).
+            {{- if and .Values.env.OXY_DATABASE_URL (ne .Values.env.OXY_DATABASE_URL "") }}
+            - name: OXY_DATABASE_URL
+              value: {{ .Values.env.OXY_DATABASE_URL | quote }}
+            {{- else if and .Values.database.external.enabled (ne .Values.database.external.connectionString "") }}
+            - name: OXY_DATABASE_URL
+              value: {{ .Values.database.external.connectionString | quote }}
+            {{- else if .Values.database.external.enabled }}
+            - name: OXY_DATABASE_URL
+              value: {{ printf "postgresql://%s:%s@%s:%v/%s"
+                .Values.database.external.user
+                .Values.database.external.password
+                .Values.database.external.host
+                .Values.database.external.port
+                .Values.database.external.database | quote }}
+            {{- else if .Values.database.postgres.enabled }}
+            - name: OXY_DATABASE_URL
+              {{- $pgHost := "" }}
+              {{- if .Values.postgres.fullnameOverride }}
+                {{- $pgHost = printf "%s.%s.svc.cluster.local" .Values.postgres.fullnameOverride .Release.Namespace }}
+              {{- else if .Values.database.postgres.host }}
+                {{- $pgHost = .Values.database.postgres.host }}
+              {{- else }}
+                {{- $pgHost = printf "%s-postgres.%s.svc.cluster.local" .Release.Name .Release.Namespace }}
+              {{- end }}
+              value: {{ printf "postgresql://%s:%s@%s:%v/%s"
+                (default "postgres" .Values.postgres.userDatabase.user.value)
+                (default "postgres" .Values.postgres.userDatabase.password.value)
+                $pgHost
+                .Values.database.postgres.port
+                (default "postgres" .Values.postgres.userDatabase.name.value) | quote }}
+            {{- end }}
+            # Shared env passthrough (DB IAM-auth vars, etc.). The migrator needs
+            # no working copy / state dir / global-worker / serving knobs.
+            {{- range $key, $value := .Values.env }}
+            {{- if and (ne $key "OXY_STATE_DIR") (ne $key "OXY_DATABASE_URL") (ne $key "OXY_INPROC_GLOBAL_WORKER") }}
+            {{- if ne $value "" }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- end }}
+            {{- end }}
+          # Shared configMap + external secrets — DB creds may live in a secret,
+          # so mirror the same envFrom as the pods.
+          {{- if or .Values.configMap.enabled (gt (len .Values.externalSecrets.envSecretNames) 0) }}
+          envFrom:
+            {{- if .Values.configMap.enabled }}
+            - configMapRef:
+                name: {{ include "oxy-app.fullname" . }}-config
+            {{- end }}
+            {{- range .Values.externalSecrets.envSecretNames }}
+            - secretRef:
+                name: {{ . | quote }}
+            {{- end }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.migrations.resources | nindent 12 }}
+{{- end }}

@@ -61,6 +61,32 @@ compileBoundary:
   # needs s3:PutObject (writer) / s3:GetObject (readers) on this bucket.
   blobS3Bucket: ""
 
+# Database migrations.
+# When enabled, a pre-install/pre-upgrade Helm hook Job runs the FULL migrator
+# (`oxy migrate`) ONCE before any app pod rolls, and the StatefulSet boots with
+# OXY_SKIP_MIGRATIONS=1 (the serve fleet already does). So no pod re-runs — or,
+# pre-advisory-lock, races — the migrator on startup, and a failed migration
+# fails the hook and BLOCKS the upgrade rather than rolling pods against an
+# unmigrated schema. Disable for single-node / dev (the in-process migrator on
+# boot, advisory-lock-guarded, is fine there).
+migrations:
+  enabled: true
+  # Image defaults to the app image (app.image / app.imageTag / appVersion).
+  image:
+    repository: ""
+    tag: ""
+    pullPolicy: ""
+  serviceAccountName: ""
+  podSecurityContext: {}
+  # Retry the Job N times before it (and the upgrade) fail.
+  backoffLimit: 3
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+
 # Ingress configuration
 # Enable and configure Kubernetes Ingress for the application.
 ingress:

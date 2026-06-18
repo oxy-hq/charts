@@ -1,0 +1,23 @@
+suite: StatefulSet stands down as migrator when the migrate Job is enabled
+templates:
+  - statefulset.yaml
+
+tests:
+  - it: sets OXY_SKIP_MIGRATIONS on the ide by default (migrations.enabled true)
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_SKIP_MIGRATIONS
+            value: "1"
+
+  - it: does NOT skip migrations on the ide when the Job is disabled
+    set:
+      migrations:
+        enabled: false
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_SKIP_MIGRATIONS
+            value: "1"
