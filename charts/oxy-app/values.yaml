@@ -61,6 +61,28 @@ compileBoundary:
   # needs s3:PutObject (writer) / s3:GetObject (readers) on this bucket.
   blobS3Bucket: ""
 
+# Shared workspace-secret encryption key (REQUIRED for multi-instance).
+# Oxy encrypts workspace secrets with an AES-256 master key. When OXY_ENCRYPTION_KEY
+# is unset, EACH pod generates its OWN key at <state-dir>/encryption_key.txt — so a
+# secret encrypted on one pod CANNOT be decrypted on another. In a split fleet that
+# breaks the serve reveal endpoint AND worker-run secret resolution, both with
+# "decryption failed". Point this at a Secret holding ONE base64-encoded 32-byte key
+# shared by the StatefulSet, the serve fleet and the worker. Seed it from the
+# StatefulSet's CURRENT on-disk key so already-encrypted secrets keep decrypting:
+#   kubectl exec <ide-pod> -- cat <state-dir>/encryption_key.txt
+# Empty = not wired: single-pod / local-dev fall back to the per-pod on-disk key,
+# which is correct there (one pod encrypts AND decrypts). Long-term this moves to a
+# managed KMS / secret store. See internal-docs/multi-instance-fleet.md.
+#
+# Alternative (used by oxy-dev): if you already inject env from an external secret
+# store — e.g. External Secrets Operator syncing an SSM / Secrets-Manager blob into
+# `externalSecrets.envSecretNames` — just add OXY_ENCRYPTION_KEY to that blob and
+# leave secretName empty. Both reach every pod; pick ONE to avoid a duplicate env.
+encryptionKey:
+  # Name of an existing Secret holding the key. Empty disables the wiring.
+  secretName: ""
+  # Key within that Secret whose value is the base64-encoded 32-byte master key.
+  secretKey: OXY_ENCRYPTION_KEY
 # Ingress configuration
 # Enable and configure Kubernetes Ingress for the application.
 ingress:

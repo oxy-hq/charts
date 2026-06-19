@@ -106,6 +106,17 @@ spec:
             # silently 500ing.
             - name: OXY_ROLE
               value: "serve"
+            # Shared AES-256 master key so workspace secrets encrypt/decrypt
+            # identically across the fleet (values.yaml encryptionKey). Without it
+            # each pod generates a divergent on-disk key → cross-pod
+            # "decryption failed". Same Secret on the StatefulSet, serve and worker.
+            {{- if .Values.encryptionKey.secretName }}
+            - name: OXY_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.encryptionKey.secretName | quote }}
+                  key: {{ .Values.encryptionKey.secretKey | default "OXY_ENCRYPTION_KEY" | quote }}
+            {{- end }}
             # Stateless: never run in-process workers, never drive the global
             # task queue. Compiles run ONLY on the StatefulSet (the node with
             # the working copy). OXY_INPROC_GLOBAL_WORKER is deliberately

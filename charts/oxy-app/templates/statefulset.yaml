@@ -341,6 +341,17 @@ spec:
             # write-heavy IDE surface here while stateless reads go to oxy-serve.
             - name: OXY_ROLE
               value: "ide"
+            # Shared AES-256 master key so workspace secrets encrypt/decrypt
+            # identically across the fleet (values.yaml encryptionKey). Without it
+            # each pod generates a divergent on-disk key → cross-pod
+            # "decryption failed". Same Secret on the StatefulSet, serve and worker.
+            {{- if .Values.encryptionKey.secretName }}
+            - name: OXY_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.encryptionKey.secretName | quote }}
+                  key: {{ .Values.encryptionKey.secretKey | default "OXY_ENCRYPTION_KEY" | quote }}
+            {{- end }}
             # State Directory Configuration
             {{- if and .Values.env.OXY_STATE_DIR (ne .Values.env.OXY_STATE_DIR "") }}
             - name: OXY_STATE_DIR

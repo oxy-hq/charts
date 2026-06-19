@@ -96,6 +96,17 @@ spec:
             # under this role because FleetOk routes are accepted by Worker.
             - name: OXY_ROLE
               value: "worker"
+            # Shared AES-256 master key so workspace secrets encrypt/decrypt
+            # identically across the fleet (values.yaml encryptionKey). Without it
+            # each pod generates a divergent on-disk key → a worker draining an
+            # agentic run resolves secrets with the wrong key ("decryption failed").
+            {{- if .Values.encryptionKey.secretName }}
+            - name: OXY_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.encryptionKey.secretName | quote }}
+                  key: {{ .Values.encryptionKey.secretKey | default "OXY_ENCRYPTION_KEY" | quote }}
+            {{- end }}
             # Compile-boundary S3 reads: a worker executing an agentic run can
             # read semantic blobs from S3, so it needs the same bucket.
             {{- if .Values.compileBoundary.blobS3Bucket }}
