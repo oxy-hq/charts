@@ -11,7 +11,15 @@ tests:
       - hasDocuments:
           count: 0
 
+  - it: renders the Job plus its dedicated migrate ServiceAccount by default
+    asserts:
+      - hasDocuments:
+          count: 2
+
   - it: renders a Job with the pre-install/pre-upgrade hook annotations
+    documentSelector:
+      path: kind
+      value: Job
     asserts:
       - isKind:
           of: Job
@@ -29,6 +37,9 @@ tests:
           value: migrate
 
   - it: runs `oxy migrate` once and never restarts
+    documentSelector:
+      path: kind
+      value: Job
     asserts:
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
@@ -41,6 +52,9 @@ tests:
           value: 3
 
   - it: injects OXY_DATABASE_URL from env override (top precedence)
+    documentSelector:
+      path: kind
+      value: Job
     set:
       env:
         OXY_DATABASE_URL: "postgresql://u:p@host:5432/db"
@@ -58,6 +72,9 @@ tests:
             value: "1"
 
   - it: inherits the app image by default
+    documentSelector:
+      path: kind
+      value: Job
     set:
       app:
         image: ghcr.io/oxy-hq/oxygen
@@ -68,6 +85,9 @@ tests:
           value: "ghcr.io/oxy-hq/oxygen:9.9.9"
 
   - it: mounts the configMap + external secrets via envFrom when enabled
+    documentSelector:
+      path: kind
+      value: Job
     set:
       configMap:
         enabled: true
@@ -80,3 +100,44 @@ tests:
           content:
             secretRef:
               name: my-db-secret
+
+  - it: runs the Job under the dedicated migrate ServiceAccount
+    documentSelector:
+      path: kind
+      value: Job
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.serviceAccountName
+          pattern: -migrate$
+
+  - it: renders the dedicated SA as a hook weighted BEFORE the Job
+    documentSelector:
+      path: kind
+      value: ServiceAccount
+    asserts:
+      - isKind:
+          of: ServiceAccount
+      - matchRegex:
+          path: metadata.name
+          pattern: -migrate$
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: pre-install,pre-upgrade
+      # -10 < the Job's -5, so the SA is created first and the Job's pod
+      # can find it on a fresh install.
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "-10"
+
+  - it: uses a supplied SA and renders no dedicated SA
+    set:
+      migrations:
+        serviceAccountName: my-migrate-sa
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: my-migrate-sa
