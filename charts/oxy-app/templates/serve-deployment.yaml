@@ -239,6 +239,18 @@ spec:
             {{- toYaml .Values.serveFleet.livenessProbe | nindent 12 }}
           readinessProbe:
             {{- toYaml .Values.serveFleet.readinessProbe | nindent 12 }}
+          {{- /*
+          preStop drain. The serve fleet sits behind the LB (ALB target-type:
+          ip / NLB), so on rollout the endpoint is removed but the LB keeps
+          routing new requests until it finishes deregistering the target. This
+          sleep keeps the container serving during that window so in-flight and
+          just-arrived requests don't hit a closing listener (the 503 source
+          plain K8s readiness can't prevent). Mirrors the StatefulSet's
+          `.Values.lifecycle`; set the value to null to disable. */}}
+          {{- with .Values.serveFleet.lifecycle }}
+          lifecycle:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
       volumes:
         # Ephemeral scratch backing OXY_STATE_DIR (result cache, charts).
         # Per-pod, discarded on restart — nothing here is a source of truth.

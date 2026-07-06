@@ -815,6 +815,19 @@ serveFleet:
   securityContext: {}
   containerSecurityContext: {}
   terminationGracePeriodSeconds: 30
+  # preStop hook for the serve container. Unlike the worker (not behind an LB,
+  # so it defaults to {}), the serve fleet is fronted by the LB, so it defaults
+  # to a drain sleep like the main StatefulSet's `.Values.lifecycle`. On rollout
+  # the LB keeps sending new requests until it finishes deregistering the target;
+  # this sleep keeps the pod serving during that window so requests don't hit a
+  # closing listener. Raise to match your LB's deregistration/connection-draining
+  # delay (ALB target-type: ip is typically 15–30s); keep it < the grace period
+  # above. Set to `null` to disable (an empty `{}` override merges over this
+  # default and won't clear it).
+  lifecycle:
+    preStop:
+      exec:
+        command: ["sleep", "5"]
   # Strategy: rolling update with at-least-one alive. These are stateless
   # so we can be aggressive about maxSurge to speed cutover.
   strategy:
