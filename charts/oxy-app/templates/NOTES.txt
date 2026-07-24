@@ -6,7 +6,7 @@ oxy-app {{ .Chart.AppVersion }} — release {{ .Release.Name }}
 
 HTTP fleet:
   StatefulSet:        {{ include "oxy-app.fullname" . }}
-  Replicas:           {{ .Values.replicaCount }}
+  Replicas:           1 (single-writer ide; owns the /workspace RWO volume)
 {{- if .Values.appServer.disableInprocessWorkers }}
   Mode:               HTTP-only (`--no-workers` + OXY_DISABLE_INPROCESS_WORKERS=1)
                       The in-process worker AND the in-process recovery driver

@@ -1,9 +1,0 @@
-dependencies:
-- name: postgres
-  repository: https://groundhog2k.github.io/helm-charts/
-  version: 1.6.1
-- name: clickhouse
-  repository: oci://registry-1.docker.io/bitnamicharts
-  version: 9.4.4
-digest: sha256:fccdfd1db38496dc4b7985183533ecf7970c056bb8f24791fc848fb01ffdeb82
-generated: "2026-02-02T13:07:02.319151+07:00"

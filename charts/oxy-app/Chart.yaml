@@ -1,8 +1,18 @@
 apiVersion: v2
 name: oxy-app
-description: A Helm chart for Oxy application deployment on kubernetes
+description: >-
+  Helm chart for the Oxy application. Deploys the app workloads only (the ide
+  StatefulSet + the stateless serve/worker fleets + the migrate Job). Postgres,
+  ClickHouse and Airhouse are external — managed outside this chart (RDS/CNPG,
+  the ClickHouse operator, the airhouse chart) and wired in via connection env
+  vars (OXY_DATABASE_*, OXY_CLICKHOUSE_*, AIRHOUSE_*).
 type: application
-version: 0.6.8
+# 1.0.0 (breaking): dropped the bundled `postgres` and `clickhouse` subchart
+# dependencies. Every real deployment already runs against external managed
+# databases (subcharts disabled), so those subcharts rendered nothing — this is
+# a render-identical drop-in for external-DB values. Bundle a DB via its own
+# operator/chart alongside this one instead. See CHANGELOG.md.
+version: 1.0.0
 appVersion: "0.5.49"
 keywords:
   - oxy
@@ -11,14 +21,3 @@ maintainers:
     email: hello@oxy.tech
   - name: Luong Vo
     email: luong@oxy.tech
-
-dependencies:
-  - name: postgres
-    version: "1.6.1"
-    repository: "https://groundhog2k.github.io/helm-charts/"
-    condition: database.postgres.enabled
-  - name: clickhouse
-    version: "9.4.4"
-    repository: "oci://registry-1.docker.io/bitnamicharts"
-    condition: database.clickhouse.enabled
-    alias: clickhouseSubchart
