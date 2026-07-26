@@ -376,30 +376,6 @@ database:
     port: 5432
     database: ""
 
-# Configuration for the postgres subchart (groundhog2k/postgres)
-# When database.postgres.enabled is true, these values configure the postgres subchart
-# The fullnameOverride controls the service name created by the subchart
-# Example: if fullnameOverride is "my-postgres", the service will be "my-postgres"
-# If not set, the service name follows Helm's pattern: {release-name}-postgres
-postgres:
-  # Override the full name of the postgres subchart resources
-  # This determines the service name that will be created
-  # Leave empty to use default: {release-name}-postgres
-  fullnameOverride: ""
-  settings:
-    superuserPassword:
-      value: postgres
-  userDatabase:
-    name:
-      value: postgres
-    user:
-      value: postgres
-    password:
-      value: postgres
-  storage:
-    requestedSize: 8Gi
-    className: ""
-
 # Configuration for the clickhouse subchart (Bitnami)
 # When database.clickhouse.enabled is true, these values configure the subchart
 # See: https://artifacthub.io/packages/helm/bitnami/clickhouse
@@ -741,18 +717,6 @@ serveFleet:
     port: 80
     targetPort: 3000
     annotations: {}
-  # Ingress path prefixes that should route to oxy-serve. Anything NOT
-  # in this list keeps going to the singleton StatefulSet (oxy-ide).
-  # Add the runtime read surfaces (e.g. /apps, agent/procedure runs) here
-  # once you've compiled + backfilled and verified the fleet serves them.
-  ingressPaths:
-    - /admin
-    - /threads
-    - /workspaces
-    - /external/api
-    - /auth
-    - /api/auth
-    - /webhooks
   # IDE upstream for serve-fleet self-routing (#2526). When set, a serve
   # replica reverse-proxies IdeOnly routes (IDE pages, file CRUD, git, compile,
   # onboarding, modeling) to this upstream instead of returning 421 — which is

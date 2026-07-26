@@ -223,71 +223,6 @@ tests:
   # Database Configuration
   # =======================
 
-  - it: should configure PostgreSQL database URL correctly
-    set:
-      database:
-        postgres:
-          enabled: true
-      postgres:
-        userDatabase:
-          name:
-            value: "testdb"
-          user:
-            value: "testuser"
-          password:
-            value: "testpass"
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: OXY_DATABASE_URL
-            value: "postgresql://testuser:testpass@RELEASE-NAME-postgres.NAMESPACE.svc.cluster.local:5432/testdb"
-
-  - it: should support groundhog2k PostgreSQL chart with custom values
-    set:
-      database:
-        postgres:
-          enabled: true
-      postgres:
-        userDatabase:
-          name:
-            value: "custom-db"
-          user:
-            value: "custom-user"
-          password:
-            value: "custom-pass"
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: OXY_DATABASE_URL
-            value: "postgresql://custom-user:custom-pass@RELEASE-NAME-postgres.NAMESPACE.svc.cluster.local:5432/custom-db"
-
-  - it: should use postgres fullnameOverride for service name when provided
-    set:
-      database:
-        postgres:
-          enabled: true
-      postgres:
-        fullnameOverride: "my-postgres"
-        userDatabase:
-          name:
-            value: "testdb"
-          user:
-            value: "testuser"
-          password:
-            value: "testpass"
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: OXY_DATABASE_URL
-            value: "postgresql://testuser:testpass@my-postgres.NAMESPACE.svc.cluster.local:5432/testdb"
-
-  # =======================
-  # Init Containers
-  # =======================
-
   - it: should not have init containers by default
     set:
       git:
@@ -298,26 +233,6 @@ tests:
     asserts:
       - notExists:
           path: spec.template.spec.initContainers
-
-  - it: should create PostgreSQL wait init container when database enabled
-    set:
-      database:
-        postgres:
-          enabled: true
-      postgres:
-        userDatabase:
-          user:
-            value: "testuser"
-    asserts:
-      - lengthEqual:
-          path: spec.template.spec.initContainers
-          count: 1
-      - equal:
-          path: spec.template.spec.initContainers[0].name
-          value: wait-for-postgres
-      - equal:
-          path: spec.template.spec.initContainers[0].image
-          value: "postgres:16-alpine"
 
   - it: should create git clone init container when git sync enabled
     set:
@@ -332,31 +247,6 @@ tests:
           count: 1
       - equal:
           path: spec.template.spec.initContainers[0].name
-          value: git-clone
-
-  - it: should create both PostgreSQL and git init containers when both enabled
-    set:
-      database:
-        postgres:
-          enabled: true
-      postgres:
-        userDatabase:
-          user:
-            value: "testuser"
-      git:
-        enabled: true
-        repository: "git@github.com:example/repo.git"
-      persistence:
-        enabled: true
-    asserts:
-      - lengthEqual:
-          path: spec.template.spec.initContainers
-          count: 2
-      - equal:
-          path: spec.template.spec.initContainers[0].name
-          value: wait-for-postgres
-      - equal:
-          path: spec.template.spec.initContainers[1].name
           value: git-clone
 
   - it: should add extra init containers

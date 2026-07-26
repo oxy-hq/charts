@@ -62,15 +62,25 @@ database's.
 - `chart-testing` (`ct`) auto-discovers the chart; `chart-releaser` publishes it
   to `oci://ghcr.io/oxy-hq/helm-charts` on merge.
 
-## Known follow-ups
+## What was removed vs. what remains
 
-- A few vestigial `database.*` / `postgres.*` / `clickhouseSubchart.*` template
-  branches (the wait-for-DB init containers, the subchart ClickHouse env block,
-  the postgres `OXY_DATABASE_URL` construction) remain **inert behind
-  default-false flags**. Removing them + their values keys is pure dead-code
-  cleanup (render-neutral for external-DB envs) and is tracked separately so the
-  drop-in stays trivially verifiable.
-- Raise to the 2026 bar: DRY the duplicated `OXY_DATABASE_URL` block into a
+The app-DB **bundling machinery is gone**: the `wait-for-postgres` /
+`wait-for-clickhouse` init containers, the postgres/external `OXY_DATABASE_URL`
+construction branches (all four workloads now emit only the `env.OXY_DATABASE_URL`
+pass-through), the in-container ClickHouse env block, and the top-level
+`postgres:` subchart values + `serveFleet.ingressPaths`. All render-neutral for
+external-DB envs (proven byte-identical to `oxy-app`, modulo removed comments).
+
+**Remaining follow-ups:**
+
+- The `database.clickhouse` / `clickhouseSubchart` / `clickhouse` values + the
+  `otel-configmap` / otel-sidecar branches that read them are kept **only** for
+  the `otel-collector` → ClickHouse export, which is **disabled in every
+  environment** (`otelCollector.enabled: false`). Decoupling otel onto a
+  self-contained `otelCollector.clickhouse.*` block (and dropping those values)
+  is the last DB-related cleanup — deferred because it touches a disabled
+  feature the render-diff can't exercise.
+- Raise to the 2026 bar: DRY the `OXY_DATABASE_URL` pass-through into a
   `_helpers.tpl` partial (or an in-house `oxy-common` library chart shared with
   `oxy-start`), digest-pin images (Renovate), and cosign-sign + attach
   SBOM/SLSA on the OCI push.
