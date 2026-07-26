@@ -1,0 +1,46 @@
+suite: serve fleet lifecycle (preStop drain)
+templates:
+  - serve-deployment.yaml
+
+set:
+  serveFleet:
+    enabled: true
+
+tests:
+  - it: renders a preStop drain on the serve container by default
+    template: serve-deployment.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-oxy-app-serve
+      - equal:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command
+          value:
+            - sleep
+            - "5"
+
+  - it: honors a custom preStop sleep (e.g. matched to the LB deregistration delay)
+    template: serve-deployment.yaml
+    set:
+      serveFleet:
+        lifecycle:
+          preStop:
+            exec:
+              command: ["sleep", "20"]
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command
+          value:
+            - sleep
+            - "20"
+
+  - it: omits the lifecycle block entirely when serveFleet.lifecycle is null
+    template: serve-deployment.yaml
+    set:
+      serveFleet:
+        lifecycle: null
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].lifecycle

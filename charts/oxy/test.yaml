@@ -1,0 +1,19 @@
+# Git clone init container configuration
+git:
+  enabled: true
+  repository: git@github.com:oxy-hq/oxy-customer-demo.git
+  branch: main
+  cloneDir: "repo"
+  imagePullPolicy: IfNotPresent
+  sshSecretName: test-git-ssh
+
+
+sshKey:
+  privateKey: |
+    -----BEGIN OPENSSH PRIVATE KEY-----
+    b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
+    QyNTUxOQAAACB/6yfyWM7t39cpxt16GcY50L93RWMep81tnH37eCX73QAAAJhHLCYhRywm
+    IQAAAAtzc2gtZWQyNTUxOQAAACB/6yfyWM7t39cpxt16GcY50L93RWMep81tnH37eCX73Q
+    AAAEAcW17g5czXGQCFhTCr4xXWIz8RgAvaGyfX8rzX0u5FVX/rJ/JYzu3f1ynG3XoZxjnQ
+    v3dFYx6nzW2cfft4JfvdAAAADmx1b25nQG94eS50ZWNoAQIDBAUGBw==
+    -----END OPENSSH PRIVATE KEY-----

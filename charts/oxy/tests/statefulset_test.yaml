@@ -1,0 +1,1204 @@
+suite: statefulset tests
+templates:
+  - statefulset.yaml
+
+tests:
+  # =======================
+  # Basic StatefulSet Tests
+  # =======================
+
+  - it: should create a StatefulSet with correct metadata
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-oxy-app
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: oxy-app
+      - equal:
+          path: metadata.labels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+
+  - it: should configure StatefulSet with correct defaults
+    asserts:
+      - equal:
+          path: spec.serviceName
+          value: RELEASE-NAME-oxy-app-headless
+      - equal:
+          path: spec.replicas
+          value: 1
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: oxy-app
+
+  - it: should support replica scaling
+    set:
+      app:
+        replicaCount: 3
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 1
+
+  # =======================
+  # Container Configuration
+  # =======================
+
+  - it: should configure main container correctly
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "ghcr.io/oxy-hq/oxygen:0.5.49"
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            containerPort: 3000
+            protocol: TCP
+            name: traffic-port
+
+  - it: should only expose main port by default
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers[0].ports
+          count: 1
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].name
+          value: traffic-port
+
+  - it: should support custom image configuration
+    set:
+      app:
+        image: "custom/oxy-app"
+        imageTag: "v2.0.0"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "custom/oxy-app:v2.0.0"
+
+  # =======================
+  # Environment Variables
+  # =======================
+
+  - it: should set default environment variables
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_STATE_DIR
+            value: "/workspace/oxy_data"
+
+  - it: should allow custom database URL
+    set:
+      env:
+        OXY_DATABASE_URL: "postgresql://user:pass@host:5432/db"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_DATABASE_URL
+            value: "postgresql://user:pass@host:5432/db"
+
+  - it: should support custom environment variables from values.env
+    set:
+      env:
+        OXY_STATE_DIR: /workspace/oxy_data
+        CUSTOM_VAR_1: "value1"
+        CUSTOM_VAR_2: "value2"
+        LOG_LEVEL: "debug"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CUSTOM_VAR_1
+            value: "value1"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CUSTOM_VAR_2
+            value: "value2"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: LOG_LEVEL
+            value: "debug"
+
+  - it: should not set empty environment variables
+    set:
+      env:
+        OXY_STATE_DIR: /workspace/oxy_data
+        EMPTY_VAR: ""
+        VALID_VAR: "value"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: VALID_VAR
+            value: "value"
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: EMPTY_VAR
+
+  - it: should not duplicate OXY_STATE_DIR or OXY_DATABASE_URL in custom env loop
+    set:
+      env:
+        OXY_STATE_DIR: /custom/state
+        OXY_DATABASE_URL: "postgresql://user:pass@host:5432/db"
+        CUSTOM_VAR: "value"
+    asserts:
+      # Ensure OXY_STATE_DIR appears exactly once
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_STATE_DIR
+            value: "/custom/state"
+      # Ensure OXY_DATABASE_URL appears exactly once
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_DATABASE_URL
+            value: "postgresql://user:pass@host:5432/db"
+      # Ensure custom var is present
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CUSTOM_VAR
+            value: "value"
+
+  - it: should support multiple custom environment variables with special characters
+    set:
+      env:
+        API_KEY: "sk-1234567890abcdef"
+        WEBHOOK_URL: "https://example.com/webhook"
+        MAX_WORKERS: "10"
+        ENABLE_FEATURE: "true"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: API_KEY
+            value: "sk-1234567890abcdef"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: WEBHOOK_URL
+            value: "https://example.com/webhook"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MAX_WORKERS
+            value: "10"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ENABLE_FEATURE
+            value: "true"
+
+  - it: should work with only custom environment variables and no special OXY vars
+    set:
+      env:
+        MY_VAR_1: "value1"
+        MY_VAR_2: "value2"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MY_VAR_1
+            value: "value1"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MY_VAR_2
+            value: "value2"
+      # OXY_STATE_DIR should still have default fallback
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_STATE_DIR
+            value: "/workspace/oxy_data"
+
+  # =======================
+  # Database Configuration
+  # =======================
+
+  - it: should configure PostgreSQL database URL correctly
+    set:
+      database:
+        postgres:
+          enabled: true
+      postgres:
+        userDatabase:
+          name:
+            value: "testdb"
+          user:
+            value: "testuser"
+          password:
+            value: "testpass"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_DATABASE_URL
+            value: "postgresql://testuser:testpass@RELEASE-NAME-postgres.NAMESPACE.svc.cluster.local:5432/testdb"
+
+  - it: should support groundhog2k PostgreSQL chart with custom values
+    set:
+      database:
+        postgres:
+          enabled: true
+      postgres:
+        userDatabase:
+          name:
+            value: "custom-db"
+          user:
+            value: "custom-user"
+          password:
+            value: "custom-pass"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_DATABASE_URL
+            value: "postgresql://custom-user:custom-pass@RELEASE-NAME-postgres.NAMESPACE.svc.cluster.local:5432/custom-db"
+
+  - it: should use postgres fullnameOverride for service name when provided
+    set:
+      database:
+        postgres:
+          enabled: true
+      postgres:
+        fullnameOverride: "my-postgres"
+        userDatabase:
+          name:
+            value: "testdb"
+          user:
+            value: "testuser"
+          password:
+            value: "testpass"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_DATABASE_URL
+            value: "postgresql://testuser:testpass@my-postgres.NAMESPACE.svc.cluster.local:5432/testdb"
+
+  # =======================
+  # Init Containers
+  # =======================
+
+  - it: should not have init containers by default
+    set:
+      git:
+        enabled: false
+      database:
+        postgres:
+          enabled: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.initContainers
+
+  - it: should create PostgreSQL wait init container when database enabled
+    set:
+      database:
+        postgres:
+          enabled: true
+      postgres:
+        userDatabase:
+          user:
+            value: "testuser"
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.initContainers
+          count: 1
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: wait-for-postgres
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: "postgres:16-alpine"
+
+  - it: should create git clone init container when git sync enabled
+    set:
+      git:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      persistence:
+        enabled: true
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.initContainers
+          count: 1
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: git-clone
+
+  - it: should create both PostgreSQL and git init containers when both enabled
+    set:
+      database:
+        postgres:
+          enabled: true
+      postgres:
+        userDatabase:
+          user:
+            value: "testuser"
+      git:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      persistence:
+        enabled: true
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.initContainers
+          count: 2
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: wait-for-postgres
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: git-clone
+
+  - it: should add extra init containers
+    set:
+      extraInitContainers:
+        - name: custom-init
+          image: busybox:1.36
+          command: ["echo", "hello"]
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.initContainers
+          count: 1
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: custom-init
+
+  # =======================
+  # Git Sync Configuration
+  # =======================
+
+  - it: should have single container when git sync disabled
+    set:
+      git:
+        enabled: false
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 1
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: oxy-app
+
+  - it: should not include local flag when git sync disabled
+    set:
+      git:
+        enabled: false
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--local.*"
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--cloud.*"
+
+  # =======================
+  # Internal Port Tests
+  # =======================
+
+  - it: should not include internal port flags by default
+    set:
+      git:
+        enabled: false
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--internal-host.*"
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--internal-port.*"
+
+  - it: should expose internal container port when internalHost is set
+    set:
+      app:
+        internalHost: "0.0.0.0"
+        internalPort: 3001
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers[0].ports
+          count: 2
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            containerPort: 3000
+            protocol: TCP
+            name: traffic-port
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            containerPort: 3001
+            protocol: TCP
+            name: internal-port
+
+  - it: should include internal port flags in command when enabled
+    set:
+      git:
+        enabled: false
+      app:
+        internalHost: "0.0.0.0"
+        internalPort: 3001
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--internal-host 0\\.0\\.0\\.0.*"
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--internal-port 3001.*"
+
+  - it: should support custom internal host and port
+    set:
+      git:
+        enabled: false
+      app:
+        internalHost: "127.0.0.1"
+        internalPort: 8001
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers[0].ports
+          count: 2
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            containerPort: 8001
+            protocol: TCP
+            name: internal-port
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--internal-host 127\\.0\\.0\\.1.*"
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--internal-port 8001.*"
+
+  - it: should work with both git sync and internal port
+    set:
+      git:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      app:
+        internalHost: "0.0.0.0"
+        internalPort: 3001
+      persistence:
+        enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--local.*"
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--internal-host 0\\.0\\.0\\.0.*"
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--internal-port 3001.*"
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            containerPort: 3001
+            protocol: TCP
+            name: internal-port
+
+  - it: should have single container when git sync enabled
+    set:
+      git:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      persistence:
+        enabled: true
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 1
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: oxy-app
+
+  - it: should include local flag when git sync enabled
+    set:
+      git:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      persistence:
+        enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--local.*"
+
+  - it: should configure git clone init container correctly
+    set:
+      git:
+        enabled: true
+        repository: "git@github.com:test/repo.git"
+        branch: "main"
+      persistence:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: "alpine/git:latest"
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: GIT_REPO
+            value: "git@github.com:test/repo.git"
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: GIT_BRANCH
+            value: "main"
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: CLONE_DIR
+            value: "/workspace/repo"
+
+  # =======================
+  # Git Pull (repo exists) Tests
+  # =======================
+
+  - it: should pull latest changes when repo exists (no auth)
+    set:
+      git:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      persistence:
+        enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: ".*git fetch origin.*"
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: ".*git reset --hard FETCH_HEAD.*"
+
+  - it: should update remote url and pull when repo exists with http auth
+    set:
+      git:
+        enabled: true
+        repository: "https://github.com/example/repo.git"
+      httpAuth:
+        username: "user"
+        password: "pass"
+      persistence:
+        enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: ".*git remote set-url origin.*"
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: ".*git fetch origin.*"
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: ".*git reset --hard FETCH_HEAD.*"
+
+  - it: should update remote url and pull when repo exists with github app auth
+    set:
+      git:
+        enabled: true
+        repository: "https://github.com/example/repo.git"
+        githubApp:
+          privateKey: "pem-key"
+          applicationId: "123"
+          installationId: "456"
+      persistence:
+        enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: ".*git remote set-url origin.*"
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: ".*git fetch origin.*"
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: ".*git reset --hard FETCH_HEAD.*"
+
+  - it: should pull latest changes when repo exists with ssh auth
+    set:
+      git:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      sshKey:
+        privateKey: "fake-key"
+      persistence:
+        enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: ".*git fetch origin.*"
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: ".*git reset --hard FETCH_HEAD.*"
+
+  # =======================
+  # Git Clone Path Configuration
+  # =======================
+
+  - it: should use default clone dir as subdirectory of mount path
+    set:
+      git:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      persistence:
+        enabled: true
+        mountPath: "/workspace"
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: CLONE_DIR
+            value: "/workspace/repo"
+
+  - it: should allow custom cloneDir
+    set:
+      git:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+        cloneDir: "myrepo"
+      persistence:
+        enabled: true
+        mountPath: "/data"
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: CLONE_DIR
+            value: "/data/myrepo"
+
+  - it: should set workingDir to clone dir for main container
+    set:
+      git:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      persistence:
+        enabled: true
+        mountPath: "/workspace"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].workingDir
+          value: "/workspace/repo"
+
+  - it: should set workingDir with subdirectory when workingDir is set
+    set:
+      git:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+        workingDir: "backend"
+      persistence:
+        enabled: true
+        mountPath: "/data"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].workingDir
+          value: "/data/repo/backend"
+
+  # =======================
+  # Sidecar Containers
+  # =======================
+
+  - it: should add extra sidecar containers
+    set:
+      extraSidecars:
+        - name: monitoring
+          image: prom/node-exporter:v1.6.0
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 2
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: monitoring
+
+  - it: should work with git sync and sidecars together
+    set:
+      git:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      extraSidecars:
+        - name: monitoring
+          image: prom/node-exporter:v1.6.0
+      persistence:
+        enabled: true
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 2
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: oxy-app
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: monitoring
+
+  # =======================
+  # Persistence & Volumes
+  # =======================
+
+  - it: should configure persistence correctly
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].metadata.name
+          value: workspace
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: 20Gi
+
+  - it: should allow custom persistence settings
+    set:
+      persistence:
+        size: 100Gi
+        storageClassName: fast-ssd
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: 100Gi
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.storageClassName
+          value: fast-ssd
+
+  - it: should omit workspace volumeClaimTemplate when persistence is disabled
+    set:
+      persistence:
+        enabled: false
+    asserts:
+      - notExists:
+          path: spec.volumeClaimTemplates
+
+  - it: should add emptyDir workspace volume when persistence is disabled
+    set:
+      persistence:
+        enabled: false
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: workspace
+            emptyDir: {}
+
+  - it: should mount extraVolumes into the pod
+    set:
+      extraVolumes:
+        - name: s3files
+          persistentVolumeClaim:
+            claimName: my-s3files-pvc
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: s3files
+            persistentVolumeClaim:
+              claimName: my-s3files-pvc
+
+  - it: should add extraVolumeMounts to the main container
+    set:
+      extraVolumeMounts:
+        - name: s3files
+          mountPath: /workspace/oxy_data
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: s3files
+            mountPath: /workspace/oxy_data
+
+  - it: should support extraVolumes and extraVolumeMounts together with persistence disabled
+    set:
+      persistence:
+        enabled: false
+      extraVolumes:
+        - name: oxy-state-s3files
+          persistentVolumeClaim:
+            claimName: oxy-app-s3files-pvc
+      extraVolumeMounts:
+        - name: oxy-state-s3files
+          mountPath: /workspace/oxy_data
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: workspace
+            emptyDir: {}
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: oxy-state-s3files
+            persistentVolumeClaim:
+              claimName: oxy-app-s3files-pvc
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: oxy-state-s3files
+            mountPath: /workspace/oxy_data
+      - notExists:
+          path: spec.volumeClaimTemplates
+
+  - it: should mount workspace volume in main container
+    set:
+      git:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+      persistence:
+        enabled: true
+        mountPath: "/data"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: workspace
+            mountPath: "/data"
+
+  - it: should have empty volumes list by default
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.volumes
+          count: 0
+
+  - it: should mount SSH secret when git sync enabled
+    set:
+      git:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+        sshSecretName: "my-git-ssh"
+      sshKey:
+        privateKey: "fake-key"
+      persistence:
+        enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[?(@.name == "git-clone")].volumeMounts
+          content:
+            name: git-ssh
+            mountPath: /etc/git-secret
+            readOnly: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: git-ssh
+            secret:
+              secretName: "my-git-ssh"
+              defaultMode: 0400
+              optional: false
+
+  - it: should use custom SSH secret name when sshKey.secretName is set
+    set:
+      git:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+        sshSecretName: "default-ssh-secret"
+      sshKey:
+        secretName: "custom-ssh-secret"
+      persistence:
+        enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: git-ssh
+            secret:
+              secretName: "custom-ssh-secret"
+              defaultMode: 0400
+              optional: false
+
+  - it: should fall back to git.sshSecretName when sshKey.secretName is empty
+    set:
+      git:
+        enabled: true
+        repository: "git@github.com:example/repo.git"
+        sshSecretName: "my-git-ssh"
+      sshKey:
+        secretName: ""
+        privateKey: "fake-key"
+      persistence:
+        enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: git-ssh
+            secret:
+              secretName: "my-git-ssh"
+              defaultMode: 0400
+              optional: false
+
+  # =======================
+  # External Secrets
+  # =======================
+
+  - it: should mount environment secrets when specified
+    set:
+      externalSecrets:
+        envSecretNames:
+          - "app-secrets"
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: env-secret-0
+            secret:
+              secretName: "app-secrets"
+              optional: true
+
+  # =======================
+  # Resource Configuration
+  # =======================
+
+  - it: should set default resource limits and requests
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 250m
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 512Mi
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 1000m
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 2Gi
+
+  - it: should allow custom resource configuration
+    set:
+      resources:
+        requests:
+          cpu: 500m
+          memory: 1Gi
+        limits:
+          cpu: 2000m
+          memory: 4Gi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 500m
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 4Gi
+
+  # =======================
+  # Health Probes
+  # =======================
+
+  - it: should configure default health probes
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: "/"
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.port
+          value: 3000
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: "/"
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.port
+          value: 3000
+
+  - it: should allow custom probe configuration
+    set:
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 3000
+        initialDelaySeconds: 10
+        periodSeconds: 30
+      readinessProbe:
+        httpGet:
+          path: /ready
+          port: 3000
+        initialDelaySeconds: 10
+        periodSeconds: 5
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: "/health"
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.initialDelaySeconds
+          value: 10
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: "/ready"
+
+  # =======================
+  # Security & Service Account
+  # =======================
+
+  - it: should apply security context
+    set:
+      securityContext:
+        fsGroup: 2000
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 2000
+
+  - it: should use correct service account
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: RELEASE-NAME-oxy-app
+
+  # =======================
+  # HTTP Auth Tests
+  # =======================
+
+  - it: should add HTTP auth env vars when username and password provided
+    set:
+      git:
+        enabled: true
+        repository: "https://github.com/example/repo.git"
+      httpAuth:
+        username: "myuser"
+        password: "mypass"
+      persistence:
+        enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[?(@.name == "git-clone")].env
+          content:
+            name: GIT_USERNAME
+            value: "myuser"
+
+  - it: should mount HTTP auth secret when username provided
+    set:
+      git:
+        enabled: true
+        repository: "https://github.com/example/repo.git"
+      httpAuth:
+        username: "myuser"
+        password: "mypass"
+      persistence:
+        enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[?(@.name == "git-clone")].volumeMounts
+          content:
+            name: git-http-auth
+            mountPath: /etc/git-auth
+            readOnly: true
+
+  - it: should create HTTP auth volume with inline password
+    set:
+      git:
+        enabled: true
+        repository: "https://github.com/example/repo.git"
+      httpAuth:
+        username: "myuser"
+        password: "mypass"
+      persistence:
+        enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: git-http-auth
+            secret:
+              secretName: RELEASE-NAME-oxy-app-http-auth
+              defaultMode: 0400
+              optional: false
+              items:
+                - key: password
+                  path: password
+
+  - it: should use custom secret name when httpAuth.secretName is provided
+    set:
+      git:
+        enabled: true
+        repository: "https://github.com/example/repo.git"
+      httpAuth:
+        username: "myuser"
+        secretName: "my-custom-secret"
+        passwordKey: "myPasswordKey"
+      persistence:
+        enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: git-http-auth
+            secret:
+              secretName: my-custom-secret
+              defaultMode: 0400
+              optional: false
+              items:
+                - key: myPasswordKey
+                  path: password
+
+  - it: should not use SSH keys when HTTP auth is enabled
+    set:
+      git:
+        enabled: true
+        repository: "https://github.com/example/repo.git"
+      httpAuth:
+        username: "myuser"
+        password: "mypass"
+      sshKey:
+        privateKey: "fake-key"
+      persistence:
+        enabled: true
+    asserts:
+      - notContains:
+          path: spec.template.spec.initContainers[?(@.name == "git-clone")].args
+          content: "--ssh-key-file=/etc/git-secret/ssh"
+      - notContains:
+          path: spec.template.spec.initContainers[?(@.name == "git-clone")].volumeMounts
+          any: true
+          content:
+            name: git-ssh
+
+  - it: should mount github app secret when githubApp inline values provided
+    set:
+      git:
+        enabled: true
+        repository: "https://github.com/example/repo.git"
+        githubApp:
+          privateKey: "my-pem"
+          applicationId: "123"
+          installationId: "456"
+      persistence:
+        enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[?(@.name == "git-clone")].volumeMounts
+          content:
+            name: github-app-secret
+            mountPath: /etc/github-app
+            readOnly: true
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: github-app-secret
+            secret:
+              secretName: RELEASE-NAME-oxy-app-github-app
+              defaultMode: 0400
+              optional: false
+
+  - it: should mount provided github app secret when secretName set
+    set:
+      git:
+        enabled: true
+        repository: "https://github.com/example/repo.git"
+        githubApp:
+          secretName: "my-github-app-secret"
+          privateKeyKey: "my_private_key"
+          applicationIdKey: "my_app_id"
+          installationIdKey: "my_install_id"
+      persistence:
+        enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: github-app-secret
+            secret:
+              secretName: my-github-app-secret
+              defaultMode: 0400
+              optional: false

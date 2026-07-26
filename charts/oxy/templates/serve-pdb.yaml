@@ -1,0 +1,16 @@
+{{- if and .Values.serveFleet.enabled .Values.serveFleet.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "oxy-app.fullname" . }}-serve
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "oxy-app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: serve
+spec:
+  minAvailable: {{ .Values.serveFleet.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "oxy-app.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: serve
+{{- end }}

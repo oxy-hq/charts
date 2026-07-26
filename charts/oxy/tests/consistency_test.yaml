@@ -1,0 +1,472 @@
+suite: cross-template consistency tests
+templates:
+  - service.yaml
+  - ingress.yaml
+  - statefulset.yaml
+  - serviceaccount.yaml
+  - otel-configmap.yaml
+
+tests:
+  # ==========================
+  # Service and Ingress Consistency
+  # ==========================
+
+  # Test default naming consistency
+  - it: should have matching service names between service and ingress (default)
+    set:
+      ingress:
+        enabled: true
+        hosts:
+          - host: test.example.com
+    asserts:
+      # Service should use fullname
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: RELEASE-NAME-oxy-app
+        template: ingress.yaml
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-oxy-app
+        template: service.yaml
+
+  # Test custom service name override consistency
+  - it: should have matching service names when service.name is overridden
+    set:
+      service:
+        name: custom-service-name
+      ingress:
+        enabled: true
+        hosts:
+          - host: test.example.com
+    asserts:
+      # Both should use the custom name
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: custom-service-name
+        template: ingress.yaml
+      - equal:
+          path: metadata.name
+          value: custom-service-name
+        template: service.yaml
+
+  # Test fullnameOverride consistency
+  - it: should have matching service names with fullnameOverride
+    set:
+      fullnameOverride: totally-custom
+      ingress:
+        enabled: true
+        hosts:
+          - host: test.example.com
+    asserts:
+      # Both should use the override
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: totally-custom
+        template: ingress.yaml
+      - equal:
+          path: metadata.name
+          value: totally-custom
+        template: service.yaml
+
+  # Test port consistency between service and ingress
+  - it: should use consistent ports between service and ingress
+    set:
+      service:
+        port: 8080
+      ingress:
+        enabled: true
+        hosts:
+          - host: test.example.com
+    asserts:
+      - equal:
+          path: spec.ports[0].port
+          value: 8080
+        template: service.yaml
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.number
+          value: 8080
+        template: ingress.yaml
+
+  # ==========================
+  # StatefulSet and Service Consistency
+  # ==========================
+
+  # Test service account name consistency
+  - it: should have matching service account names between statefulset and serviceaccount
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: RELEASE-NAME-oxy-app
+        template: statefulset.yaml
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-oxy-app
+        template: serviceaccount.yaml
+
+  # Test custom service account name consistency
+  - it: should have matching custom service account names
+    set:
+      serviceAccount:
+        create: true
+        name: custom-sa
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: custom-sa
+        template: statefulset.yaml
+      - equal:
+          path: metadata.name
+          value: custom-sa
+        template: serviceaccount.yaml
+
+  # Test selector labels consistency between service and statefulset
+  - it: should have matching selector labels
+    asserts:
+      - equal:
+          path: spec.selector["app.kubernetes.io/name"]
+          value: oxy-app
+        template: service.yaml
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          value: oxy-app
+        template: statefulset.yaml
+      - equal:
+          path: spec.selector["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+        template: service.yaml
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+        template: statefulset.yaml
+
+  # ==========================
+  # Naming Convention Consistency
+  # ==========================
+
+  # Test that all resources follow consistent naming
+  - it: should use consistent fullname across all resources
+    set:
+      fullnameOverride: my-custom-app
+    asserts:
+      - equal:
+          path: metadata.name
+          value: my-custom-app
+        template: service.yaml
+      - equal:
+          path: metadata.name
+          value: my-custom-app
+        template: statefulset.yaml
+      - equal:
+          path: metadata.name
+          value: my-custom-app
+        template: serviceaccount.yaml
+
+  # Test nameOverride consistency
+  - it: should use consistent nameOverride pattern
+    set:
+      nameOverride: custom-name
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-custom-name
+        template: service.yaml
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-custom-name
+        template: statefulset.yaml
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-custom-name
+        template: serviceaccount.yaml
+
+  # ==========================
+  # Label Consistency Tests
+  # ==========================
+
+  # Test standard labels are consistent across resources
+  - it: should have consistent standard labels
+    asserts:
+      # Check service labels
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: oxy-app
+        template: service.yaml
+      - equal:
+          path: metadata.labels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+        template: service.yaml
+
+      # Check statefulset labels
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: oxy-app
+        template: statefulset.yaml
+      - equal:
+          path: metadata.labels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+        template: statefulset.yaml
+
+      # Check serviceaccount labels
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: oxy-app
+        template: serviceaccount.yaml
+      - equal:
+          path: metadata.labels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+        template: serviceaccount.yaml
+
+  # ==========================
+  # OpenTelemetry Collector Integration Tests
+  # ==========================
+
+  # Test ConfigMap name matches volume reference in StatefulSet
+  - it: should have matching otel-collector ConfigMap name between statefulset and configmap
+    set:
+      otelCollector:
+        enabled: true
+      clickhouse:
+        enabled: true
+        url: "http://clickhouse:8123"
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-oxy-app-otel-collector
+        template: otel-configmap.yaml
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: otel-collector-config
+            configMap:
+              name: RELEASE-NAME-oxy-app-otel-collector
+        template: statefulset.yaml
+
+  # Test shared ClickHouse config consistency between main app and otel-collector
+  - it: should use same ClickHouse credentials in main app and otel-collector config
+    set:
+      otelCollector:
+        enabled: true
+      clickhouse:
+        enabled: true
+        url: "http://clickhouse:8123"
+        database: "shared_db"
+        username: "shared_user"
+        password: "shared_pass"
+    asserts:
+      # Main app gets ClickHouse env vars
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_CLICKHOUSE_URL
+            value: "http://clickhouse:8123"
+        template: statefulset.yaml
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_CLICKHOUSE_DATABASE
+            value: "shared_db"
+        template: statefulset.yaml
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_CLICKHOUSE_USER
+            value: "shared_user"
+        template: statefulset.yaml
+      # Otel collector config uses same values (TCP endpoint derived from HTTP)
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "endpoint: tcp://clickhouse:9000"
+        template: otel-configmap.yaml
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "database: shared_db"
+        template: otel-configmap.yaml
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "username: shared_user"
+        template: otel-configmap.yaml
+
+  # Test secret reference consistency when using existingSecret
+  - it: should use same secret reference in main app and otel-collector
+    set:
+      otelCollector:
+        enabled: true
+      clickhouse:
+        enabled: true
+        url: "http://clickhouse:8123"
+        existingSecret:
+          name: clickhouse-creds
+          usernameKey: ch-user
+          passwordKey: ch-pass
+    asserts:
+      # Main app references the secret for credentials
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_CLICKHOUSE_USER
+            valueFrom:
+              secretKeyRef:
+                name: clickhouse-creds
+                key: ch-user
+        template: statefulset.yaml
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_CLICKHOUSE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: clickhouse-creds
+                key: ch-pass
+        template: statefulset.yaml
+      # Otel collector also references the same secret
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: CLICKHOUSE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: clickhouse-creds
+                key: ch-pass
+        template: statefulset.yaml
+      # ConfigMap uses env var substitution for password
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'password: \$\{CLICKHOUSE_PASSWORD\}'
+        template: otel-configmap.yaml
+
+  # Test health_check extension is properly configured
+  - it: should have health_check extension enabled in otel config
+    set:
+      otelCollector:
+        enabled: true
+      clickhouse:
+        enabled: true
+        url: "http://clickhouse:8123"
+    asserts:
+      # ConfigMap has health_check extension defined
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "health_check:"
+        template: otel-configmap.yaml
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "endpoint: 0.0.0.0:13133"
+        template: otel-configmap.yaml
+      # Service section enables the extension
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "extensions: \\[health_check\\]"
+        template: otel-configmap.yaml
+      # StatefulSet probes point to the health check port
+      - equal:
+          path: spec.template.spec.containers[1].startupProbe.httpGet.port
+          value: 13133
+        template: statefulset.yaml
+      - equal:
+          path: spec.template.spec.containers[1].livenessProbe.httpGet.port
+          value: 13133
+        template: statefulset.yaml
+      - equal:
+          path: spec.template.spec.containers[1].readinessProbe.httpGet.port
+          value: 13133
+        template: statefulset.yaml
+
+  # Test otel-collector labels consistency
+  - it: should have consistent labels on otel-collector ConfigMap
+    set:
+      otelCollector:
+        enabled: true
+      clickhouse:
+        enabled: true
+        url: "http://clickhouse:8123"
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: oxy-app
+        template: otel-configmap.yaml
+      - equal:
+          path: metadata.labels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+        template: otel-configmap.yaml
+
+  # Test fullnameOverride applies to otel-collector ConfigMap
+  - it: should use fullnameOverride for otel-collector ConfigMap
+    set:
+      fullnameOverride: custom-app
+      otelCollector:
+        enabled: true
+      clickhouse:
+        enabled: true
+        url: "http://clickhouse:8123"
+    asserts:
+      - equal:
+          path: metadata.name
+          value: custom-app-otel-collector
+        template: otel-configmap.yaml
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: otel-collector-config
+            configMap:
+              name: custom-app-otel-collector
+        template: statefulset.yaml
+
+  # Test complete integration: all components work together
+  - it: should configure complete otel integration with all features
+    set:
+      fullnameOverride: my-oxy
+      otelCollector:
+        enabled: true
+        ports:
+          otlpGrpc: 4317
+          otlpHttp: 4318
+        clickhouse:
+          enabled: true
+          logsTableName: "app_logs"
+          tracesTableName: "app_traces"
+      clickhouse:
+        enabled: true
+        url: "http://ch-server:8123"
+        database: "telemetry"
+        username: "otel_user"
+        password: "otel_pass"
+    asserts:
+      # StatefulSet has 2 containers
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 2
+        template: statefulset.yaml
+      # Main app has ClickHouse env vars
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_CLICKHOUSE_URL
+            value: "http://ch-server:8123"
+        template: statefulset.yaml
+      # Otel collector sidecar exists
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: otel-collector
+        template: statefulset.yaml
+      # Otel collector has correct ports
+      - contains:
+          path: spec.template.spec.containers[1].ports
+          content:
+            containerPort: 4317
+            protocol: TCP
+            name: otlp-grpc
+        template: statefulset.yaml
+      # ConfigMap has derived TCP endpoint
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "endpoint: tcp://ch-server:9000"
+        template: otel-configmap.yaml
+      # ConfigMap has custom table names
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "logs_table_name: app_logs"
+        template: otel-configmap.yaml
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: "traces_table_name: app_traces"
+        template: otel-configmap.yaml

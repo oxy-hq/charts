@@ -1,0 +1,103 @@
+suite: ingress tests
+templates:
+  - ingress.yaml
+
+tests:
+  # Ingress disabled by default
+  - it: should not render Ingress when disabled
+    set:
+      ingress:
+        enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # Basic ingress configuration
+  - it: should render Ingress when enabled
+    set:
+      ingress:
+        enabled: true
+        hosts:
+          - host: oxy.example.com
+            paths:
+              - path: /
+                pathType: Prefix
+    asserts:
+      - isKind:
+          of: Ingress
+      - equal:
+          path: spec.rules[0].host
+          value: oxy.example.com
+      - equal:
+          path: spec.rules[0].http.paths[0].path
+          value: /
+      - equal:
+          path: spec.rules[0].http.paths[0].pathType
+          value: Prefix
+
+  # Ingress with TLS
+  - it: should configure TLS correctly
+    set:
+      ingress:
+        enabled: true
+        hosts:
+          - host: oxy.example.com
+            paths: []
+        tls:
+          - hosts:
+              - oxy.example.com
+            secretName: oxy-tls
+    asserts:
+      - equal:
+          path: spec.tls[0].secretName
+          value: oxy-tls
+      - contains:
+          path: spec.tls[0].hosts
+          content: oxy.example.com
+
+  # Ingress with annotations
+  - it: should support custom annotations
+    set:
+      ingress:
+        enabled: true
+        annotations:
+          kubernetes.io/ingress.class: nginx
+          cert-manager.io/cluster-issuer: letsencrypt-prod
+        hosts:
+          - host: oxy.example.com
+    asserts:
+      - equal:
+          path: metadata.annotations["kubernetes.io/ingress.class"]
+          value: nginx
+      - equal:
+          path: metadata.annotations["cert-manager.io/cluster-issuer"]
+          value: letsencrypt-prod
+
+  # Ingress with custom className
+  - it: should support ingress class name
+    set:
+      ingress:
+        enabled: true
+        ingressClassName: nginx
+        hosts:
+          - host: oxy.example.com
+    asserts:
+      - equal:
+          path: spec.ingressClassName
+          value: nginx
+
+  # Multiple hosts
+  - it: should support multiple hosts
+    set:
+      ingress:
+        enabled: true
+        hosts:
+          - host: oxy1.example.com
+          - host: oxy2.example.com
+    asserts:
+      - equal:
+          path: spec.rules[0].host
+          value: oxy1.example.com
+      - equal:
+          path: spec.rules[1].host
+          value: oxy2.example.com

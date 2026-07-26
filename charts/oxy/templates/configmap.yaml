@@ -1,0 +1,12 @@
+{{- if .Values.configMap.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "oxy-app.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "oxy-app.labels" . | nindent 4 }}
+data:
+  {{- /* Render explicit key/values only. toYaml handles empty maps. */}}
+  {{- toYaml .Values.configMap.data | nindent 2 }}
+{{- end }}

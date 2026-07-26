@@ -1,0 +1,749 @@
+{{/*
+Define git clone paths
+*/}}
+{{- /* Fail fast if the worker topology is misconfigured. See _worker-validation.tpl. */}}
+{{- include "oxy-app.validateWorkerTopology" . -}}
+{{- $gitCloneDir := printf "%s/%s" .Values.persistence.mountPath (default "repo" .Values.git.cloneDir) -}}
+{{- $workingDir := $gitCloneDir -}}
+{{- if and .Values.git.workingDir (ne .Values.git.workingDir "") -}}
+  {{- $workingDir = printf "%s/%s" $gitCloneDir .Values.git.workingDir -}}
+{{- end -}}
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "oxy-app.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "oxy-app.labels" . | nindent 4 }}
+    version: v1
+spec:
+  serviceName: {{ include "oxy-app.fullname" . }}-headless
+  replicas: 1
+  {{- if gt (int (.Values.minReadySeconds | default 0)) 0 }}
+  minReadySeconds: {{ .Values.minReadySeconds }}
+  {{- end }}
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      partition: 0
+  selector:
+    matchLabels:
+      {{- include "oxy-app.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "oxy-app.selectorLabels" . | nindent 8 }}
+        version: v1
+        {{- /*
+          HA-split routing anchor. When serveFleet is enabled, the main Service
+          selects on this label so the catch-all `/` route reaches ONLY this
+          singleton (which owns the working copy + drives compiles) — not the
+          stateless serve pods (component=serve) nor the worker pods
+          (component=worker), both of which also carry the bare
+          name+instance selectorLabels. Gated so serveFleet-off deployments
+          keep their exact current pod template (no rollout on upgrade).
+        */}}
+        {{- if .Values.serveFleet.enabled }}
+        app.kubernetes.io/component: ide
+        {{- end }}
+      {{- if .Values.otelCollector.enabled }}
+      annotations:
+        checksum/otel-config: {{ include (print $.Template.BasePath "/otel-configmap.yaml") . | sha256sum }}
+      {{- end }}
+    spec:
+      {{- $sa := include "oxy-app.serviceAccountName" . }}
+      {{- if ne $sa "" }}
+      serviceAccountName: {{ $sa | quote }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      securityContext:
+        fsGroup: {{ .Values.securityContext.fsGroup }}
+
+      {{- if or .Values.git.enabled .Values.database.postgres.enabled .Values.database.clickhouse.enabled .Values.extraInitContainers }}
+      initContainers:
+        {{- if .Values.database.postgres.enabled }}
+        # Wait for PostgreSQL to be ready
+        - name: wait-for-postgres
+          image: postgres:16-alpine
+          command: ['sh', '-c']
+          args:
+            - |
+              echo "Waiting for PostgreSQL to be ready..."
+              {{- if .Values.postgres.fullnameOverride }}
+              PG_HOST="{{ .Values.postgres.fullnameOverride }}.{{ .Release.Namespace }}.svc.cluster.local"
+              {{- else if .Values.database.postgres.host }}
+              PG_HOST="{{ .Values.database.postgres.host }}"
+              {{- else }}
+              PG_HOST="{{ .Release.Name }}-postgres.{{ .Release.Namespace }}.svc.cluster.local"
+              {{- end }}
+              PG_PORT="{{ .Values.database.postgres.port }}"
+              MAX_RETRIES=60
+              RETRY_COUNT=0
+
+              echo "Target: $PG_HOST:$PG_PORT"
+
+              # First, check DNS resolution
+              echo "Checking DNS resolution..."
+              while [ $RETRY_COUNT -lt 10 ]; do
+                if nslookup "$PG_HOST" >/dev/null 2>&1; then
+                  echo "DNS resolution successful for $PG_HOST"
+                  break
+                fi
+                echo "DNS lookup failed, retrying in 2 seconds... ($RETRY_COUNT/10)"
+                RETRY_COUNT=$((RETRY_COUNT + 1))
+                sleep 2
+              done
+
+              # Reset counter for pg_isready check
+              RETRY_COUNT=0
+
+              # Now check PostgreSQL readiness
+              while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+                if pg_isready -h "$PG_HOST" -p "$PG_PORT" -t 5; then
+                  echo "PostgreSQL is ready and accepting connections!"
+                  exit 0
+                fi
+                echo "PostgreSQL is not ready yet. Waiting 5 seconds... ($RETRY_COUNT/$MAX_RETRIES)"
+                RETRY_COUNT=$((RETRY_COUNT + 1))
+                sleep 5
+              done
+
+              echo "ERROR: PostgreSQL did not become ready within the timeout period"
+              exit 1
+        {{- end }}
+        {{- if .Values.database.clickhouse.enabled }}
+        # Wait for ClickHouse to be ready
+        - name: wait-for-clickhouse
+          image: curlimages/curl:8.5.0
+          command: ['sh', '-c']
+          args:
+            - |
+              echo "Waiting for ClickHouse to be ready..."
+              {{- if .Values.clickhouseSubchart.fullnameOverride }}
+              CH_HOST="{{ .Values.clickhouseSubchart.fullnameOverride }}.{{ .Release.Namespace }}.svc.cluster.local"
+              {{- else if .Values.database.clickhouse.host }}
+              CH_HOST="{{ .Values.database.clickhouse.host }}"
+              {{- else }}
+              CH_HOST="{{ .Release.Name }}-clickhouse.{{ .Release.Namespace }}.svc.cluster.local"
+              {{- end }}
+              CH_PORT="{{ .Values.database.clickhouse.httpPort }}"
+              MAX_RETRIES=60
+              RETRY_COUNT=0
+
+              echo "Target: $CH_HOST:$CH_PORT"
+
+              # First, check DNS resolution
+              echo "Checking DNS resolution..."
+              while [ $RETRY_COUNT -lt 10 ]; do
+                if nslookup "$CH_HOST" >/dev/null 2>&1; then
+                  echo "DNS resolution successful for $CH_HOST"
+                  break
+                fi
+                echo "DNS lookup failed, retrying in 2 seconds... ($RETRY_COUNT/10)"
+                RETRY_COUNT=$((RETRY_COUNT + 1))
+                sleep 2
+              done
+
+              # Reset counter for ClickHouse health check
+              RETRY_COUNT=0
+
+              # Now check ClickHouse readiness via HTTP ping endpoint
+              while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+                if curl -sf "http://$CH_HOST:$CH_PORT/ping" >/dev/null 2>&1; then
+                  echo "ClickHouse is ready and accepting connections!"
+                  exit 0
+                fi
+                echo "ClickHouse is not ready yet. Waiting 5 seconds... ($RETRY_COUNT/$MAX_RETRIES)"
+                RETRY_COUNT=$((RETRY_COUNT + 1))
+                sleep 5
+              done
+
+              echo "ERROR: ClickHouse did not become ready within the timeout period"
+              exit 1
+        {{- end }}
+        {{- if .Values.git.enabled }}
+        # Git Clone Init Container — performs a shallow clone on first run
+        - name: git-clone
+          image: "{{ .Values.git.image }}:{{ .Values.git.imageTag }}"
+          imagePullPolicy: {{ .Values.git.imagePullPolicy }}
+          env:
+            - name: GIT_REPO
+              value: {{ .Values.git.repository | quote }}
+            - name: GIT_BRANCH
+              value: {{ .Values.git.branch | quote }}
+            - name: CLONE_DIR
+              value: {{ $gitCloneDir | quote }}
+            {{- if .Values.httpAuth.username }}
+            - name: GIT_USERNAME
+              value: {{ .Values.httpAuth.username | quote }}
+            {{- end }}
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+
+              {{- if or .Values.git.githubApp.secretName (and .Values.git.githubApp.privateKey .Values.git.githubApp.applicationId .Values.git.githubApp.installationId) }}
+              # GitHub App authentication — generate an installation access token
+              apk add --no-cache curl openssl > /dev/null
+
+              APP_ID=$(cat /etc/github-app/{{ .Values.git.githubApp.applicationIdKey }})
+              INSTALL_ID=$(cat /etc/github-app/{{ .Values.git.githubApp.installationIdKey }})
+
+              NOW=$(date +%s)
+              IAT=$((NOW - 60))
+              EXP=$((NOW + 600))
+              HEADER=$(printf '{"alg":"RS256","typ":"JWT"}' | openssl base64 -A | tr -d '=' | tr '/+' '_-')
+              PAYLOAD=$(printf '{"iat":%d,"exp":%d,"iss":"%s"}' "$IAT" "$EXP" "$APP_ID" | openssl base64 -A | tr -d '=' | tr '/+' '_-')
+              SIG=$(printf '%s.%s' "$HEADER" "$PAYLOAD" | openssl dgst -sha256 -sign /etc/github-app/{{ .Values.git.githubApp.privateKeyKey }} -binary | openssl base64 -A | tr -d '=' | tr '/+' '_-')
+              JWT="${HEADER}.${PAYLOAD}.${SIG}"
+
+              RESPONSE=$(curl -s -X POST \
+                "https://api.github.com/app/installations/${INSTALL_ID}/access_tokens" \
+                -H "Authorization: Bearer $JWT" \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28")
+
+              TOKEN=$(printf '%s' "$RESPONSE" | sed -n 's/.*"token"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+
+              if [ -z "$TOKEN" ]; then
+                echo "Error: failed to obtain GitHub App installation token"
+                echo "GitHub API response: $RESPONSE"
+                exit 1
+              fi
+
+              REPO_URL=$(echo "$GIT_REPO" | sed "s|https://github.com/|https://x-access-token:${TOKEN}@github.com/|")
+
+              if [ -d "$CLONE_DIR/.git" ]; then
+                echo "Repository already exists at $CLONE_DIR, pulling latest changes"
+                cd "$CLONE_DIR"
+                git remote set-url origin "$REPO_URL"
+                git fetch origin "$GIT_BRANCH"
+                git reset --hard FETCH_HEAD
+              else
+                mkdir -p "$CLONE_DIR"
+                git clone --branch "$GIT_BRANCH" --depth 1 "$REPO_URL" "$CLONE_DIR"
+              fi
+
+              {{- else if .Values.httpAuth.username }}
+              # HTTP authentication
+              GIT_PASSWORD=$(cat /etc/git-auth/password)
+              REPO_URL=$(echo "$GIT_REPO" | sed "s|https://|https://${GIT_USERNAME}:${GIT_PASSWORD}@|")
+
+              if [ -d "$CLONE_DIR/.git" ]; then
+                echo "Repository already exists at $CLONE_DIR, pulling latest changes"
+                cd "$CLONE_DIR"
+                git remote set-url origin "$REPO_URL"
+                git fetch origin "$GIT_BRANCH"
+                git reset --hard FETCH_HEAD
+              else
+                mkdir -p "$CLONE_DIR"
+                git clone --branch "$GIT_BRANCH" --depth 1 "$REPO_URL" "$CLONE_DIR"
+              fi
+
+              {{- else if or .Values.sshKey.privateKey .Values.sshKey.secretName }}
+              # SSH key authentication
+              mkdir -p /root/.ssh
+              chmod 700 /root/.ssh
+              cp /etc/git-secret/ssh /root/.ssh/id_rsa
+              chmod 600 /root/.ssh/id_rsa
+              if [ -f /etc/git-secret/known_hosts ]; then
+                cp /etc/git-secret/known_hosts /root/.ssh/known_hosts
+                chmod 644 /root/.ssh/known_hosts
+              else
+                touch /root/.ssh/known_hosts
+                HOSTNAME=$(echo "$GIT_REPO" | sed 's|.*@\([^:/]*\)[:/].*|\1|')
+                ssh-keyscan -H "$HOSTNAME" >> /root/.ssh/known_hosts 2>/dev/null || true
+              fi
+
+              if [ -d "$CLONE_DIR/.git" ]; then
+                echo "Repository already exists at $CLONE_DIR, pulling latest changes"
+                cd "$CLONE_DIR"
+                git fetch origin "$GIT_BRANCH"
+                git reset --hard FETCH_HEAD
+              else
+                mkdir -p "$CLONE_DIR"
+                git clone --branch "$GIT_BRANCH" --depth 1 "$GIT_REPO" "$CLONE_DIR"
+              fi
+
+              {{- else }}
+              # No authentication (public repository)
+              if [ -d "$CLONE_DIR/.git" ]; then
+                echo "Repository already exists at $CLONE_DIR, pulling latest changes"
+                cd "$CLONE_DIR"
+                git fetch origin "$GIT_BRANCH"
+                git reset --hard FETCH_HEAD
+              else
+                mkdir -p "$CLONE_DIR"
+                git clone --branch "$GIT_BRANCH" --depth 1 "$GIT_REPO" "$CLONE_DIR"
+              fi
+              {{- end }}
+          volumeMounts:
+            - name: workspace
+              mountPath: {{ .Values.persistence.mountPath }}
+            {{- if .Values.httpAuth.username }}
+            - name: git-http-auth
+              mountPath: /etc/git-auth
+              readOnly: true
+            {{- else if or .Values.git.githubApp.secretName (and .Values.git.githubApp.privateKey .Values.git.githubApp.applicationId .Values.git.githubApp.installationId) }}
+            - name: github-app-secret
+              mountPath: /etc/github-app
+              readOnly: true
+            {{- else if or .Values.sshKey.privateKey .Values.sshKey.secretName }}
+            - name: git-ssh
+              mountPath: /etc/git-secret
+              readOnly: true
+            {{- end }}
+        {{- end }}
+
+        {{- /* Render any user-supplied init containers */}}
+        {{- with .Values.extraInitContainers }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+
+      containers:
+        # Main Application Container
+        - name: {{ include "oxy-app.name" . }}
+          image: "{{ .Values.app.image }}:{{ default .Chart.AppVersion .Values.app.imageTag }}"
+          {{- if and .Values.app.command (gt (len .Values.app.command) 0) }}
+          command:
+            {{- range .Values.app.command }}
+            - {{ . | quote }}
+            {{- end }}
+          {{- else }}
+          command:
+            - sh
+            - -c
+            - |
+              exec oxy serve{{- if .Values.git.enabled }} --local{{- end }}{{- if .Values.app.internalHost }} --internal-host {{ .Values.app.internalHost }} --internal-port {{ .Values.app.internalPort }}{{- end }}{{- if .Values.appServer.disableInprocessWorkers }} --no-workers{{- end }}
+          {{- end }}
+          {{- if .Values.git.enabled }}
+          workingDir: {{ $workingDir }}
+          {{- end }}
+          ports:
+            - containerPort: {{ .Values.app.port }}
+              protocol: TCP
+              name: traffic-port
+            {{- if .Values.app.internalHost }}
+            - containerPort: {{ .Values.app.internalPort }}
+              protocol: TCP
+              name: internal-port
+            {{- end }}
+
+          # Environment Variables
+          env:
+            # Role classification — oxygen-internal PR #2505 routing guardrail.
+            # IDE singleton: owns the workspace working copy + .git tree.
+            # Accepts every route (IdeOnly + FleetOk) on this pod. When
+            # serveFleet is enabled, the path-based ingress routes the
+            # write-heavy IDE surface here while stateless reads go to oxy-serve.
+            - name: OXY_ROLE
+              value: "ide"
+            # Shared AES-256 master key so workspace secrets encrypt/decrypt
+            # identically across the fleet (values.yaml encryptionKey). Without it
+            # each pod generates a divergent on-disk key → cross-pod
+            # "decryption failed". Same Secret on the StatefulSet, serve and worker.
+            {{- if .Values.encryptionKey.secretName }}
+            - name: OXY_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.encryptionKey.secretName | quote }}
+                  key: {{ .Values.encryptionKey.secretKey | default "OXY_ENCRYPTION_KEY" | quote }}
+            {{- end }}
+            # State Directory Configuration
+            {{- if and .Values.env.OXY_STATE_DIR (ne .Values.env.OXY_STATE_DIR "") }}
+            - name: OXY_STATE_DIR
+              value: {{ .Values.env.OXY_STATE_DIR | quote }}
+            {{- else }}
+            - name: OXY_STATE_DIR
+              value: {{ printf "%s/%s" .Values.persistence.mountPath .Values.persistence.folder | quote }}
+            {{- end }}
+
+            # Belt-and-suspenders for the --no-workers CLI flag: HTTP-only fleets
+            # paired with a standalone `oxy worker` deployment must skip the
+            # in-process workers so they don't double-drive the queue.
+            {{- if .Values.appServer.disableInprocessWorkers }}
+            - name: OXY_DISABLE_INPROCESS_WORKERS
+              value: "1"
+            {{- end }}
+
+            # Compile-boundary global driver: drive the Global task queue
+            # (incl. TaskSpec::Compile) in-process. The StatefulSet is the only
+            # node with the working copy, so compiles can ONLY run here. Inert
+            # under --no-workers, so gate on both.
+            {{- if and .Values.appServer.inprocGlobalWorker (not .Values.appServer.disableInprocessWorkers) }}
+            - name: OXY_INPROC_GLOBAL_WORKER
+              value: "1"
+            {{- end }}
+            # The pre-upgrade migrate Job owns schema migrations; the StatefulSet
+            # (the canonical migrator) stands down so it doesn't re-run them on
+            # boot. The serve fleet already sets this unconditionally.
+            {{- if .Values.migrations.enabled }}
+            - name: OXY_SKIP_MIGRATIONS
+              value: "1"
+            {{- end }}
+            # Compile-boundary S3 offload (semantic blobs + local-DuckDB mirror).
+            # This is the compile WRITER, so it needs the bucket to upload.
+            {{- if .Values.compileBoundary.blobS3Bucket }}
+            - name: OXY_COMPILE_BLOB_S3_BUCKET
+              value: {{ .Values.compileBoundary.blobS3Bucket | quote }}
+            {{- end }}
+
+            # Database URL Configuration
+            # Preference order (sqlite fallback intentionally omitted):
+            # 1) Explicit value provided by caller via values.env.OXY_DATABASE_URL
+            # 2) Explicit external.connectionString or external fields
+            # 3) Postgres subchart connection (if user enabled it manually)
+            # If none are provided, OXY_DATABASE_URL will not be set
+            {{- if and .Values.env.OXY_DATABASE_URL (ne .Values.env.OXY_DATABASE_URL "") }}
+            - name: OXY_DATABASE_URL
+              value: {{ .Values.env.OXY_DATABASE_URL | quote }}
+            {{- else if and .Values.database.external.enabled (ne .Values.database.external.connectionString "") }}
+            - name: OXY_DATABASE_URL
+              value: {{ .Values.database.external.connectionString | quote }}
+            {{- else if .Values.database.external.enabled }}
+            - name: OXY_DATABASE_URL
+              value: {{ printf "postgresql://%s:%s@%s:%v/%s"
+                .Values.database.external.user
+                .Values.database.external.password
+                .Values.database.external.host
+                .Values.database.external.port
+                .Values.database.external.database | quote }}
+            {{- else if .Values.database.postgres.enabled }}
+            - name: OXY_DATABASE_URL
+              {{- $pgHost := "" }}
+              {{- if .Values.postgres.fullnameOverride }}
+                {{- $pgHost = printf "%s.%s.svc.cluster.local" .Values.postgres.fullnameOverride .Release.Namespace }}
+              {{- else if .Values.database.postgres.host }}
+                {{- $pgHost = .Values.database.postgres.host }}
+              {{- else }}
+                {{- $pgHost = printf "%s-postgres.%s.svc.cluster.local" .Release.Name .Release.Namespace }}
+              {{- end }}
+              value: {{ printf "postgresql://%s:%s@%s:%v/%s"
+                (default "postgres" .Values.postgres.userDatabase.user.value)
+                (default "postgres" .Values.postgres.userDatabase.password.value)
+                $pgHost
+                .Values.database.postgres.port
+                (default "postgres" .Values.postgres.userDatabase.name.value) | quote }}
+            {{- end }}
+
+            # Additional environment variables from values.env
+            {{- range $key, $value := .Values.env }}
+            {{- if and (ne $key "OXY_STATE_DIR") (ne $key "OXY_DATABASE_URL") }}
+            {{- if ne $value "" }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- end }}
+            {{- end }}
+
+            # ClickHouse Configuration
+            # Preference order:
+            # 1) Embedded subchart (database.clickhouse.enabled = true)
+            # 2) External ClickHouse (clickhouse.enabled = true, database.clickhouse.enabled = false)
+            {{- if .Values.database.clickhouse.enabled }}
+            {{- $chHost := "" }}
+            {{- if .Values.clickhouseSubchart.fullnameOverride }}
+              {{- $chHost = printf "%s.%s.svc.cluster.local" .Values.clickhouseSubchart.fullnameOverride .Release.Namespace }}
+            {{- else if .Values.database.clickhouse.host }}
+              {{- $chHost = .Values.database.clickhouse.host }}
+            {{- else }}
+              {{- $chHost = printf "%s-clickhouse.%s.svc.cluster.local" .Release.Name .Release.Namespace }}
+            {{- end }}
+            - name: OXY_CLICKHOUSE_URL
+              value: {{ printf "http://%s:%v" $chHost (.Values.database.clickhouse.httpPort | default 8123) | quote }}
+            - name: OXY_CLICKHOUSE_DATABASE
+              value: {{ .Values.clickhouse.database | default "default" | quote }}
+            {{- if .Values.clickhouseSubchart.auth.existingSecret }}
+            - name: OXY_CLICKHOUSE_USER
+              value: {{ .Values.clickhouseSubchart.auth.username | default "default" | quote }}
+            - name: OXY_CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.clickhouseSubchart.auth.existingSecret }}
+                  key: {{ .Values.clickhouseSubchart.auth.existingSecretPasswordKey | default "password" }}
+            {{- else }}
+            - name: OXY_CLICKHOUSE_USER
+              value: {{ .Values.clickhouseSubchart.auth.username | default "default" | quote }}
+            - name: OXY_CLICKHOUSE_PASSWORD
+              value: {{ .Values.clickhouseSubchart.auth.password | default "" | quote }}
+            {{- end }}
+            {{- else if .Values.clickhouse.enabled }}
+            - name: OXY_CLICKHOUSE_URL
+              value: {{ .Values.clickhouse.url | quote }}
+            - name: OXY_CLICKHOUSE_DATABASE
+              value: {{ .Values.clickhouse.database | quote }}
+            {{- if .Values.clickhouse.passwordExistingSecret }}
+            - name: OXY_CLICKHOUSE_USER
+              value: {{ .Values.clickhouse.username | quote }}
+            - name: OXY_CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.clickhouse.passwordExistingSecret }}
+                  key: {{ default "password" .Values.clickhouse.passwordSecretKey }}
+            {{- else if and .Values.clickhouse.existingSecret .Values.clickhouse.existingSecret.name }}
+            - name: OXY_CLICKHOUSE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.clickhouse.existingSecret.name }}
+                  key: {{ default "username" .Values.clickhouse.existingSecret.usernameKey }}
+            - name: OXY_CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.clickhouse.existingSecret.name }}
+                  key: {{ default "password" .Values.clickhouse.existingSecret.passwordKey }}
+            {{- else }}
+            - name: OXY_CLICKHOUSE_USER
+              value: {{ .Values.clickhouse.username | quote }}
+            - name: OXY_CLICKHOUSE_PASSWORD
+              value: {{ .Values.clickhouse.password | quote }}
+            {{- end }}
+            {{- end }}
+
+          # ConfigMap / Secret Environment Variables
+          {{- if or .Values.configMap.enabled (gt (len .Values.externalSecrets.envSecretNames) 0) }}
+          envFrom:
+            {{- if .Values.configMap.enabled }}
+            - configMapRef:
+                name: {{ include "oxy-app.fullname" . }}-config
+            {{- end }}
+            {{- range .Values.externalSecrets.envSecretNames }}
+            - secretRef:
+                name: {{ . | quote }}
+            {{- end }}
+          {{- end }}
+
+          # Resource Limits and Requests
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          # Volume Mounts
+          volumeMounts:
+            - name: workspace
+              mountPath: {{ .Values.persistence.mountPath }}
+            {{- /* Mount environment secrets */}}
+            {{- range $idx, $secretName := .Values.externalSecrets.envSecretNames }}
+            - name: env-secret-{{ $idx }}
+              mountPath: /secrets/env/{{ $secretName }}
+              readOnly: true
+            {{- end }}
+            {{- /* Mount file secrets */}}
+            {{- range $idx, $fileSecret := .Values.externalSecrets.fileSecrets }}
+            - name: file-secret-{{ $idx }}
+              mountPath: /secrets/files/{{ $fileSecret.name }}
+              readOnly: true
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+
+          # Health Checks
+          {{- if .Values.git.enabled }}
+          {{- with .Values.startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- end }}
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.lifecycle }}
+          lifecycle:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+        {{- if .Values.otelCollector.enabled }}
+        - name: otel-collector
+          image: "{{ .Values.otelCollector.image }}:{{ .Values.otelCollector.imageTag }}"
+          imagePullPolicy: {{ .Values.otelCollector.imagePullPolicy }}
+          command:
+            - "/otelcol-contrib"
+            - "--config=/etc/otelcol/config.yaml"
+          ports:
+            - containerPort: {{ .Values.otelCollector.ports.otlpGrpc }}
+              protocol: TCP
+              name: otlp-grpc
+            - containerPort: {{ .Values.otelCollector.ports.otlpHttp }}
+              protocol: TCP
+              name: otlp-http
+            - containerPort: {{ .Values.otelCollector.ports.metrics }}
+              protocol: TCP
+              name: metrics
+          {{- if or (and .Values.database.clickhouse.enabled .Values.clickhouseSubchart.auth.existingSecret) .Values.clickhouse.passwordExistingSecret (and .Values.clickhouse.existingSecret .Values.clickhouse.existingSecret.name) }}
+          env:
+            {{- if and .Values.database.clickhouse.enabled .Values.clickhouseSubchart.auth.existingSecret }}
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.clickhouseSubchart.auth.existingSecret }}
+                  key: {{ .Values.clickhouseSubchart.auth.existingSecretPasswordKey | default "password" }}
+            {{- else if .Values.clickhouse.passwordExistingSecret }}
+            - name: OXY_CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.clickhouse.passwordExistingSecret }}
+                  key: {{ default "password" .Values.clickhouse.passwordSecretKey }}
+            {{- else }}
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.clickhouse.existingSecret.name }}
+                  key: {{ default "password" .Values.clickhouse.existingSecret.passwordKey }}
+            {{- end }}
+          {{- end }}
+          volumeMounts:
+            - name: otel-collector-config
+              mountPath: /etc/otelcol
+              readOnly: true
+          {{- with .Values.otelCollector.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          startupProbe:
+            httpGet:
+              path: /
+              port: 13133
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 13133
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 13133
+            periodSeconds: 10
+            failureThreshold: 3
+        {{- end }}
+
+        {{- /* Render user-supplied sidecars after built-in sidecars */}}
+        {{- with .Values.extraSidecars }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+
+      # Volume Definitions
+      volumes:
+        {{- if .Values.git.enabled }}
+        {{- if .Values.httpAuth.username }}
+        {{- /* HTTP authentication secret */}}
+        {{- $httpAuthSecretName := "" }}
+        {{- if .Values.httpAuth.secretName }}
+          {{- $httpAuthSecretName = .Values.httpAuth.secretName }}
+        {{- else if .Values.httpAuth.password }}
+          {{- $httpAuthSecretName = printf "%s-http-auth" (include "oxy-app.fullname" $) }}
+        {{- end }}
+        - name: git-http-auth
+          secret:
+            secretName: {{ $httpAuthSecretName }}
+            defaultMode: 0400
+            optional: false
+            items:
+              - key: {{ .Values.httpAuth.passwordKey }}
+                path: password
+        {{- else if or .Values.git.githubApp.secretName (and .Values.git.githubApp.privateKey .Values.git.githubApp.applicationId .Values.git.githubApp.installationId) }}
+        {{- if .Values.git.githubApp.secretName }}
+        - name: github-app-secret
+          secret:
+            secretName: {{ .Values.git.githubApp.secretName }}
+            defaultMode: 0400
+            optional: false
+        {{- else }}
+        - name: github-app-secret
+          secret:
+            secretName: {{ printf "%s-github-app" (include "oxy-app.fullname" $) }}
+            defaultMode: 0400
+            optional: false
+        {{- end }}
+        {{- else if or .Values.sshKey.privateKey .Values.sshKey.secretName }}
+        - name: git-ssh
+          secret:
+            secretName: {{ default .Values.git.sshSecretName .Values.sshKey.secretName }}
+            defaultMode: 0400
+            optional: false
+        {{- end }}
+        {{- end }}
+        {{- /* Environment secret volumes */}}
+        {{- range $idx, $secretName := .Values.externalSecrets.envSecretNames }}
+        - name: env-secret-{{ $idx }}
+          secret:
+            secretName: {{ $secretName | quote }}
+            optional: true
+        {{- end }}
+        {{- /* File secret volumes */}}
+        {{- range $idx, $fileSecret := .Values.externalSecrets.fileSecrets }}
+        - name: file-secret-{{ $idx }}
+          secret:
+            secretName: {{ $fileSecret.name | quote }}
+            optional: true
+        {{- end }}
+        {{- /* OpenTelemetry Collector config volume */}}
+        {{- if .Values.otelCollector.enabled }}
+        - name: otel-collector-config
+          configMap:
+            name: {{ include "oxy-app.fullname" . }}-otel-collector
+        {{- end }}
+        {{- if not .Values.persistence.enabled }}
+        - name: workspace
+          emptyDir: {}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+
+      # Node Selection and Tolerations
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+  # Persistent Volume Claim Templates
+  {{- if .Values.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: workspace
+        {{- with .Values.persistence.annotations }}
+        annotations:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.persistence.labels }}
+        labels:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes:
+          - {{ .Values.persistence.accessMode | quote }}
+        {{- with .Values.persistence.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
+        {{- with .Values.persistence.volumeMode }}
+        volumeMode: {{ . }}
+        {{- end }}
+        {{- with .Values.persistence.selector }}
+        selector:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size }}
+  {{- end }}

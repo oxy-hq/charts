@@ -1,0 +1,259 @@
+{{- if .Values.serveFleet.enabled }}
+{{- /*
+Stateless oxy-serve fleet — see oxygen-internal `internal-docs/2026-06-06-compile-boundary-design.md`
+and the simplification doc at `2026-06-10-compile-boundary-simplification.md`.
+
+This Deployment serves Postgres-backed reads (customer-apps, external API,
+admin, chat list, and the runtime read paths — apps, procedures, agents,
+semantic). The compile boundary is always-on (no per-surface flags); each
+read falls back to the filesystem only when the workspace isn't compiled —
+which a stateless replica can't do, so a workspace must be compiled before
+this fleet serves it. No PVC, no workspace files — the StatefulSet remains
+the singleton owner of working copies.
+
+Both fleets share the SAME Postgres (`OXY_DATABASE_URL`). The StatefulSet
+is the canonical migrator; oxy-serve pods skip migrations and assume the
+schema is already in place.
+
+IMPORTANT: compiles only run on a node that has the working copy AND drives
+the global task queue — i.e. the StatefulSet with `OXY_INPROC_GLOBAL_WORKER=1`.
+If nothing drives compiles, this fleet has no promoted revisions to serve.
+See the `serveFleet` notes in values.yaml.
+*/}}
+{{- $serveImageRepo := default .Values.app.image .Values.serveFleet.image.repository -}}
+{{- $serveImageTag := default (default .Chart.AppVersion .Values.app.imageTag) .Values.serveFleet.image.tag -}}
+{{- $serveImagePullPolicy := default .Values.app.imagePullPolicy .Values.serveFleet.image.pullPolicy -}}
+{{- $serveSa := default (include "oxy-app.serviceAccountName" .) .Values.serveFleet.serviceAccountName -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "oxy-app.fullname" . }}-serve
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "oxy-app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: serve
+spec:
+  replicas: {{ .Values.serveFleet.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "oxy-app.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: serve
+  strategy:
+    {{- toYaml .Values.serveFleet.strategy | nindent 4 }}
+  template:
+    metadata:
+      labels:
+        {{- include "oxy-app.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: serve
+        {{- with .Values.serveFleet.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.serveFleet.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- if ne $serveSa "" }}
+      serviceAccountName: {{ $serveSa | quote }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.serveFleet.terminationGracePeriodSeconds }}
+      {{- with .Values.serveFleet.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.serveFleet.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.serveFleet.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.serveFleet.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: serve
+          image: "{{ $serveImageRepo }}:{{ $serveImageTag }}"
+          imagePullPolicy: {{ $serveImagePullPolicy }}
+          {{- with .Values.serveFleet.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if and .Values.serveFleet.command (gt (len .Values.serveFleet.command) 0) }}
+          command:
+            {{- range .Values.serveFleet.command }}
+            - {{ . | quote }}
+            {{- end }}
+          {{- else }}
+          # Default: HTTP-only, no in-process workers, no workspace FS.
+          # Migrations are owned by the StatefulSet.
+          command:
+            - "sh"
+            - "-c"
+            - "exec oxy serve --no-workers"
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          env:
+            # Role classification — oxygen-internal PR #2505 routing guardrail.
+            # Stateless fleet replica with no workspace volume mounted.
+            # FS-touching routes (IDE pages, file CRUD, git, compile,
+            # onboarding) 421 with X-Oxy-Required-Role: ide instead of
+            # silently 500ing.
+            - name: OXY_ROLE
+              value: "serve"
+            # Shared AES-256 master key so workspace secrets encrypt/decrypt
+            # identically across the fleet (values.yaml encryptionKey). Without it
+            # each pod generates a divergent on-disk key → cross-pod
+            # "decryption failed". Same Secret on the StatefulSet, serve and worker.
+            {{- if .Values.encryptionKey.secretName }}
+            - name: OXY_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.encryptionKey.secretName | quote }}
+                  key: {{ .Values.encryptionKey.secretKey | default "OXY_ENCRYPTION_KEY" | quote }}
+            {{- end }}
+            # Stateless: never run in-process workers, never drive the global
+            # task queue. Compiles run ONLY on the StatefulSet (the node with
+            # the working copy). OXY_INPROC_GLOBAL_WORKER is deliberately
+            # stripped from the shared-env passthrough below so it can't leak
+            # in and turn a serve replica into a working-copy-less compile
+            # driver — --no-workers makes it inert, but we don't rely on that.
+            - name: OXY_DISABLE_INPROCESS_WORKERS
+              value: "1"
+            - name: OXY_SKIP_MIGRATIONS
+              value: "1"
+            # Ephemeral scratch (result cache, generated charts) on an emptyDir
+            # mount — there is no PVC here. Skipped from the shared-env
+            # passthrough because the StatefulSet's OXY_STATE_DIR points at the
+            # /workspace PVC, which this fleet doesn't mount.
+            - name: OXY_STATE_DIR
+              value: {{ .Values.serveFleet.stateDir | quote }}
+            # Compile-boundary S3 reads (semantic blobs + DuckDB mirror). Must
+            # match the bucket the StatefulSet compile writer uploads to.
+            {{- if .Values.compileBoundary.blobS3Bucket }}
+            - name: OXY_COMPILE_BLOB_S3_BUCKET
+              value: {{ .Values.compileBoundary.blobS3Bucket | quote }}
+            {{- end }}
+
+            # Database URL — the SAME shared Postgres as the StatefulSet, same
+            # precedence (compiled *_definitions rows live here; serving them is
+            # the entire purpose of the stateless fleet). Mirrors the injection
+            # in statefulset.yaml.
+            {{- if and .Values.env.OXY_DATABASE_URL (ne .Values.env.OXY_DATABASE_URL "") }}
+            - name: OXY_DATABASE_URL
+              value: {{ .Values.env.OXY_DATABASE_URL | quote }}
+            {{- else if and .Values.database.external.enabled (ne .Values.database.external.connectionString "") }}
+            - name: OXY_DATABASE_URL
+              value: {{ .Values.database.external.connectionString | quote }}
+            {{- else if .Values.database.external.enabled }}
+            - name: OXY_DATABASE_URL
+              value: {{ printf "postgresql://%s:%s@%s:%v/%s"
+                .Values.database.external.user
+                .Values.database.external.password
+                .Values.database.external.host
+                .Values.database.external.port
+                .Values.database.external.database | quote }}
+            {{- else if .Values.database.postgres.enabled }}
+            - name: OXY_DATABASE_URL
+              {{- $pgHost := "" }}
+              {{- if .Values.postgres.fullnameOverride }}
+                {{- $pgHost = printf "%s.%s.svc.cluster.local" .Values.postgres.fullnameOverride .Release.Namespace }}
+              {{- else if .Values.database.postgres.host }}
+                {{- $pgHost = .Values.database.postgres.host }}
+              {{- else }}
+                {{- $pgHost = printf "%s-postgres.%s.svc.cluster.local" .Release.Name .Release.Namespace }}
+              {{- end }}
+              value: {{ printf "postgresql://%s:%s@%s:%v/%s"
+                (default "postgres" .Values.postgres.userDatabase.user.value)
+                (default "postgres" .Values.postgres.userDatabase.password.value)
+                $pgHost
+                .Values.database.postgres.port
+                (default "postgres" .Values.postgres.userDatabase.name.value) | quote }}
+            {{- end }}
+
+            # Shared env passthrough (warehouse creds, DUCKLAKE_*, observability,
+            # Slack, magic-link, customer-apps bucket, …) — same source as the
+            # StatefulSet. Three keys are intentionally skipped:
+            #   OXY_STATE_DIR            → PVC path that doesn't exist here (set above)
+            #   OXY_DATABASE_URL         → injected with precedence above
+            #   OXY_INPROC_GLOBAL_WORKER → fleet must never drive the global queue
+            {{- range $key, $value := .Values.env }}
+            {{- if and (ne $key "OXY_STATE_DIR") (ne $key "OXY_DATABASE_URL") (ne $key "OXY_INPROC_GLOBAL_WORKER") }}
+            {{- if ne $value "" }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- end }}
+            {{- end }}
+
+            # Self-routing (#2526): forward IdeOnly routes (IDE pages, file
+            # CRUD, git, compile, onboarding, modeling) to the singleton IDE
+            # pod instead of 421-ing — required for inverse mode (catch-all →
+            # serve) to be safe. The main Service (oxy-app.fullname) selects
+            # component=ide when serveFleet is enabled, so this targets ONLY
+            # the StatefulSet, satisfying ide_proxy's loop guard (a serve-
+            # targeted upstream would ping-pong). Empty = legacy 421. Inert on
+            # images without PR #2526.
+            {{- if .Values.serveFleet.ideUpstream }}
+            - name: OXY_IDE_UPSTREAM
+              value: {{ tpl .Values.serveFleet.ideUpstream . | quote }}
+            {{- end }}
+
+            # Per-fleet overrides win over shared env (listed last).
+            {{- range $k, $v := .Values.serveFleet.env }}
+            - name: {{ $k | quote }}
+              value: {{ $v | quote }}
+            {{- end }}
+            {{- with .Values.serveFleet.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+
+          # Shared configMap + external secrets (LLM keys, GitHub, Airhouse) —
+          # same envFrom as the StatefulSet so agent runs, auth, and
+          # integrations work on the fleet. Plus any serveFleet-specific envFrom.
+          {{- if or .Values.configMap.enabled (gt (len .Values.externalSecrets.envSecretNames) 0) .Values.serveFleet.extraEnvFrom }}
+          envFrom:
+            {{- if .Values.configMap.enabled }}
+            - configMapRef:
+                name: {{ include "oxy-app.fullname" . }}-config
+            {{- end }}
+            {{- range .Values.externalSecrets.envSecretNames }}
+            - secretRef:
+                name: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.serveFleet.extraEnvFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- end }}
+          volumeMounts:
+            - name: oxy-serve-state
+              mountPath: {{ .Values.serveFleet.stateDir | quote }}
+          resources:
+            {{- toYaml .Values.serveFleet.resources | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.serveFleet.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.serveFleet.readinessProbe | nindent 12 }}
+          {{- /*
+          preStop drain. The serve fleet sits behind the LB (ALB target-type:
+          ip / NLB), so on rollout the endpoint is removed but the LB keeps
+          routing new requests until it finishes deregistering the target. This
+          sleep keeps the container serving during that window so in-flight and
+          just-arrived requests don't hit a closing listener (the 503 source
+          plain K8s readiness can't prevent). Mirrors the StatefulSet's
+          `.Values.lifecycle`; set the value to null to disable. */}}
+          {{- with .Values.serveFleet.lifecycle }}
+          lifecycle:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        # Ephemeral scratch backing OXY_STATE_DIR (result cache, charts).
+        # Per-pod, discarded on restart — nothing here is a source of truth.
+        - name: oxy-serve-state
+          emptyDir: {}
+{{- end }}

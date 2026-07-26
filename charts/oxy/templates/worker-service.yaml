@@ -1,0 +1,30 @@
+{{- if and .Values.worker.enabled .Values.worker.service.enabled }}
+{{- /*
+ClusterIP service fronting the worker fleet on the health port.
+Workers are driven by Postgres LISTEN/NOTIFY, not by HTTP traffic, so
+this Service exists only for in-cluster `/healthz` / `/readyz` probes
+and observability (e.g. Prometheus scrape targets).
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "oxy-app.fullname" . }}-worker
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "oxy-app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+  {{- with .Values.worker.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.worker.service.type }}
+  selector:
+    {{- include "oxy-app.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+  ports:
+    - name: health
+      port: {{ .Values.worker.service.port }}
+      targetPort: {{ .Values.worker.healthPort }}
+      protocol: TCP
+{{- end }}

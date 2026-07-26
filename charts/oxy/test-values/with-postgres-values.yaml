@@ -1,0 +1,43 @@
+# Integration test with PostgreSQL enabled
+nameOverride: "oxy-test-postgres"
+fullnameOverride: "oxy-test-postgres"
+
+app:
+  image: "ghcr.io/oxy-hq/oxygen"
+  # Match Chart.appVersion. The previous 0.4.0 pin pre-dates the
+  # chart's DB-URL handling refactor and caused silent startup
+  # failures.
+  imageTag: "0.5.49"
+  imagePullPolicy: "IfNotPresent"
+
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 80
+
+# Enable PostgreSQL dependency (groundhog2k postgres chart)
+database:
+  postgres:
+    enabled: true
+
+# Configure postgres subchart
+postgres:
+  # Set explicit service name to avoid conflicts with release name
+  fullnameOverride: "test-postgres-db"
+  userDatabase:
+    name:
+      value: "testdb"
+    user:
+      value: "testuser"
+    password:
+      value: "testpass"
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi

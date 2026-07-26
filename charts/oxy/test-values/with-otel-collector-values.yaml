@@ -1,0 +1,89 @@
+# Example: Enable OpenTelemetry Collector with shared ClickHouse configuration
+# Both oxy-app and otel-collector use the same ClickHouse instance
+
+# Shared ClickHouse configuration
+# Used by both oxy-app (via env vars) and otel-collector (for trace export)
+clickhouse:
+  enabled: true
+  # HTTP endpoint for oxy-app
+  url: "http://clickhouse:8123"
+  # TCP endpoint for otel-collector (optional - derived from url if not set)
+  # tcpEndpoint: "tcp://clickhouse:9000"
+  database: "otel"
+  username: "default"
+  # For development/testing only - use existingSecret for production
+  password: "default"
+  # Production: use existing Kubernetes secret
+  # existingSecret:
+  #   name: clickhouse-credentials
+  #   usernameKey: username
+  #   passwordKey: password
+
+# OpenTelemetry Collector sidecar
+otelCollector:
+  enabled: true
+  image: otel/opentelemetry-collector-contrib
+  imageTag: "0.95.0"
+  imagePullPolicy: IfNotPresent
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Receiver ports (app sends traces to localhost:4317)
+  ports:
+    otlpGrpc: 4317
+    otlpHttp: 4318
+    metrics: 8888
+
+  processors:
+    batch:
+      timeout: 10s
+      sendBatchSize: 100
+      sendBatchMaxSize: 1000
+    memoryLimiter:
+      checkInterval: 1s
+      limitMib: 512
+
+  # ClickHouse exporter settings (connection details inherited from shared clickhouse.*)
+  clickhouse:
+    enabled: true
+    # Override endpoint/database/username/password here if otel-collector
+    # needs different settings than the main app
+    # endpoint: ""
+    # database: ""
+    # username: ""
+    # password: ""
+    logsTableName: "otel_logs"
+    tracesTableName: "otel_traces"
+    metricsTableName: "otel_metrics"
+    asyncInsert: true
+    compress: "lz4"
+    createSchema: true
+    ttl: "72h"
+    timeout: "5s"
+    retry:
+      enabled: true
+      initialInterval: "5s"
+      maxInterval: "30s"
+      maxElapsedTime: "300s"
+
+  # Enable debug exporter for troubleshooting
+  debug:
+    enabled: false
+    verbosity: "detailed"
+
+  telemetry:
+    logs:
+      level: "info"
+
+# Configure the app to send traces to the otel-collector sidecar
+env:
+  OXY_STATE_DIR: /workspace/oxy_data
+  # OTLP endpoint (collector runs as sidecar on localhost)
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://localhost:4317"
+  OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"

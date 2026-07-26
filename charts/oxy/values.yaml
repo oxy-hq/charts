@@ -1,0 +1,974 @@
+# Default values for oxy-app
+# This is a YAML-formatted file.
+
+# Application configuration
+name: oxy-app
+
+# Keep resource names identical to the predecessor `oxy-app` chart so swapping
+# oxy-app -> oxy is a non-disruptive drop-in (no StatefulSet/PVC rename). The
+# fullname helper resolves to `<release>-oxy-app` via this override; the Helm
+# template helpers are also intentionally kept under the `oxy-app.*` namespace
+# so existing values files render unchanged. Unset it only for a fresh install
+# that is happy to be named after this chart (`oxy`).
+nameOverride: oxy-app
+
+app:
+  image: ghcr.io/oxy-hq/oxygen
+  imageTag: ""
+  port: 3000
+  imagePullPolicy: IfNotPresent
+  # Optional override for the container command. When empty, the chart will
+  # use the default shell wrapper that runs `oxy serve` (readonly if git disabled).
+  # Example: ["/app/bin/oxy", "serve"]
+  command: []
+  # Internal API port configuration (optional)
+  # The internal API serves the same routes with authentication bypassed (auto-authenticated as internal user)
+  # Leave internalHost empty to disable the internal API
+  internalPort: 3001
+  internalHost: ""  # Set to "0.0.0.0" to enable internal API on all interfaces
+
+# HTTP server (`oxy serve`) tunables.
+# Use this stanza to pair the StatefulSet HTTP fleet with a separate
+# worker fleet (see `worker.*`) — when disableInprocessWorkers is true the
+# HTTP server runs as HTTP-only (`--no-workers`) and standalone
+# `oxy worker` pods drain the durable task queue.
+appServer:
+  # When true, append `--no-workers` to the `oxy serve` command and set
+  # OXY_DISABLE_INPROCESS_WORKERS=1 so the HTTP server skips startup
+  # recovery and the in-process driver loop. Required when a standalone
+  # worker fleet is handling agentic execution. Default false so existing
+  # deployments are unaffected on upgrade.
+  disableInprocessWorkers: false
+
+  # Drive the GLOBAL task queue (incl. TaskSpec::Compile) in-process on the
+  # StatefulSet by setting OXY_INPROC_GLOBAL_WORKER=1.
+  #
+  # REQUIRED for the compile boundary: a compile can only run on a node that
+  # has the working copy AND drives the global queue — that's the StatefulSet
+  # (oxy-ide). With this off, Compile tasks enqueue but never drain, no
+  # workspace promotes, and a stateless `serveFleet` 503s every request.
+  #
+  # Only effective when in-process workers are running (i.e. NOT
+  # `disableInprocessWorkers`); under `--no-workers` the StatefulSet can't
+  # drive compiles, and the standalone `oxy worker` fleet can't either (no
+  # working copy — per-worker clone-on-demand is a later phase). So to use the
+  # compile boundary today, keep `disableInprocessWorkers: false` and set this
+  # `true`. Default false so existing deployments are unaffected on upgrade.
+  inprocGlobalWorker: false
+
+# Compile-boundary cross-cutting config. The runtime serves workspace
+# definitions from Postgres (always-on, no feature flags); these knobs tune the
+# optional S3 offload. See oxygen-internal `internal-docs/compile-boundary.md`.
+compileBoundary:
+  # S3 bucket for (a) semantic view/topic blob offload and (b) the local-file
+  # DuckDB → S3 mirror. Injected as OXY_COMPILE_BLOB_S3_BUCKET on the
+  # StatefulSet (the compile WRITER), the serve fleet and the worker (READERS)
+  # — writer and readers must agree on the same bucket. Empty = disabled:
+  # semantic bodies stay in Postgres JSONB (works, just larger) and local-file
+  # DuckDB warehouses are NOT servable by the stateless fleet. The pod IAM role
+  # needs s3:PutObject (writer) / s3:GetObject (readers) on this bucket.
+  blobS3Bucket: ""
+
+# Shared workspace-secret encryption key (REQUIRED for multi-instance).
+# Oxy encrypts workspace secrets with an AES-256 master key. When OXY_ENCRYPTION_KEY
+# is unset, EACH pod generates its OWN key at <state-dir>/encryption_key.txt — so a
+# secret encrypted on one pod CANNOT be decrypted on another. In a split fleet that
+# breaks the serve reveal endpoint AND worker-run secret resolution, both with
+# "decryption failed". Point this at a Secret holding ONE base64-encoded 32-byte key
+# shared by the StatefulSet, the serve fleet and the worker. Seed it from the
+# StatefulSet's CURRENT on-disk key so already-encrypted secrets keep decrypting:
+#   kubectl exec <ide-pod> -- cat <state-dir>/encryption_key.txt
+# Empty = not wired: single-pod / local-dev fall back to the per-pod on-disk key,
+# which is correct there (one pod encrypts AND decrypts). Long-term this moves to a
+# managed KMS / secret store. See internal-docs/multi-instance-fleet.md.
+#
+# Alternative (used by oxy-dev): if you already inject env from an external secret
+# store — e.g. External Secrets Operator syncing an SSM / Secrets-Manager blob into
+# `externalSecrets.envSecretNames` — just add OXY_ENCRYPTION_KEY to that blob and
+# leave secretName empty. Both reach every pod; pick ONE to avoid a duplicate env.
+encryptionKey:
+  # Name of an existing Secret holding the key. Empty disables the wiring.
+  secretName: ""
+  # Key within that Secret whose value is the base64-encoded 32-byte master key.
+  secretKey: OXY_ENCRYPTION_KEY
+
+# Database migrations.
+# When enabled, a pre-install/pre-upgrade Helm hook Job runs the FULL migrator
+# (`oxy migrate`) ONCE before any app pod rolls, and the StatefulSet boots with
+# OXY_SKIP_MIGRATIONS=1 (the serve fleet already does). So no pod re-runs — or,
+# pre-advisory-lock, races — the migrator on startup, and a failed migration
+# fails the hook and BLOCKS the upgrade rather than rolling pods against an
+# unmigrated schema. Disable for single-node / dev (the in-process migrator on
+# boot, advisory-lock-guarded, is fine there).
+migrations:
+  enabled: true
+  # Image defaults to the app image (app.image / app.imageTag / appVersion).
+  image:
+    repository: ""
+    tag: ""
+    pullPolicy: ""
+  serviceAccountName: ""
+  podSecurityContext: {}
+  # Retry the Job N times before it (and the upgrade) fail.
+  backoffLimit: 3
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+
+# Ingress configuration
+# Enable and configure Kubernetes Ingress for the application.
+ingress:
+  enabled: false
+  # ingressClassName allows selecting a specific IngressClass (empty = use default)
+  ingressClassName: ""
+  annotations: {}
+  # Default path and pathType for the first host entry
+  path: /
+  pathType: Prefix
+  # Primary hosts list. Each entry can contain a host and optional paths.
+  hosts:
+    - host: chart-example.local
+      paths: []
+  # TLS configuration. Example:
+  # tls:
+  #   - hosts:
+  #       - chart-example.local
+  #     secretName: chart-example-tls
+  tls: []
+
+# Resource configuration
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+
+# Environment variables
+env:
+  OXY_STATE_DIR: /workspace/oxy_data
+  # Optional explicit database URL. If set, this takes precedence over other DB settings.
+  OXY_DATABASE_URL: ""
+
+configMap:
+  enabled: false
+  # free-form map of key -> value to be included in the ConfigMap
+  data: {}
+
+# Service Account for IRSA
+serviceAccount:
+  create: true
+  name: ""  # If empty, will auto-generate using chart name
+  annotations: {}
+  # Example: eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/oxy-app-role
+
+# Persistent storage
+persistence:
+  enabled: true
+  storageClassName: ""
+  size: 20Gi
+  accessMode: ReadWriteOnce
+  # Mount path inside the container where the PVC will be mounted
+  mountPath: /workspace
+  # Folder under the mountPath to use as the OXY_STATE_DIR
+  folder: oxy_data
+  # Optional metadata for the PVC
+  annotations: {}
+  labels: {}
+  # volumeMode can be "Filesystem" or "Block"
+  volumeMode: Filesystem
+  # Optional selector for matching existing PVs
+  selector: {}
+
+# Node selection and tolerations
+nodeSelector:
+
+tolerations:
+
+# Node affinity configuration (optional). Provide a map compatible with
+# Kubernetes PodAffinity/PodAntiAffinity/NodeAffinity specs. An empty map
+# here prevents template engines from erroring when `.Values.affinity` is
+# referenced but not set by the user.
+affinity: {}
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3000
+  # Optionally override the service resource name. If empty, uses the chart fullname
+  name: ""
+  # Internal API port (exposed only if app.internalHost is set)
+  internalPort: 3001
+
+# Headless service for StatefulSet
+headlessService:
+  enabled: true
+
+# Probes configuration
+livenessProbe:
+  httpGet:
+    path: /
+    port: 3000
+  initialDelaySeconds: 10
+  periodSeconds: 30
+  timeoutSeconds: 10
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /
+    port: 3000
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+startupProbe:
+  httpGet:
+    path: /
+    port: 3000
+  failureThreshold: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+
+# Lifecycle hooks
+lifecycle:
+  preStop:
+    exec:
+      # For zero-downtime deployments, increase this sleep to match your load balancer's
+      # connection-draining timeout (typically 15–30s). This gives the LB time to
+      # deregister the pod before connections are terminated.
+      command: ["sleep", "5"]
+
+# Termination grace period (should be > preStop sleep + app shutdown time)
+terminationGracePeriodSeconds: 30
+
+# minReadySeconds: seconds a newly created Pod must be ready before the rolling update
+# is considered complete. Increase to 10–30s to confirm the new pod is truly healthy.
+# Note: with a single-replica StatefulSet + ReadWriteOnce PVC the new pod cannot start
+# until the old pod releases the PVC, so a brief gap is unavoidable. Minimize it by
+# increasing the preStop sleep and terminationGracePeriodSeconds above.
+minReadySeconds: 0
+
+# Security context
+securityContext:
+  fsGroup: 1000
+
+# External secrets configuration
+externalSecrets:
+  # When true, the chart will create ExternalSecret CRs as configured below.
+  # Default is false: the chart will NOT create ESO CRs and expects secrets to be
+  # created externally (recommended for production).
+  create: false
+
+  # Generic lists for mounting secrets into the pod. Leave empty by default.
+  # 1) Env secrets: list of existing Kubernetes Secret names whose keys will be
+  #    concatenated into the application .env file. Each Secret will be mounted
+  #    under /secrets/env/<secret-name> and all files will be concatenated.
+  envSecretNames: []
+
+  # Optional per-secret mapping allowing the user to provide a map of
+  # key -> remoteKey for a given secret name. Used only when creating ExternalSecrets.
+  # envSecretMappings:
+  #   my-env-secret:
+  #     DATABASE_URL: /path/to/database/url
+  envSecretMappings: {}
+
+  # 2) File secrets: list of objects that represent a secret and a specific key
+  #    inside that secret which should be copied into the pod as a file.
+  #    Example:
+  #    fileSecrets:
+  #      - name: my-datawarehouse-secret
+  #        key: bigquery-key.json
+  #        dest: bigquery-key.json  # optional, defaults to key
+  fileSecrets: []
+
+  # External Secrets Operator configuration (used only if create: true)
+  storeRef:
+    name: ""
+    kind: ""
+
+# Single SSH key configuration (preferred for simple setups)
+# Use `sshKey.secretName` to point to an existing Secret in production,
+# or provide `sshKey.privateKey` (inline) for development/testing only.
+sshKey:
+  secretName: ""  # If empty, defaults to git.sshSecretName
+  privateKey: ""  # Inline private SSH key (DO NOT commit to VCS)
+  knownHosts: ""  # Optional known_hosts content (multiline)
+
+# Git init container configuration — performs a shallow clone on pod start
+git:
+  enabled: false
+  repository: ""
+  branch: main
+  # Directory name inside persistence.mountPath to clone into
+  cloneDir: "repo"
+  # Optional subdirectory within cloneDir to use as the working directory
+  workingDir: ""
+  image: alpine/git
+  imageTag: "latest"
+  imagePullPolicy: IfNotPresent
+  # Default secret name used when sshKey.secretName is not set
+  sshSecretName: oxy-git-ssh
+  # GitHub App credentials for HTTPS cloning
+  githubApp:
+    secretName: ""  # Optional: existing secret name containing GitHub App data
+    privateKey: ""  # PEM private key contents for GitHub App (DO NOT commit in production)
+    applicationId: ""  # GitHub App Application ID
+    installationId: ""  # Installation ID for GitHub App auth
+    privateKeyKey: "github_app_private_key"
+    applicationIdKey: "github_app_application_id"
+    installationIdKey: "github_app_installation_id"
+
+# HTTP authentication for git cloning (for HTTPS git repositories)
+httpAuth:
+  username: ""
+  # Inline password (for development/testing only - NOT RECOMMENDED for production)
+  password: ""
+  # Reference to an existing Kubernetes secret containing the password
+  secretName: ""
+  passwordKey: "password"
+
+database:
+  # Enable or disable the postgres subchart
+  postgres:
+    enabled: false
+    # Host for the postgres service created by the subchart
+    # Format: servicename.namespace.svc.cluster.local
+    # Common patterns:
+    # - {release-name}-postgres (most common for groundhog2k chart)
+    # - {subchart-name} (if using alias)
+    # Leave empty to auto-generate as: {release-name}-postgres.{namespace}.svc.cluster.local
+    host: ""
+    port: 5432
+    # Note: Connection details are inferred from the postgres.* configuration below
+    # No need to duplicate userDatabase configuration here
+
+  # Enable or disable the clickhouse subchart
+  clickhouse:
+    enabled: false
+    # Host for the ClickHouse service created by the subchart
+    # Leave empty to auto-generate as: {release-name}-clickhouse.{namespace}.svc.cluster.local
+    host: ""
+    # HTTP port (used by oxy-app for queries)
+    httpPort: 8123
+    # TCP/Native port (used by otel-collector)
+    tcpPort: 9000
+
+  # External DB settings (optional)
+  external:
+    enabled: false
+    # If enabled, the external DB may rely on secrets managed by the user.
+    # Use `externalSecrets.envSecretNames` and `externalSecrets.fileSecrets` to
+    # declare and mount any required secrets into the pod.
+    # Optional connection details for an external database. Leave empty to
+    # let callers supply a full connection string via `connectionString` or
+    # rely on mounted secrets.
+    connectionString: ""
+    user: ""
+    password: ""
+    host: ""
+    port: 5432
+    database: ""
+
+# Configuration for the postgres subchart (groundhog2k/postgres)
+# When database.postgres.enabled is true, these values configure the postgres subchart
+# The fullnameOverride controls the service name created by the subchart
+# Example: if fullnameOverride is "my-postgres", the service will be "my-postgres"
+# If not set, the service name follows Helm's pattern: {release-name}-postgres
+postgres:
+  # Override the full name of the postgres subchart resources
+  # This determines the service name that will be created
+  # Leave empty to use default: {release-name}-postgres
+  fullnameOverride: ""
+  settings:
+    superuserPassword:
+      value: postgres
+  userDatabase:
+    name:
+      value: postgres
+    user:
+      value: postgres
+    password:
+      value: postgres
+  storage:
+    requestedSize: 8Gi
+    className: ""
+
+# Configuration for the clickhouse subchart (Bitnami)
+# When database.clickhouse.enabled is true, these values configure the subchart
+# See: https://artifacthub.io/packages/helm/bitnami/clickhouse
+clickhouseSubchart:
+  # Override the full name of the clickhouse subchart resources
+  # This determines the service name that will be created
+  # Leave empty to use default: {release-name}-clickhouse
+  fullnameOverride: ""
+  # Image configuration - use legacy Bitnami images (non-paid)
+  image:
+    repository: bitnamilegacy/clickhouse
+  # Authentication configuration
+  auth:
+    username: "default"
+    password: "clickhouse"
+    # Use existing secret for credentials (recommended for production)
+    existingSecret: ""
+    existingSecretPasswordKey: "password"
+  # ClickHouse Keeper (required for single-node setup, alternative to ZooKeeper)
+  keeper:
+    enabled: true
+    image:
+      repository: bitnamilegacy/clickhouse-keeper
+  # ZooKeeper (alternative to Keeper, disabled by default)
+  zookeeper:
+    enabled: false
+    image:
+      repository: bitnamilegacy/zookeeper
+  # Shard and replica configuration
+  shards: 1
+  replicaCount: 1
+  # Resource configuration
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+  # Persistence configuration
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: ""
+
+# ClickHouse configuration (shared between oxy-app and otel-collector)
+# This configures the ClickHouse connection used by the main application
+# and optionally by the OpenTelemetry Collector for trace/metrics export
+clickhouse:
+  enabled: false
+  # HTTP endpoint for oxy-app (e.g., http://clickhouse:8123)
+  url: ""
+  # TCP endpoint for otel-collector (e.g., tcp://clickhouse:9000)
+  # If empty, derived from url by replacing http->tcp and port 8123->9000
+  tcpEndpoint: ""
+  database: "otel"
+  username: "default"
+  # Password can be provided inline (dev only) or via existingSecret
+  password: ""
+  # Source only the password from an existing Kubernetes secret. Takes precedence
+  # over existingSecret below. Leave empty to fall back to existingSecret or inline password.
+  passwordExistingSecret: ""
+  passwordSecretKey: "password"
+  # Use existing secret for credentials (recommended for production)
+  # The secret should contain keys for username and password
+  existingSecret:
+    name: ""
+    usernameKey: "username"
+    passwordKey: "password"
+
+# Allow users to supply arbitrary initContainers and sidecar containers.
+# Each entry should be a Kubernetes container spec. Examples below show
+# how to mount a secret and run a simple command. These are merged into
+# the Pod spec as-is; the user is responsible for valid container specs.
+extraInitContainers: []
+
+# Extra sidecar containers to run alongside the main application container.
+# Example usage:
+# extraSidecars:
+#   - name: my-sidecar
+#     image: busybox:1.36
+#     imagePullPolicy: IfNotPresent
+#     command: ["sh", "-c", "while true; do echo sidecar; sleep 60; done"]
+#     volumeMounts:
+#       - name: workspace
+#         mountPath: /workspace
+extraSidecars: []
+extraVolumes: []
+extraVolumeMounts: []
+
+# OpenTelemetry Collector sidecar configuration
+# Collects traces/metrics and exports to ClickHouse or other backends
+otelCollector:
+  enabled: false
+  image: otel/opentelemetry-collector-contrib
+  imageTag: "latest"
+  imagePullPolicy: IfNotPresent
+
+  # Resource limits for the collector
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Receiver ports
+  ports:
+    otlpGrpc: 4317
+    otlpHttp: 4318
+    metrics: 8888
+
+  # Processor configuration
+  processors:
+    batch:
+      timeout: 10s
+      sendBatchSize: 100
+      sendBatchMaxSize: 1000
+    memoryLimiter:
+      checkInterval: 1s
+      limitMib: 512
+
+  # ClickHouse exporter configuration
+  # By default, uses the shared clickhouse.* config above
+  # Set overrides here for otel-collector specific settings
+  clickhouse:
+    enabled: true
+    # Override endpoint (if empty, uses shared clickhouse.tcpEndpoint or derived from clickhouse.url)
+    endpoint: ""
+    # Override database (if empty, uses shared clickhouse.database)
+    database: ""
+    # Override credentials (if empty, uses shared clickhouse.username/password)
+    username: ""
+    password: ""
+    # Table configuration
+    logsTableName: "otel_logs"
+    tracesTableName: "otel_traces"
+    metricsTableName: "otel_metrics"
+    # Performance settings
+    asyncInsert: true
+    compress: "lz4"
+    createSchema: true
+    # Data retention (TTL)
+    ttl: "72h"
+    # Timeout and retry settings
+    timeout: "5s"
+    retry:
+      enabled: true
+      initialInterval: "5s"
+      maxInterval: "30s"
+      maxElapsedTime: "300s"
+
+  # Debug exporter (useful for troubleshooting)
+  debug:
+    enabled: false
+    verbosity: "detailed"
+
+  # Service telemetry (collector's own logs)
+  telemetry:
+    logs:
+      level: "info"
+
+# PodDisruptionBudget configuration
+pdb:
+  enabled: false
+  # Either set minAvailable or maxUnavailable. When both are set, minAvailable takes precedence.
+  # Examples: 1, "50%"
+  minAvailable: ""
+  # Examples: 1, "25%". Leave empty to not set.
+  maxUnavailable: ""
+  # Optional selector labels to narrow the PDB selector. Merges with chart selectorLabels when provided.
+  selector: {}
+
+# ---------------------------------------------------------------------------
+# Standalone worker fleet (`oxy worker`)
+# ---------------------------------------------------------------------------
+# Opt-in deployment of the standalone `oxy worker` process introduced in
+# oxygen-internal#2409 (`feat/worker-fleet-separation`). When
+# `worker.enabled: false` (default) NO worker resources are rendered, so
+# existing deployments upgrade with zero impact.
+#
+# Topology when enabled:
+#   - HTTP fleet (StatefulSet): run with `appServer.disableInprocessWorkers: true`
+#     so the HTTP server skips in-process workers and is HTTP-only.
+#   - Worker fleet (Deployment, this stanza): N replicas drain the
+#     `agentic_task_queue` table via `SELECT ... FOR UPDATE SKIP LOCKED`.
+#   - Both point at the SAME Postgres (`OXY_DATABASE_URL`).
+#
+# Operational requirements live in oxygen-internal `internal-docs/worker-fleet.md`.
+
+# ---------------------------------------------------------------------------
+# Stateless `oxy-serve` fleet (HA split)
+# ---------------------------------------------------------------------------
+# Opt-in stateless HTTP Deployment that serves the compile-boundary read
+# paths (customer-apps, external API, runtime serving) without touching
+# the workspace filesystem. The existing StatefulSet stays as the
+# singleton `oxy-ide` that owns working copies + file CRUD + git ops +
+# the IDE Compile button. The two fleets share the same Postgres.
+#
+# Topology when enabled:
+#   - oxy-ide (StatefulSet, replicas=1): IDE / files / git / compile
+#   - oxy-serve (Deployment, this stanza, replicas=N): everything that
+#     only needs Postgres — customer-apps, external API, chat, admin, and
+#     the runtime read paths (apps, procedures, agents, semantic). The
+#     compile boundary is always-on (no per-surface flags).
+#   - oxy-worker (Deployment, see `worker` stanza): TaskSpec consumers.
+#
+# Set `serveFleet.enabled: false` (default) to render no oxy-serve
+# resources and preserve existing single-StatefulSet behaviour.
+#
+# Ingress routing:
+#   - Legacy (additive) mode: `ideRoutes` empty → catch-all `/` stays on
+#     the StatefulSet and `serveFleet.ingressPaths` peel off to oxy-serve.
+#     Used during the initial HA-split rollout; safest, smallest blast
+#     radius, but blocked from reaching the workspace-scoped tree
+#     because `/api/{workspace_id}/...` can't be peeled by prefix match.
+#   - Inverse mode: `ideRoutes` non-empty → catch-all `/` flips to
+#     oxy-serve, and only the IdeOnly patterns in `ideRoutes` peel off
+#     to the StatefulSet. This is the path to reach the original goal of
+#     "only filesystem-touching surfaces live on oxy-ide". Patterns use
+#     `pathType: ImplementationSpecific` so mid-segment wildcards like
+#     `/api/*/files` work natively on AWS ALB. See `ideRoutes` below.
+# The app-layer `OXY_ROLE` guardrail (returns 421 + `X-Oxy-Required-Role`
+# when a request lands on the wrong fleet) is the actual safety net;
+# ingress routing is an optimization on top.
+#
+# ── REQUIRED config for the compile boundary ───────────────────────────
+# The stateless fleet can ONLY serve a workspace that has been compiled (it
+# has no working copy to fall back to). So compiles MUST drain — set
+# `appServer.inprocGlobalWorker: true` (keep `disableInprocessWorkers: false`)
+# so the StatefulSet drives them. The `oxy worker` fleet does NOT compile (no
+# working copy; per-worker clone-on-demand is a later phase). For S3 offload +
+# DuckDB-on-fleet, set `compileBoundary.blobS3Bucket`. After deploy, compile
+# existing workspaces once via the admin "Compile all uncompiled" backfill.
+# ── IdeOnly route override (inverse routing) ─────────────────────────────
+# When `serveFleet.enabled: true` AND this list is non-empty, the
+# Ingress flips: catch-all `/` → oxy-serve, and ONLY the patterns below
+# peel off to the singleton StatefulSet (oxy-ide). The default list
+# mirrors the `IdeOnly` entries in `crates/app/src/server/role_manifest.rs`
+# — surfaces that touch the workspace filesystem or `.git`. Operators
+# normally do NOT need to set this from the workload values file; bump
+# the chart `appVersion` when the role manifest changes upstream.
+#
+# Each entry: `{path, pathType?}`. `pathType` defaults to
+# `ImplementationSpecific` so mid-segment wildcards work on AWS ALB;
+# override with `Prefix` for left-anchored paths if you prefer.
+#
+# Set `ideRoutes: []` from the workload values to fall back to legacy
+# additive routing (catch-all → StatefulSet; `serveFleet.ingressPaths`
+# peeled to serve fleet).
+#
+# Caveats — both benign in practice because the app-layer `OXY_ROLE`
+# guardrail catches misroutes with a 421:
+#   - ALB wildcards are greedy across slashes, so `/api/?/files` (with
+#     the asterisk pattern) also matches `/api/a/b/files`. No such
+#     paths exist today.
+#   - A handful of GETs under an IdeOnly subtree (e.g.
+#     `GET /api/{ws}/compile/status`) are FleetOk in the manifest but
+#     land on `ide` here. Harmless — `ide` accepts FleetOk.
+ideRoutes:
+  # Pages — full IDE SPA.
+  - path: /ide
+  - path: /ide/*
+  # Workspace-scoped file tree + per-file CRUD.
+  - path: /api/*/files
+  - path: /api/*/files/*
+  # Compile dispatcher (POST). The status GET is FleetOk in the
+  # manifest but lands on ide here; harmless.
+  - path: /api/*/compile
+  - path: /api/*/compile/*
+  # Working-copy git operations. These are mounted FLAT in the router
+  # (no `/git/` segment), so each must be listed explicitly — must stay
+  # in lock-step with IDE_ONLY_PATTERNS in
+  # crates/app/src/server/role_manifest.rs (build_git_routes). A
+  # `/api/*/git/*` wildcard would match NONE of them.
+  - path: /api/*/branches
+  - path: /api/*/branches/*
+  - path: /api/*/switch-branch
+  - path: /api/*/pull-changes
+  - path: /api/*/fetch
+  - path: /api/*/push-changes
+  - path: /api/*/force-push
+  - path: /api/*/discard-all
+  - path: /api/*/abort-rebase
+  - path: /api/*/continue-rebase
+  - path: /api/*/resolve-conflict-file
+  - path: /api/*/unresolve-conflict-file
+  - path: /api/*/resolve-conflict-with-content
+  - path: /api/*/reset-to-commit
+  - path: /api/*/recent-commits
+  - path: /api/*/revision-info
+  # Data repositories — git checkouts under modeling/ (build_data_repo_routes).
+  - path: /api/*/repositories
+  - path: /api/*/repositories/*
+  # Workspace onboarding subtree (clones + scaffolds), incl. the flat
+  # onboarding-readiness route (reads config.yml from the working copy).
+  - path: /api/*/onboarding
+  - path: /api/*/onboarding/*
+  - path: /api/*/onboarding-readiness
+  # Modeling / Airform dbt projects live on disk.
+  - path: /api/*/modeling/*
+  # Org-scoped workspace creation (clones the repo into a new workspace).
+  - path: /api/orgs/*/onboarding/demo
+  - path: /api/orgs/*/onboarding/new
+  - path: /api/orgs/*/onboarding/github
+  # Legacy workflow / agentic-task LIVE SSE. These stream via a process-local
+  # BROADCASTER (crates/app/src/server/api/{run,task,world_model}.rs), so the
+  # producing run lives on a DIFFERENT process (the worker, or the ide pod) —
+  # a worker-less serve replica's broadcaster is empty and the stream
+  # truncates silently. Pin them to the ide singleton even though they are
+  # FleetOk in the role manifest. NB: the MODERN agentic runs under
+  # /api/*/analytics, /api/*/agentic-workflows, /api/*/agentic-airway stream
+  # via the cross-process Postgres task router (LISTEN/NOTIFY) and ARE
+  # fleet-safe — deliberately NOT listed here.
+  - path: /api/*/events
+  - path: /api/*/events/*
+  - path: /api/*/world-model/events
+
+serveFleet:
+  enabled: false
+  # Number of stateless pods. HPA-friendly — these have no PVC, no in-
+  # memory state to drain on rollout.
+  replicaCount: 2
+  # Image: inherits from .Values.app.image / .Values.app.imageTag when
+  # left empty. Override only when you intentionally want the serve
+  # fleet pinned to a different tag (e.g. canary).
+  image:
+    repository: ""
+    tag: ""
+    pullPolicy: ""
+  # Override the container command. When empty, the chart uses
+  #   exec oxy serve --no-workers
+  command: []
+  # Service surface. ClusterIP only — exposure happens via the chart's
+  # main Ingress when `ingress.enabled` is on.
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 3000
+    annotations: {}
+  # Ingress path prefixes that should route to oxy-serve. Anything NOT
+  # in this list keeps going to the singleton StatefulSet (oxy-ide).
+  # Add the runtime read surfaces (e.g. /apps, agent/procedure runs) here
+  # once you've compiled + backfilled and verified the fleet serves them.
+  ingressPaths:
+    - /admin
+    - /threads
+    - /workspaces
+    - /external/api
+    - /auth
+    - /api/auth
+    - /webhooks
+  # IDE upstream for serve-fleet self-routing (#2526). When set, a serve
+  # replica reverse-proxies IdeOnly routes (IDE pages, file CRUD, git, compile,
+  # onboarding, modeling) to this upstream instead of returning 421 — which is
+  # what lets inverse mode (catch-all → serve) front the whole surface safely.
+  # MUST resolve to ide-ONLY pods or the in-binary loop guard rejects it; the
+  # main Service (oxy-app.fullname) already selects component=ide when
+  # serveFleet is enabled, so point it there. Rendered through `tpl`, e.g.
+  #   ideUpstream: "http://{{ include \"oxy-app.fullname\" . }}:{{ .Values.service.port }}"
+  # Empty = legacy 421 (self-routing off). Requires an image with PR #2526
+  # (OXY_IDE_UPSTREAM is inert on older images, so IdeOnly would hard-421).
+  ideUpstream: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1
+      memory: 1Gi
+  # Ephemeral state dir for the stateless fleet (no PVC). Backed by an
+  # emptyDir mount; holds the parquet result cache + generated charts —
+  # per-pod scratch that's safe to lose on restart.
+  stateDir: /var/lib/oxy
+  # Container env. The chart injects OXY_DATABASE_URL + the shared `.Values.env`
+  # (minus OXY_STATE_DIR / OXY_DATABASE_URL / OXY_INPROC_GLOBAL_WORKER) + the
+  # externalSecrets envFrom automatically — same Postgres + secrets as the
+  # StatefulSet. Use this map only for serve-fleet-specific overrides.
+  env: {}
+  extraEnv: []
+  extraEnvFrom: []
+  # Probes hit the REAL endpoints, which live under the /api nest
+  # (public.rs → nested at /api). /api/live is an unconditional 200 (process
+  # up — won't crashloop on a transient DB blip); /api/ready returns 503 unless
+  # Postgres is reachable, so a replica that can't read compiled definitions is
+  # pulled from the Service endpoints instead of serving 500s. NB: top-level
+  # /health and /ready do NOT exist — they fall through to the SPA and would
+  # mask an unhealthy pod with a 200.
+  livenessProbe:
+    httpGet:
+      path: /api/live
+      port: 3000
+    initialDelaySeconds: 15
+    periodSeconds: 10
+  readinessProbe:
+    httpGet:
+      path: /api/ready
+      port: 3000
+    initialDelaySeconds: 5
+    periodSeconds: 5
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector: {}
+  tolerations: []
+  # By default, prefer to spread oxy-serve pods across nodes so a node
+  # failure can only take one replica at a time.
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: serve
+  serviceAccountName: ""
+  securityContext: {}
+  containerSecurityContext: {}
+  terminationGracePeriodSeconds: 30
+  # preStop hook for the serve container. Unlike the worker (not behind an LB,
+  # so it defaults to {}), the serve fleet is fronted by the LB, so it defaults
+  # to a drain sleep like the main StatefulSet's `.Values.lifecycle`. On rollout
+  # the LB keeps sending new requests until it finishes deregistering the target;
+  # this sleep keeps the pod serving during that window so requests don't hit a
+  # closing listener. Raise to match your LB's deregistration/connection-draining
+  # delay (ALB target-type: ip is typically 15–30s); keep it < the grace period
+  # above. Set to `null` to disable (an empty `{}` override merges over this
+  # default and won't clear it).
+  lifecycle:
+    preStop:
+      exec:
+        command: ["sleep", "5"]
+  # Strategy: rolling update with at-least-one alive. These are stateless
+  # so we can be aggressive about maxSurge to speed cutover.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: "50%"
+
+worker:
+  enabled: false
+  # Number of worker pods. Scale independently of the HTTP fleet.
+  replicaCount: 2
+  # Image: inherits from .Values.app.image / .Values.app.imageTag when left empty.
+  # Override here only when you intentionally want the worker fleet to pin
+  # to a different tag (e.g. canary rollouts).
+  image:
+    repository: ""
+    tag: ""
+    pullPolicy: ""
+  # Override the container command. When empty, the chart uses
+  #   exec oxy worker --health-port <healthPort> [--skip-migrations]
+  command: []
+  # Worker process tunables. These mirror the `oxy worker` env vars / flags
+  # documented in oxygen-internal `internal-docs/worker-fleet.md`.
+  env:
+    # Concurrent task cap per worker process.
+    OXY_WORKER_MAX_INFLIGHT: "32"
+    # Cadence of the recovery loop (reaper pre-pass) in seconds.
+    OXY_WORKER_RECOVERY_INTERVAL_SECS: "30"
+  # Port the worker binds `/healthz` and `/readyz` on. Used by both probes
+  # and the worker `ClusterIP` Service. Stays inside the cluster — no
+  # ingress / public exposure.
+  healthPort: 8081
+  # When true, pass `--skip-migrations` to `oxy worker`. The HTTP StatefulSet
+  # is the canonical migrator on rollout; workers must skip so they don't
+  # race the HTTP fleet on the same schema changes. Leave true unless you
+  # know you've moved migrations out to a dedicated Job.
+  skipMigrations: true
+  # Pod-level extras
+  serviceAccountName: ""  # If empty, falls back to the main chart serviceAccount
+  podAnnotations: {}
+  podLabels: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  # Extra env entries appended to the worker container after the defaults
+  # above. Format: list of EnvVar objects (name/value or name/valueFrom).
+  extraEnv: []
+  # Extra envFrom entries (configMapRef / secretRef) for the worker container.
+  extraEnvFrom: []
+  # Resources. Defaults sized for a single worker process with the default
+  # max-inflight of 32. Bump CPU / memory before bumping replicaCount when
+  # individual workers are pegged.
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  # Liveness probe: `/healthz` — 200 once the process is up.
+  livenessProbe:
+    httpGet:
+      path: /healthz
+      port: 8081
+    initialDelaySeconds: 5
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  # Readiness probe: `/readyz` — 200 only when router_connected + recovery_alive.
+  # Flips to 503 during graceful shutdown so k8s yanks the pod out of the
+  # Service before in-flight tasks drain.
+  readinessProbe:
+    httpGet:
+      path: /readyz
+      port: 8081
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 5
+    failureThreshold: 3
+  # Graceful shutdown takes up to 35s (30s recovery drain + 5s health server drain).
+  # Bump if you raise OXY_WORKER_RECOVERY_INTERVAL_SECS materially.
+  terminationGracePeriodSeconds: 40
+  # Optional preStop hook. Empty by default — the worker's own SIGTERM
+  # handler flips /readyz to 503 and drives the drain.
+  lifecycle: {}
+  # securityContext block applied to the worker pod.
+  securityContext:
+    fsGroup: 1000
+  # Worker container securityContext (e.g. runAsNonRoot, readOnlyRootFilesystem).
+  containerSecurityContext: {}
+  # ClusterIP service that fronts the worker pods on `healthPort`. Useful
+  # for in-cluster scrapers / debugging; not required for queue drainage
+  # (workers are driven by Postgres LISTEN/NOTIFY, not HTTP).
+  service:
+    enabled: true
+    type: ClusterIP
+    port: 8081
+    annotations: {}
+  # PodDisruptionBudget. Bounds voluntary disruption so a fleet of 2+
+  # workers doesn't drain to zero during a node rollout.
+  pdb:
+    enabled: true
+    # minAvailable wins over maxUnavailable when both are set.
+    minAvailable: 1
+    maxUnavailable: ""
+  # HorizontalPodAutoscaler. OFF by default because it requires a custom
+  # Prometheus + prometheus-postgres-exporter metric pipeline reading queue
+  # depth from `agentic_task_queue WHERE queue_status='queued'`. When you
+  # have that wired, flip `enabled: true` and tune
+  # `queueDepthThreshold` — see WORKER_FLEET.md for the exporter query.
+  #
+  # The chart renders a v2 HPA with an `External` metric named
+  # `oxy_agentic_task_queue_depth` (override via `metricName`). Adapt to
+  # your cluster's metrics adapter as needed.
+  hpa:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 10
+    metricName: oxy_agentic_task_queue_depth
+    queueDepthThreshold: 100
+    # Optional fallback Resource metric (CPU) — paired with the external
+    # metric so the HPA still has a signal when the queue exporter is down.
+    cpuUtilization: 0  # 0 = disabled. Set to e.g. 70 to enable.
+    # Optional scale behavior block. Leave empty for the controller defaults.
+    behavior: {}
+  # Extra sidecar containers for the worker pod.
+  extraSidecars: []
+  # Extra volumes / mounts.
+  extraVolumes: []
+  extraVolumeMounts: []
+  # Inherit external secret env mounts from the top-level
+  # externalSecrets.envSecretNames so workers see the same DB / LLM keys
+  # as the HTTP fleet. Disable if your worker pods use a different secret
+  # surface.
+  inheritExternalSecrets: true
