@@ -1,59 +1,20 @@
 {{- if .Values.otelCollector.enabled }}
 {{- /*
-  Resolve ClickHouse settings with fallback to shared config:
-  - otelCollector.clickhouse.* overrides take precedence
-  - Falls back to shared clickhouse.* config
-  - For embedded subchart (database.clickhouse.enabled), auto-derive endpoints
-  - For TCP endpoint: can derive from HTTP URL if tcpEndpoint not set
+  ClickHouse is an EXTERNAL service for this chart — no bundled subchart.
+  All connection settings are self-contained under otelCollector.clickhouse.*:
+  - tcpEndpoint (preferred) / endpoint: the tcp:// endpoint the exporter dials
+  - database / username / password: static credentials
+  - passwordExistingSecret / passwordSecretKey: source the password from a
+    Secret via the OXY_CLICKHOUSE_PASSWORD env injected on the sidecar
 */ -}}
-{{- $chEndpoint := .Values.otelCollector.clickhouse.endpoint -}}
-{{- $chDatabase := "" -}}
-{{- $chUsername := "" -}}
-{{- $chPassword := "" -}}
-{{- $useSecret := false -}}
+{{- $ch := .Values.otelCollector.clickhouse -}}
+{{- $chEndpoint := default $ch.endpoint $ch.tcpEndpoint -}}
+{{- $chDatabase := default "otel" $ch.database -}}
+{{- $chUsername := default "default" $ch.username -}}
+{{- $chPassword := default "" $ch.password -}}
 {{- $useOxyEnv := false -}}
-
-{{- if not $chEndpoint -}}
-  {{- if .Values.database.clickhouse.enabled -}}
-    {{- /* Using embedded ClickHouse subchart - derive TCP endpoint */ -}}
-    {{- $chHost := "" -}}
-    {{- if .Values.clickhouseSubchart.fullnameOverride -}}
-      {{- $chHost = printf "%s.%s.svc.cluster.local" .Values.clickhouseSubchart.fullnameOverride $.Release.Namespace -}}
-    {{- else if .Values.database.clickhouse.host -}}
-      {{- $chHost = .Values.database.clickhouse.host -}}
-    {{- else -}}
-      {{- $chHost = printf "%s-clickhouse.%s.svc.cluster.local" $.Release.Name $.Release.Namespace -}}
-    {{- end -}}
-    {{- $chTcpPort := .Values.database.clickhouse.tcpPort | default 9000 -}}
-    {{- $chEndpoint = printf "tcp://%s:%v" $chHost $chTcpPort -}}
-  {{- else if .Values.clickhouse.tcpEndpoint -}}
-    {{- $chEndpoint = .Values.clickhouse.tcpEndpoint -}}
-  {{- else if .Values.clickhouse.url -}}
-    {{- /* Derive TCP endpoint from HTTP URL: http://host:8123 -> tcp://host:9000 */ -}}
-    {{- $chEndpoint = .Values.clickhouse.url | replace "http://" "tcp://" | replace "https://" "tcp://" | replace ":8123" ":9000" -}}
-  {{- end -}}
-{{- end -}}
-
-{{- /* Resolve credentials based on subchart or external config */ -}}
-{{- if .Values.database.clickhouse.enabled -}}
-  {{- /* Using embedded subchart */ -}}
-  {{- $chDatabase = default "default" (default .Values.clickhouse.database .Values.otelCollector.clickhouse.database) -}}
-  {{- $chUsername = default "default" (default .Values.clickhouseSubchart.auth.username .Values.otelCollector.clickhouse.username) -}}
-  {{- if .Values.clickhouseSubchart.auth.existingSecret -}}
-    {{- $useSecret = true -}}
-  {{- else -}}
-    {{- $chPassword = default "" (default .Values.clickhouseSubchart.auth.password .Values.otelCollector.clickhouse.password) -}}
-  {{- end -}}
-{{- else -}}
-  {{- /* Using external ClickHouse */ -}}
-  {{- $chDatabase = default .Values.clickhouse.database .Values.otelCollector.clickhouse.database -}}
-  {{- $chUsername = default .Values.clickhouse.username .Values.otelCollector.clickhouse.username -}}
-  {{- $chPassword = default .Values.clickhouse.password .Values.otelCollector.clickhouse.password -}}
-  {{- if .Values.clickhouse.passwordExistingSecret -}}
-    {{- $useOxyEnv = true -}}
-  {{- else if and .Values.clickhouse.existingSecret .Values.clickhouse.existingSecret.name -}}
-    {{- $useSecret = true -}}
-  {{- end -}}
+{{- if $ch.passwordExistingSecret -}}
+  {{- $useOxyEnv = true -}}
 {{- end -}}
 apiVersion: v1
 kind: ConfigMap
@@ -93,8 +54,6 @@ data:
         username: {{ $chUsername }}
         {{- if $useOxyEnv }}
         password: ${env:OXY_CLICKHOUSE_PASSWORD}
-        {{- else if $useSecret }}
-        password: ${CLICKHOUSE_PASSWORD}
         {{- else }}
         password: {{ $chPassword | quote }}
         {{- end }}

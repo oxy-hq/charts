@@ -22,9 +22,11 @@ service:
   port: 80
   targetPort: 80  # nginx default port instead of 3000
 
-# Environment variables for testing
+# Environment variables for testing. This chart bundles no database — point
+# OXY_DATABASE_URL at an external Postgres.
 env:
   OXY_STATE_DIR: "/workspace/oxy_data"
+  OXY_DATABASE_URL: "postgresql://oxy:oxy@external-postgres:5432/oxy"
 
 # Resource configuration similar to production but smaller for CI
 resources:
@@ -47,10 +49,6 @@ nodeSelector: {}
 
 tolerations: []
 
-# Git synchronization disabled for testing
-git:
-  enabled: false
-
 # External secrets disabled for basic testing
 externalSecrets:
   envSecretNames: []
@@ -68,11 +66,6 @@ ingress:
         - path: "/"
           pathType: "Prefix"
   tls: []
-
-# Disable external database dependency for this test
-database:
-  postgres:
-    enabled: true
 
 # Enable PodDisruptionBudget in this production-like test values
 pdb:

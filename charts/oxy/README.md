@@ -11,6 +11,20 @@ airhouse chart) and reached purely over the network via connection env vars.
 This is the standalone successor to the `oxy-app` chart with the bundled
 `postgres` / `clickhouse` subcharts removed.
 
+This is a **cloud-only** chart: there is no local / git-sync mode (the app
+serves workspace definitions from Postgres, not a cloned working tree) and no
+in-process-worker toggle — the `ide` always runs its in-process workers.
+
+## Topology
+
+The default is the **prod-style HA topology**: one `ide` StatefulSet (single
+writer, owns the `/workspace` RWO volume and drives the compile boundary) + N
+stateless `serve` replicas (`oxy serve --no-workers`, serving the compiled read
+paths) + a `worker` fleet draining the durable task queue. All fleets share the
+same external Postgres. Set `serveFleet.enabled: false` and
+`worker.enabled: false` for a single-instance install where the `ide`
+StatefulSet handles every request and drains the queue in-process.
+
 ## Relationship to `oxy-app` (migration)
 
 This chart renders **byte-identical Kubernetes objects** to `oxy-app` for the
@@ -64,23 +78,25 @@ database's.
 
 ## What was removed vs. what remains
 
-The app-DB **bundling machinery is gone**: the `wait-for-postgres` /
-`wait-for-clickhouse` init containers, the postgres/external `OXY_DATABASE_URL`
-construction branches (all four workloads now emit only the `env.OXY_DATABASE_URL`
-pass-through), the in-container ClickHouse env block, and the top-level
-`postgres:` subchart values + `serveFleet.ingressPaths`. All render-neutral for
-external-DB envs (proven byte-identical to `oxy-app`, modulo removed comments).
+Removed as part of the cloud-only refactor (all render-neutral for external-DB
+envs — proven byte-identical to `oxy-app`, modulo removed comments):
 
-**Remaining follow-ups:**
+- **Local / git-sync mode** — the `git-clone` init container, the `--local`
+  flag, `workingDir`, the HTTP-auth / SSH / GitHub-App clone-credential secrets,
+  the `startupProbe` (it was git-sync-era; readiness is the startup gate), and
+  the top-level `git:` / `httpAuth:` / `sshKey:` values.
+- **The `--no-workers` / `appServer.disableInprocessWorkers` toggle** — the
+  `ide` always runs in-process workers. (The stateless `serve` fleet still runs
+  `oxy serve --no-workers`; that is intrinsic to its role, not a toggle.)
+- **Bundled databases** — the top-level `database:` / `clickhouse:` /
+  `clickhouseSubchart:` values. Postgres and ClickHouse are external.
 
-- The `database.clickhouse` / `clickhouseSubchart` / `clickhouse` values + the
-  `otel-configmap` / otel-sidecar branches that read them are kept **only** for
-  the `otel-collector` → ClickHouse export, which is **disabled in every
-  environment** (`otelCollector.enabled: false`). Decoupling otel onto a
-  self-contained `otelCollector.clickhouse.*` block (and dropping those values)
-  is the last DB-related cleanup — deferred because it touches a disabled
-  feature the render-diff can't exercise.
-- Raise to the 2026 bar: DRY the `OXY_DATABASE_URL` pass-through into a
-  `_helpers.tpl` partial (or an in-house `oxy-common` library chart shared with
-  `oxy-start`), digest-pin images (Renovate), and cosign-sign + attach
-  SBOM/SLSA on the OCI push.
+**Remaining:** the `otel-collector` sidecar is the only ClickHouse consumer in
+the chart, and it is now fully self-contained under `otelCollector.clickhouse.*`
+(external endpoint + credentials). It is **disabled in every environment**
+(`otelCollector.enabled: false`).
+
+**Follow-ups to the 2026 bar:** DRY the `OXY_DATABASE_URL` pass-through into a
+`_helpers.tpl` partial (or an in-house `oxy-common` library chart shared with
+`oxy-start`), digest-pin images (Renovate), and cosign-sign + attach SBOM/SLSA
+on the OCI push.

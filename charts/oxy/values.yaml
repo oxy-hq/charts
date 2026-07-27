@@ -27,33 +27,21 @@ app:
   internalPort: 3001
   internalHost: ""  # Set to "0.0.0.0" to enable internal API on all interfaces
 
-# HTTP server (`oxy serve`) tunables.
-# Use this stanza to pair the StatefulSet HTTP fleet with a separate
-# worker fleet (see `worker.*`) — when disableInprocessWorkers is true the
-# HTTP server runs as HTTP-only (`--no-workers`) and standalone
-# `oxy worker` pods drain the durable task queue.
+# HTTP server (`oxy serve`) tunables for the ide StatefulSet. The ide always
+# runs in-process workers; the standalone `oxy worker` fleet (see `worker.*`)
+# drains the durable task queue alongside it.
 appServer:
-  # When true, append `--no-workers` to the `oxy serve` command and set
-  # OXY_DISABLE_INPROCESS_WORKERS=1 so the HTTP server skips startup
-  # recovery and the in-process driver loop. Required when a standalone
-  # worker fleet is handling agentic execution. Default false so existing
-  # deployments are unaffected on upgrade.
-  disableInprocessWorkers: false
-
   # Drive the GLOBAL task queue (incl. TaskSpec::Compile) in-process on the
   # StatefulSet by setting OXY_INPROC_GLOBAL_WORKER=1.
   #
   # REQUIRED for the compile boundary: a compile can only run on a node that
   # has the working copy AND drives the global queue — that's the StatefulSet
   # (oxy-ide). With this off, Compile tasks enqueue but never drain, no
-  # workspace promotes, and a stateless `serveFleet` 503s every request.
-  #
-  # Only effective when in-process workers are running (i.e. NOT
-  # `disableInprocessWorkers`); under `--no-workers` the StatefulSet can't
-  # drive compiles, and the standalone `oxy worker` fleet can't either (no
-  # working copy — per-worker clone-on-demand is a later phase). So to use the
-  # compile boundary today, keep `disableInprocessWorkers: false` and set this
-  # `true`. Default false so existing deployments are unaffected on upgrade.
+  # workspace promotes, and a stateless `serveFleet` 503s every request. The
+  # standalone `oxy worker` fleet does NOT compile (no working copy —
+  # per-worker clone-on-demand is a later phase), so keep this `true` whenever
+  # a serve fleet fronts the compiled read paths. Default false so
+  # single-instance deployments are unaffected on upgrade.
   inprocGlobalWorker: false
 
 # Compile-boundary cross-cutting config. The runtime serves workspace
@@ -228,14 +216,6 @@ readinessProbe:
   timeoutSeconds: 5
   failureThreshold: 3
 
-startupProbe:
-  httpGet:
-    path: /
-    port: 3000
-  failureThreshold: 30
-  periodSeconds: 10
-  timeoutSeconds: 5
-
 # Lifecycle hooks
 lifecycle:
   preStop:
@@ -293,159 +273,6 @@ externalSecrets:
     name: ""
     kind: ""
 
-# Single SSH key configuration (preferred for simple setups)
-# Use `sshKey.secretName` to point to an existing Secret in production,
-# or provide `sshKey.privateKey` (inline) for development/testing only.
-sshKey:
-  secretName: ""  # If empty, defaults to git.sshSecretName
-  privateKey: ""  # Inline private SSH key (DO NOT commit to VCS)
-  knownHosts: ""  # Optional known_hosts content (multiline)
-
-# Git init container configuration — performs a shallow clone on pod start
-git:
-  enabled: false
-  repository: ""
-  branch: main
-  # Directory name inside persistence.mountPath to clone into
-  cloneDir: "repo"
-  # Optional subdirectory within cloneDir to use as the working directory
-  workingDir: ""
-  image: alpine/git
-  imageTag: "latest"
-  imagePullPolicy: IfNotPresent
-  # Default secret name used when sshKey.secretName is not set
-  sshSecretName: oxy-git-ssh
-  # GitHub App credentials for HTTPS cloning
-  githubApp:
-    secretName: ""  # Optional: existing secret name containing GitHub App data
-    privateKey: ""  # PEM private key contents for GitHub App (DO NOT commit in production)
-    applicationId: ""  # GitHub App Application ID
-    installationId: ""  # Installation ID for GitHub App auth
-    privateKeyKey: "github_app_private_key"
-    applicationIdKey: "github_app_application_id"
-    installationIdKey: "github_app_installation_id"
-
-# HTTP authentication for git cloning (for HTTPS git repositories)
-httpAuth:
-  username: ""
-  # Inline password (for development/testing only - NOT RECOMMENDED for production)
-  password: ""
-  # Reference to an existing Kubernetes secret containing the password
-  secretName: ""
-  passwordKey: "password"
-
-database:
-  # Enable or disable the postgres subchart
-  postgres:
-    enabled: false
-    # Host for the postgres service created by the subchart
-    # Format: servicename.namespace.svc.cluster.local
-    # Common patterns:
-    # - {release-name}-postgres (most common for groundhog2k chart)
-    # - {subchart-name} (if using alias)
-    # Leave empty to auto-generate as: {release-name}-postgres.{namespace}.svc.cluster.local
-    host: ""
-    port: 5432
-    # Note: Connection details are inferred from the postgres.* configuration below
-    # No need to duplicate userDatabase configuration here
-
-  # Enable or disable the clickhouse subchart
-  clickhouse:
-    enabled: false
-    # Host for the ClickHouse service created by the subchart
-    # Leave empty to auto-generate as: {release-name}-clickhouse.{namespace}.svc.cluster.local
-    host: ""
-    # HTTP port (used by oxy-app for queries)
-    httpPort: 8123
-    # TCP/Native port (used by otel-collector)
-    tcpPort: 9000
-
-  # External DB settings (optional)
-  external:
-    enabled: false
-    # If enabled, the external DB may rely on secrets managed by the user.
-    # Use `externalSecrets.envSecretNames` and `externalSecrets.fileSecrets` to
-    # declare and mount any required secrets into the pod.
-    # Optional connection details for an external database. Leave empty to
-    # let callers supply a full connection string via `connectionString` or
-    # rely on mounted secrets.
-    connectionString: ""
-    user: ""
-    password: ""
-    host: ""
-    port: 5432
-    database: ""
-
-# Configuration for the clickhouse subchart (Bitnami)
-# When database.clickhouse.enabled is true, these values configure the subchart
-# See: https://artifacthub.io/packages/helm/bitnami/clickhouse
-clickhouseSubchart:
-  # Override the full name of the clickhouse subchart resources
-  # This determines the service name that will be created
-  # Leave empty to use default: {release-name}-clickhouse
-  fullnameOverride: ""
-  # Image configuration - use legacy Bitnami images (non-paid)
-  image:
-    repository: bitnamilegacy/clickhouse
-  # Authentication configuration
-  auth:
-    username: "default"
-    password: "clickhouse"
-    # Use existing secret for credentials (recommended for production)
-    existingSecret: ""
-    existingSecretPasswordKey: "password"
-  # ClickHouse Keeper (required for single-node setup, alternative to ZooKeeper)
-  keeper:
-    enabled: true
-    image:
-      repository: bitnamilegacy/clickhouse-keeper
-  # ZooKeeper (alternative to Keeper, disabled by default)
-  zookeeper:
-    enabled: false
-    image:
-      repository: bitnamilegacy/zookeeper
-  # Shard and replica configuration
-  shards: 1
-  replicaCount: 1
-  # Resource configuration
-  resources:
-    requests:
-      cpu: 250m
-      memory: 512Mi
-    limits:
-      cpu: 1000m
-      memory: 2Gi
-  # Persistence configuration
-  persistence:
-    enabled: true
-    size: 10Gi
-    storageClass: ""
-
-# ClickHouse configuration (shared between oxy-app and otel-collector)
-# This configures the ClickHouse connection used by the main application
-# and optionally by the OpenTelemetry Collector for trace/metrics export
-clickhouse:
-  enabled: false
-  # HTTP endpoint for oxy-app (e.g., http://clickhouse:8123)
-  url: ""
-  # TCP endpoint for otel-collector (e.g., tcp://clickhouse:9000)
-  # If empty, derived from url by replacing http->tcp and port 8123->9000
-  tcpEndpoint: ""
-  database: "otel"
-  username: "default"
-  # Password can be provided inline (dev only) or via existingSecret
-  password: ""
-  # Source only the password from an existing Kubernetes secret. Takes precedence
-  # over existingSecret below. Leave empty to fall back to existingSecret or inline password.
-  passwordExistingSecret: ""
-  passwordSecretKey: "password"
-  # Use existing secret for credentials (recommended for production)
-  # The secret should contain keys for username and password
-  existingSecret:
-    name: ""
-    usernameKey: "username"
-    passwordKey: "password"
-
 # Allow users to supply arbitrary initContainers and sidecar containers.
 # Each entry should be a Kubernetes container spec. Examples below show
 # how to mount a secret and run a simple command. These are merged into
@@ -499,18 +326,26 @@ otelCollector:
       checkInterval: 1s
       limitMib: 512
 
-  # ClickHouse exporter configuration
-  # By default, uses the shared clickhouse.* config above
-  # Set overrides here for otel-collector specific settings
+  # ClickHouse exporter configuration.
+  # Self-contained EXTERNAL ClickHouse connection — this chart does not bundle a
+  # ClickHouse subchart. Point these at an existing ClickHouse the collector can
+  # reach; only consulted when `otelCollector.enabled: true`.
   clickhouse:
     enabled: true
-    # Override endpoint (if empty, uses shared clickhouse.tcpEndpoint or derived from clickhouse.url)
+    # TCP endpoint the exporter dials, e.g. "tcp://clickhouse:9000".
+    # `tcpEndpoint` takes precedence over `endpoint` when both are set; either
+    # form is accepted (they are aliases for the same tcp:// address).
+    tcpEndpoint: ""
     endpoint: ""
-    # Override database (if empty, uses shared clickhouse.database)
-    database: ""
-    # Override credentials (if empty, uses shared clickhouse.username/password)
-    username: ""
+    # Target database (default "otel").
+    database: "otel"
+    # Credentials. Provide the password inline (dev) OR via a Secret using
+    # `passwordExistingSecret` (recommended) — the sidecar then reads it from
+    # the OXY_CLICKHOUSE_PASSWORD env and `password` below is ignored.
+    username: "default"
     password: ""
+    passwordExistingSecret: ""
+    passwordSecretKey: "password"
     # Table configuration
     logsTableName: "otel_logs"
     tracesTableName: "otel_traces"
@@ -553,14 +388,13 @@ pdb:
 # ---------------------------------------------------------------------------
 # Standalone worker fleet (`oxy worker`)
 # ---------------------------------------------------------------------------
-# Opt-in deployment of the standalone `oxy worker` process introduced in
-# oxygen-internal#2409 (`feat/worker-fleet-separation`). When
-# `worker.enabled: false` (default) NO worker resources are rendered, so
-# existing deployments upgrade with zero impact.
+# Standalone `oxy worker` process (oxygen-internal#2409). Enabled by default as
+# part of the prod-style HA topology; set `worker.enabled: false` for a
+# single-instance install where the ide StatefulSet drains the queue in-process.
 #
 # Topology when enabled:
-#   - HTTP fleet (StatefulSet): run with `appServer.disableInprocessWorkers: true`
-#     so the HTTP server skips in-process workers and is HTTP-only.
+#   - ide fleet (StatefulSet): runs in-process workers AND drives the global
+#     queue (compile boundary). See `appServer.inprocGlobalWorker`.
 #   - Worker fleet (Deployment, this stanza): N replicas drain the
 #     `agentic_task_queue` table via `SELECT ... FOR UPDATE SKIP LOCKED`.
 #   - Both point at the SAME Postgres (`OXY_DATABASE_URL`).
@@ -584,8 +418,8 @@ pdb:
 #     compile boundary is always-on (no per-surface flags).
 #   - oxy-worker (Deployment, see `worker` stanza): TaskSpec consumers.
 #
-# Set `serveFleet.enabled: false` (default) to render no oxy-serve
-# resources and preserve existing single-StatefulSet behaviour.
+# Enabled by default (prod-style HA). Set `serveFleet.enabled: false` to render
+# no oxy-serve resources and fall back to single-StatefulSet behaviour.
 #
 # Ingress routing:
 #   - Legacy (additive) mode: `ideRoutes` empty → catch-all `/` stays on
@@ -606,8 +440,8 @@ pdb:
 # ── REQUIRED config for the compile boundary ───────────────────────────
 # The stateless fleet can ONLY serve a workspace that has been compiled (it
 # has no working copy to fall back to). So compiles MUST drain — set
-# `appServer.inprocGlobalWorker: true` (keep `disableInprocessWorkers: false`)
-# so the StatefulSet drives them. The `oxy worker` fleet does NOT compile (no
+# `appServer.inprocGlobalWorker: true` so the StatefulSet drives them. The
+# `oxy worker` fleet does NOT compile (no
 # working copy; per-worker clone-on-demand is a later phase). For S3 offload +
 # DuckDB-on-fleet, set `compileBoundary.blobS3Bucket`. After deploy, compile
 # existing workspaces once via the admin "Compile all uncompiled" backfill.
@@ -696,7 +530,10 @@ ideRoutes:
   - path: /api/*/world-model/events
 
 serveFleet:
-  enabled: false
+  # Default topology is the prod-style HA layout: one ide StatefulSet + N
+  # stateless serve pods + a worker fleet (see `worker.*`). Set to false for a
+  # single-instance install (ide only) where `oxy serve` handles every request.
+  enabled: true
   # Number of stateless pods. HPA-friendly — these have no PVC, no in-
   # memory state to drain on rollout.
   replicaCount: 2
@@ -809,7 +646,10 @@ serveFleet:
       maxSurge: "50%"
 
 worker:
-  enabled: false
+  # On by default as part of the prod-style HA topology (ide + serve fleet +
+  # worker fleet). Set to false only for a single-instance install where the
+  # ide StatefulSet drains the task queue in-process.
+  enabled: true
   # Number of worker pods. Scale independently of the HTTP fleet.
   replicaCount: 2
   # Image: inherits from .Values.app.image / .Values.app.imageTag when left empty.

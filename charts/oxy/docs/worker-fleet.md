@@ -16,8 +16,8 @@ oxygen-internal doc wins.
 
 | Mode | Chart config | Use when |
 | --- | --- | --- |
-| Single-process | `worker.enabled: false` (default) | Local dev, single-node prod. HTTP and workers share one StatefulSet pod. |
-| Split fleet | `worker.enabled: true` + `appServer.disableInprocessWorkers: true` | Production where HTTP and worker scaling signals diverge (request rate vs queue depth), or where you want different node pools / rollout cadences for each. |
+| Single-instance | `worker.enabled: false` | Local dev / single-node. The `ide` StatefulSet drains the queue in-process. |
+| HA (default) | `worker.enabled: true` | Production. The `ide` keeps its in-process workers and drives the compile / global queue; the worker fleet drains the `agentic_task_queue` and scales on queue depth independently of HTTP. |
 
 Both deployments must point at the **same Postgres**. The durable queue
 (`agentic_task_queue`) is the only coordination surface.
@@ -26,12 +26,11 @@ Both deployments must point at the **same Postgres**. The durable queue
 
 ```
 +--------------------+         +--------------------+
-| oxy serve          |         | oxy worker         |
-| --no-workers       |         | --health-port 8081 |
-| (StatefulSet)      |         | (Deployment xN)    |
-|                    |         |                    |
-|  HTTP frontend     |         |  Drains queue via  |
-|  + PostgresRouter  |         |  SKIP LOCKED       |
+| oxy serve (ide)    |         | oxy worker         |
+| (StatefulSet x1)   |         | --health-port 8081 |
+|                    |         | (Deployment xN)    |
+|  HTTP + in-process |         |  Drains queue via  |
+|  workers + compile |         |  SKIP LOCKED       |
 +---------+----------+         +---------+----------+
           |                              |
           +----------+ Postgres +--------+
@@ -39,20 +38,21 @@ Both deployments must point at the **same Postgres**. The durable queue
               agentic_task_queue
 ```
 
+(A stateless `oxy serve --no-workers` fleet — see `serveFleet.*` — fronts the
+compiled read paths in the full HA topology; it too drains nothing and leans on
+the worker fleet + the `ide` for queue work.)
+
 ## Enabling
 
-Minimal turn-on:
+The worker fleet is on by default (prod-style HA). To tune it:
 
 ```yaml
-appServer:
-  disableInprocessWorkers: true   # HTTP fleet stops draining the queue
-
 worker:
-  enabled: true                   # Worker Deployment renders
+  enabled: true                   # Worker Deployment renders (default)
   replicaCount: 2
 ```
 
-The chart will then render:
+The chart renders:
 
 - `Deployment/{release}-oxy-app-worker` (N replicas of `oxy worker`)
 - `Service/{release}-oxy-app-worker` (ClusterIP on the health port, for
@@ -60,19 +60,17 @@ The chart will then render:
 - `PodDisruptionBudget/{release}-oxy-app-worker-pdb` (minAvailable: 1)
 - HPA when `worker.hpa.enabled: true` (see below)
 
-And the existing HTTP StatefulSet picks up:
+The `ide` StatefulSet is unaffected — it keeps its in-process workers and (when
+`appServer.inprocGlobalWorker: true`) drives the global / compile queue.
 
-- `--no-workers` appended to `oxy serve`
-- `OXY_DISABLE_INPROCESS_WORKERS=1` as a belt-and-suspenders env
-
-When `worker.enabled` is left at `false` (the default) no worker
-resources are rendered — existing deploys upgrade with zero impact.
+Set `worker.enabled: false` for a single-instance install where the `ide`
+StatefulSet drains the queue in-process and no worker resources are rendered.
 
 ## Key knobs (`worker.*`)
 
 | Key | Default | Purpose |
 | --- | --- | --- |
-| `worker.enabled` | `false` | Master switch for the worker Deployment + Service + PDB + (optional) HPA. |
+| `worker.enabled` | `true` | Master switch for the worker Deployment + Service + PDB + (optional) HPA. |
 | `worker.replicaCount` | `2` | Worker pod count. Bump this OR `worker.resources` when individual workers peg. |
 | `worker.image.repository` / `worker.image.tag` / `worker.image.pullPolicy` | inherited from `app.image*` | Pin worker fleet to a different image (canary). |
 | `worker.healthPort` | `8081` | Port `oxy worker` binds `/healthz` + `/readyz` on. Used by both probes and the worker Service. |
@@ -86,19 +84,17 @@ resources are rendered — existing deploys upgrade with zero impact.
 
 ## `--skip-migrations` rationale
 
-Both fleets share a Postgres. If every worker pod on rollout tried to
+All fleets share a Postgres. If every worker pod on rollout tried to
 run migrations, they'd race for the same `INFORMATION_SCHEMA` /
 `sea_orm_migrations` rows. To avoid that:
 
-1. The HTTP StatefulSet (single pod by default) runs migrations on
-   startup — it is the canonical migrator.
+1. The pre-install/pre-upgrade `migrate` Job (`migrations.enabled: true`,
+   the default) runs the full migrator ONCE before any pod rolls, and the
+   `ide` StatefulSet boots with `OXY_SKIP_MIGRATIONS=1`. (With
+   `migrations.enabled: false`, the `ide` becomes the canonical migrator and
+   runs the advisory-lock-guarded in-process migrator on startup instead.)
 2. Worker pods skip migrations (`worker.skipMigrations: true`, the
    default) and assume the schema is already up to date.
-
-If you'd rather run migrations as a one-shot `oxy migrate` Job, set
-`worker.skipMigrations: true` on the worker fleet AND ensure
-`oxy serve` is started after the Job completes. The chart does not (yet)
-ship that Job — see "Punted" below.
 
 ## HPA wiring
 
@@ -139,9 +135,6 @@ before flipping HTTP traffic.
 These follow the limitations called out in
 `internal-docs/worker-fleet.md`:
 
-- **Migration Job**: the chart does not ship a dedicated `oxy migrate`
-  Helm hook / Job. The HTTP StatefulSet is the migrator; if you need a
-  Job-based migration path, add it out-of-band.
 - **Stranded-run sweep**: the standalone worker's recovery loop only
   runs a reaper pre-pass. Cloud-mode multi-workspace stranded-run replay
   still requires at least one HTTP pod with in-process workers.

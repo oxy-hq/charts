@@ -1,23 +1,6 @@
-# Example: Enable OpenTelemetry Collector with shared ClickHouse configuration
-# Both oxy-app and otel-collector use the same ClickHouse instance
-
-# Shared ClickHouse configuration
-# Used by both oxy-app (via env vars) and otel-collector (for trace export)
-clickhouse:
-  enabled: true
-  # HTTP endpoint for oxy-app
-  url: "http://clickhouse:8123"
-  # TCP endpoint for otel-collector (optional - derived from url if not set)
-  # tcpEndpoint: "tcp://clickhouse:9000"
-  database: "otel"
-  username: "default"
-  # For development/testing only - use existingSecret for production
-  password: "default"
-  # Production: use existing Kubernetes secret
-  # existingSecret:
-  #   name: clickhouse-credentials
-  #   usernameKey: username
-  #   passwordKey: password
+# Example: Enable the OpenTelemetry Collector sidecar exporting to an EXTERNAL
+# ClickHouse. All ClickHouse settings are self-contained under
+# otelCollector.clickhouse.* — this chart bundles no ClickHouse.
 
 # OpenTelemetry Collector sidecar
 otelCollector:
@@ -49,15 +32,18 @@ otelCollector:
       checkInterval: 1s
       limitMib: 512
 
-  # ClickHouse exporter settings (connection details inherited from shared clickhouse.*)
+  # External ClickHouse exporter settings (self-contained).
   clickhouse:
     enabled: true
-    # Override endpoint/database/username/password here if otel-collector
-    # needs different settings than the main app
-    # endpoint: ""
-    # database: ""
-    # username: ""
-    # password: ""
+    # tcpEndpoint (preferred) / endpoint: the tcp:// address the exporter dials.
+    tcpEndpoint: "tcp://clickhouse:9000"
+    database: "otel"
+    username: "default"
+    # Dev/testing only — use passwordExistingSecret for production so the
+    # password is injected via OXY_CLICKHOUSE_PASSWORD.
+    password: "default"
+    # passwordExistingSecret: clickhouse-credentials
+    # passwordSecretKey: password
     logsTableName: "otel_logs"
     tracesTableName: "otel_traces"
     metricsTableName: "otel_metrics"
@@ -81,9 +67,11 @@ otelCollector:
     logs:
       level: "info"
 
-# Configure the app to send traces to the otel-collector sidecar
+# Configure the app to send traces to the otel-collector sidecar. This chart
+# bundles no database — point OXY_DATABASE_URL at an external Postgres.
 env:
   OXY_STATE_DIR: /workspace/oxy_data
+  OXY_DATABASE_URL: "postgresql://oxy:oxy@external-postgres:5432/oxy"
   # OTLP endpoint (collector runs as sidecar on localhost)
   OTEL_EXPORTER_OTLP_ENDPOINT: "http://localhost:4317"
   OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"

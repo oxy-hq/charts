@@ -2,6 +2,14 @@ suite: ingress tests
 templates:
   - ingress.yaml
 
+# These cases exercise vanilla single-fleet ingress routing. Pin the serve
+# fleet off so the catch-all `/` stays simple (inverse HA-split routing, which
+# kicks in when serveFleet is enabled with the default ideRoutes, is covered by
+# its own behaviour and would otherwise restructure spec.rules here).
+set:
+  serveFleet:
+    enabled: false
+
 tests:
   # Ingress disabled by default
   - it: should not render Ingress when disabled

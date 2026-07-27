@@ -1,22 +1,27 @@
-{{/* See `templates/_worker-validation.tpl` for the corresponding fail-fast
-     guard against misconfigured topologies. */}}
 ================================================================================
-oxy-app {{ .Chart.AppVersion }} — release {{ .Release.Name }}
+{{ .Chart.Name }} {{ .Chart.AppVersion }} — release {{ .Release.Name }}
 ================================================================================
 
-HTTP fleet:
+Cloud topology (external Postgres; no local/git-sync mode):
+
+ide fleet:
   StatefulSet:        {{ include "oxy-app.fullname" . }}
   Replicas:           1 (single-writer ide; owns the /workspace RWO volume)
-{{- if .Values.appServer.disableInprocessWorkers }}
-  Mode:               HTTP-only (`--no-workers` + OXY_DISABLE_INPROCESS_WORKERS=1)
-                      The in-process worker AND the in-process recovery driver
-                      are disabled. The standalone `oxy worker` Deployment is
-                      the sole consumer of `agentic_task_queue`.
+  Role:               IDE / files / compile. Runs in-process workers and, when
+                      `appServer.inprocGlobalWorker: true`, drives the global
+                      task queue (the compile boundary).
+
+Serve fleet:
+{{- if .Values.serveFleet.enabled }}
+  Deployment:         {{ include "oxy-app.fullname" . }}-serve
+  Replicas:           {{ .Values.serveFleet.replicaCount }}
+  Role:               stateless `oxy serve --no-workers` replicas serving the
+                      compiled read paths (customer-apps, external API, chat,
+                      runtime serving). No PVC — safe to scale / roll freely.
 {{- else }}
-  Mode:               single-process (workers run inside the HTTP server)
-                      This is the default and preserves the legacy behavior.
-                      Long-running compute and HTTP request handling share the
-                      same pod. Safe for local dev and single-node prod.
+  Status:             disabled (single-instance install — the ide StatefulSet
+                      serves every request). Set `serveFleet.enabled=true` for
+                      the HA topology.
 {{- end }}
 
 Worker fleet:
@@ -26,31 +31,18 @@ Worker fleet:
   Health port:        {{ .Values.worker.healthPort | default 8081 }}
   Liveness contract:  /healthz on the worker pod returns 200 while the durable
                       transport + router + reaper are all alive.
-{{- if not .Values.appServer.disableInprocessWorkers }}
-
-  ⚠  Both fleets are draining the same queue.
-     `worker.enabled=true` AND `appServer.disableInprocessWorkers=false`
-     means BOTH the standalone worker fleet AND the in-process worker in
-     the HTTP StatefulSet are pulling from `agentic_task_queue`. This is
-     safe (SKIP-LOCKED prevents double-execution) but wasteful. Flip
-     `appServer.disableInprocessWorkers=true` once the worker fleet is
-     proven so the HTTP pods can drop the worker workload.
-{{- end }}
 {{- else }}
-  Status:             disabled (no resources rendered)
-                      Set `worker.enabled=true` and
-                      `appServer.disableInprocessWorkers=true` to scale the
-                      worker fleet independently of HTTP. Until then, agentic
-                      runs / builder pipelines / airway pipelines / preagg
-                      cycles execute inside the HTTP StatefulSet pod.
+  Status:             disabled (no worker resources rendered). The ide
+                      StatefulSet drains `agentic_task_queue` in-process. Set
+                      `worker.enabled=true` to scale workers independently.
 {{- end }}
 
 Coordination surface:
-  Both fleets must point at the SAME Postgres. `OXY_DATABASE_URL` flows
-  through the existing `app.env.OXY_DATABASE_URL` / external-secret pipeline
-  for both the StatefulSet and the worker Deployment.
+  All fleets must point at the SAME external Postgres. `OXY_DATABASE_URL` flows
+  through `env.OXY_DATABASE_URL` / the external-secret pipeline for the ide
+  StatefulSet, the serve fleet and the worker Deployment.
 
 References:
-  - chart guide:        charts/oxy-app/docs/worker-fleet.md
+  - worker fleet guide: charts/oxy/docs/worker-fleet.md
   - upstream design:    oxygen-internal#2409
   - operator runbook:   oxygen-internal `internal-docs/worker-fleet.md`

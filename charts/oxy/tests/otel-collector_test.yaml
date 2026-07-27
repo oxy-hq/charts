@@ -22,12 +22,12 @@ tests:
     set:
       otelCollector:
         enabled: true
-      clickhouse:
-        enabled: true
-        url: "http://clickhouse:8123"
-        database: "otel"
-        username: "default"
-        password: "default"
+        clickhouse:
+          enabled: true
+          tcpEndpoint: "tcp://clickhouse:9000"
+          database: "otel"
+          username: "default"
+          password: "default"
     asserts:
       - isKind:
           of: ConfigMap
@@ -38,17 +38,17 @@ tests:
           path: metadata.labels["app.kubernetes.io/name"]
           value: oxy-app
 
-  - it: should use shared ClickHouse config in ConfigMap
+  - it: should render the external ClickHouse exporter config
     template: otel-configmap.yaml
     set:
       otelCollector:
         enabled: true
-      clickhouse:
-        enabled: true
-        url: "http://my-clickhouse:8123"
-        database: "mydb"
-        username: "myuser"
-        password: "mypassword"
+        clickhouse:
+          enabled: true
+          tcpEndpoint: "tcp://my-clickhouse:9000"
+          database: "mydb"
+          username: "myuser"
+          password: "mypassword"
     asserts:
       - matchRegex:
           path: data["config.yaml"]
@@ -60,24 +60,24 @@ tests:
           path: data["config.yaml"]
           pattern: "username: myuser"
 
-  - it: should use tcpEndpoint when provided
+  - it: should prefer tcpEndpoint over endpoint when both are set
     template: otel-configmap.yaml
     set:
       otelCollector:
         enabled: true
-      clickhouse:
-        enabled: true
-        url: "http://clickhouse:8123"
-        tcpEndpoint: "tcp://clickhouse-tcp:9440"
-        database: "otel"
-        username: "default"
-        password: "default"
+        clickhouse:
+          enabled: true
+          endpoint: "tcp://fallback-ch:9000"
+          tcpEndpoint: "tcp://clickhouse-tcp:9440"
+          database: "otel"
+          username: "default"
+          password: "default"
     asserts:
       - matchRegex:
           path: data["config.yaml"]
           pattern: "endpoint: tcp://clickhouse-tcp:9440"
 
-  - it: should allow otel-collector specific overrides
+  - it: should fall back to the endpoint field when tcpEndpoint is unset
     template: otel-configmap.yaml
     set:
       otelCollector:
@@ -88,12 +88,6 @@ tests:
           database: "otel_traces"
           username: "otel_user"
           password: "otel_password"
-      clickhouse:
-        enabled: true
-        url: "http://shared-ch:8123"
-        database: "shared_db"
-        username: "shared_user"
-        password: "shared_password"
     asserts:
       - matchRegex:
           path: data["config.yaml"]
@@ -105,6 +99,20 @@ tests:
           path: data["config.yaml"]
           pattern: "username: otel_user"
 
+  - it: should source the exporter password from OXY_CLICKHOUSE_PASSWORD when using a secret
+    template: otel-configmap.yaml
+    set:
+      otelCollector:
+        enabled: true
+        clickhouse:
+          enabled: true
+          tcpEndpoint: "tcp://clickhouse:9000"
+          passwordExistingSecret: my-clickhouse-secret
+    asserts:
+      - matchRegex:
+          path: data["config.yaml"]
+          pattern: 'password: \$\{env:OXY_CLICKHOUSE_PASSWORD\}'
+
   - it: should configure custom table names
     template: otel-configmap.yaml
     set:
@@ -112,12 +120,10 @@ tests:
         enabled: true
         clickhouse:
           enabled: true
+          tcpEndpoint: "tcp://clickhouse:9000"
           logsTableName: "custom_logs"
           tracesTableName: "custom_traces"
           metricsTableName: "custom_metrics"
-      clickhouse:
-        enabled: true
-        url: "http://clickhouse:8123"
     asserts:
       - matchRegex:
           path: data["config.yaml"]
@@ -137,9 +143,9 @@ tests:
         ports:
           otlpGrpc: 14317
           otlpHttp: 14318
-      clickhouse:
-        enabled: true
-        url: "http://clickhouse:8123"
+        clickhouse:
+          enabled: true
+          tcpEndpoint: "tcp://clickhouse:9000"
     asserts:
       - matchRegex:
           path: data["config.yaml"]
@@ -156,9 +162,9 @@ tests:
         debug:
           enabled: true
           verbosity: "detailed"
-      clickhouse:
-        enabled: true
-        url: "http://clickhouse:8123"
+        clickhouse:
+          enabled: true
+          tcpEndpoint: "tcp://clickhouse:9000"
     asserts:
       - matchRegex:
           path: data["config.yaml"]
@@ -294,34 +300,31 @@ tests:
             configMap:
               name: RELEASE-NAME-oxy-app-otel-collector
 
-  - it: should inject CLICKHOUSE_PASSWORD from shared existing secret
+  - it: should inject OXY_CLICKHOUSE_PASSWORD from passwordExistingSecret
     template: statefulset.yaml
     set:
       otelCollector:
         enabled: true
-      clickhouse:
-        enabled: true
-        existingSecret:
-          name: my-clickhouse-secret
-          passwordKey: ch-password
+        clickhouse:
+          passwordExistingSecret: my-clickhouse-secret
+          passwordSecretKey: ch-password
     asserts:
       - contains:
           path: spec.template.spec.containers[1].env
           content:
-            name: CLICKHOUSE_PASSWORD
+            name: OXY_CLICKHOUSE_PASSWORD
             valueFrom:
               secretKeyRef:
                 name: my-clickhouse-secret
                 key: ch-password
 
-  - it: should not inject CLICKHOUSE_PASSWORD when no existing secret
+  - it: should not inject a ClickHouse password env when using an inline password
     template: statefulset.yaml
     set:
       otelCollector:
         enabled: true
-      clickhouse:
-        enabled: true
-        password: "inline-password"
+        clickhouse:
+          password: "inline-password"
     asserts:
       - notExists:
           path: spec.template.spec.containers[1].env
@@ -344,40 +347,6 @@ tests:
       - equal:
           path: spec.template.spec.containers[1].readinessProbe.httpGet.port
           value: 13133
-
-  # =======================
-  # Main App ClickHouse Env Vars
-  # =======================
-
-  - it: should not inject ClickHouse env vars when disabled
-    template: statefulset.yaml
-    set:
-      clickhouse:
-        enabled: false
-    asserts:
-      - notContains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: OXY_CLICKHOUSE_URL
-
-  - it: should work with git-sync and otel-collector together
-    template: statefulset.yaml
-    set:
-      git:
-        enabled: true
-        repository: "git@github.com:example/repo.git"
-      otelCollector:
-        enabled: true
-    asserts:
-      - lengthEqual:
-          path: spec.template.spec.containers
-          count: 2
-      - equal:
-          path: spec.template.spec.containers[0].name
-          value: oxy-app
-      - equal:
-          path: spec.template.spec.containers[1].name
-          value: otel-collector
 
   - it: should work with otel-collector and extraSidecars
     template: statefulset.yaml

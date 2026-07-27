@@ -26,10 +26,9 @@ ingress:
           pathType: Prefix
   tls: []
 
-# Disable external dependencies
-database:
-  postgres:
-    enabled: true
+# External Postgres connection (this chart bundles no database).
+env:
+  OXY_DATABASE_URL: "postgresql://oxy:oxy@external-postgres:5432/oxy"
 
 resources:
   limits:

@@ -1,34 +1,37 @@
-suite: worker fleet zero-impact upgrade (worker.enabled=false)
+suite: worker fleet disabled (worker.enabled=false)
 templates:
   - worker-deployment.yaml
   - worker-service.yaml
   - worker-pdb.yaml
   - worker-hpa.yaml
 
-# No `set:` block — using chart defaults to prove that an existing
-# deployment upgrading to this chart version sees NO new worker
-# resources unless they explicitly opt in.
+# The default topology enables the worker fleet; this suite pins
+# worker.enabled=false to prove the single-instance opt-out renders NO
+# worker resources.
+set:
+  worker:
+    enabled: false
 
 tests:
-  - it: does not render the worker Deployment by default
+  - it: does not render the worker Deployment when disabled
     template: worker-deployment.yaml
     asserts:
       - hasDocuments:
           count: 0
 
-  - it: does not render the worker Service by default
+  - it: does not render the worker Service when disabled
     template: worker-service.yaml
     asserts:
       - hasDocuments:
           count: 0
 
-  - it: does not render the worker PDB by default
+  - it: does not render the worker PDB when disabled
     template: worker-pdb.yaml
     asserts:
       - hasDocuments:
           count: 0
 
-  - it: does not render the worker HPA by default
+  - it: does not render the worker HPA when disabled
     template: worker-hpa.yaml
     asserts:
       - hasDocuments:

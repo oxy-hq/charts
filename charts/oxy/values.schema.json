@@ -21,7 +21,7 @@
     "appServer": {
       "type": "object",
       "properties": {
-        "disableInprocessWorkers": { "type": "boolean" }
+        "inprocGlobalWorker": { "type": "boolean" }
       }
     },
     "compileBoundary": {
@@ -72,10 +72,6 @@
     "service": {
       "type": "object",
       "properties": { "port": { "type": "integer" } }
-    },
-    "git": {
-      "type": "object",
-      "properties": { "enabled": { "type": "boolean" } }
     },
     "env": {
       "type": "object",

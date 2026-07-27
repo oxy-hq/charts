@@ -8,14 +8,6 @@ persistence:
   enabled: true
   size: "1Gi"
 
-# Disable external dependencies
-database:
-  postgres:
-    enabled: false
-
-git:
-  enabled: false
-
 # Use minimal resources for fast testing
 resources:
   limits:

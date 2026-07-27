@@ -4,9 +4,10 @@ Standalone `oxy worker` fleet — see oxygen-internal#2409 and
 `internal-docs/worker-fleet.md` for the operational shape.
 
 This Deployment runs the durable orchestrator out-of-process so the
-HTTP fleet (StatefulSet) and worker fleet can scale independently.
-Both fleets must share the SAME Postgres (`OXY_DATABASE_URL`).
-The HTTP StatefulSet should run with `appServer.disableInprocessWorkers: true`.
+ide fleet (StatefulSet) and worker fleet can scale independently.
+Both fleets must share the SAME Postgres (`OXY_DATABASE_URL`). The ide
+StatefulSet keeps its in-process workers and drives the global/compile
+queue; the worker fleet drains the agentic task queue alongside it.
 */}}
 {{- $workerImageRepo := default .Values.app.image .Values.worker.image.repository -}}
 {{- $workerImageTag := default (default .Chart.AppVersion .Values.app.imageTag) .Values.worker.image.tag -}}

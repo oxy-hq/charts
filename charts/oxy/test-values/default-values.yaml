@@ -3,15 +3,8 @@
 # Smallest helm-install shape that the chart will actually start. Modern
 # oxy serve requires OXY_DATABASE_URL — there is no sqlite fallback
 # (intentional, see statefulset.yaml comment on the OXY_DATABASE_URL
-# branch). So "default" here means "minimal viable production-ish
-# install": the postgres subchart plus the oxy server.
-#
-# Previously this file disabled the postgres subchart and pinned image
-# 0.4.0, which silently broke the integration suite when the chart's
-# DB-URL fallback was removed. The CI failure surfaced as a 3-minute
-# "StatefulSet not ready" timeout with no pod-level cause printed.
-# `scripts/test.sh` now dumps kubectl describe + pod logs on failure
-# so future regressions are visible at a glance.
+# branch). This chart bundles no database, so point OXY_DATABASE_URL at an
+# EXTERNAL Postgres (deploy it as its own release; see README "Quick start").
 nameOverride: "oxy-test-default"
 fullnameOverride: "oxy-test-default"
 
@@ -29,22 +22,9 @@ service:
   port: 80
   targetPort: 3000
 
-# Enable the postgres subchart so OXY_DATABASE_URL is wired and the oxy
-# server can start. Test config mirrors with-postgres-values.yaml so the
-# default test is a strict subset of the postgres-specific test.
-database:
-  postgres:
-    enabled: true
-
-postgres:
-  fullnameOverride: "test-default-db"
-  userDatabase:
-    name:
-      value: "testdb"
-    user:
-      value: "testuser"
-    password:
-      value: "testpass"
+# External Postgres connection (this chart bundles no database).
+env:
+  OXY_DATABASE_URL: "postgresql://testuser:testpass@test-default-db:5432/testdb"
 
 # Bumped from 128Mi → 512Mi. The Rust binary plus startup migrations
 # need headroom; 128Mi was tight enough that pods spent the full 3min
