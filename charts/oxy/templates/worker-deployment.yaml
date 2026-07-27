@@ -1,0 +1,224 @@
+{{- if .Values.worker.enabled }}
+{{- /*
+Standalone `oxy worker` fleet — see oxygen-internal#2409 and
+`internal-docs/worker-fleet.md` for the operational shape.
+
+This Deployment runs the durable orchestrator out-of-process so the
+ide fleet (StatefulSet) and worker fleet can scale independently.
+Both fleets must share the SAME Postgres (`OXY_DATABASE_URL`). The ide
+StatefulSet keeps its in-process workers and drives the global/compile
+queue; the worker fleet drains the agentic task queue alongside it.
+*/}}
+{{- $workerImageRepo := default .Values.app.image .Values.worker.image.repository -}}
+{{- $workerImageTag := default (default .Chart.AppVersion .Values.app.imageTag) .Values.worker.image.tag -}}
+{{- $workerImagePullPolicy := default .Values.app.imagePullPolicy .Values.worker.image.pullPolicy -}}
+{{- $workerSa := default (include "oxy-app.serviceAccountName" .) .Values.worker.serviceAccountName -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "oxy-app.fullname" . }}-worker
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "oxy-app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  replicas: {{ .Values.worker.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "oxy-app.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: worker
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # Keep at least one worker alive during rollout; allow one extra to
+      # smooth the cutover. Drain time can be up to 35 s per pod.
+      maxUnavailable: 1
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        {{- include "oxy-app.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: worker
+        {{- with .Values.worker.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.worker.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- if ne $workerSa "" }}
+      serviceAccountName: {{ $workerSa | quote }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.worker.terminationGracePeriodSeconds }}
+      {{- with .Values.worker.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.worker.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.worker.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.worker.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: worker
+          image: "{{ $workerImageRepo }}:{{ $workerImageTag }}"
+          imagePullPolicy: {{ $workerImagePullPolicy }}
+          {{- with .Values.worker.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if and .Values.worker.command (gt (len .Values.worker.command) 0) }}
+          command:
+            {{- range .Values.worker.command }}
+            - {{ . | quote }}
+            {{- end }}
+          {{- else }}
+          command:
+            - sh
+            - -c
+            - |
+              exec oxy worker --health-port {{ .Values.worker.healthPort }}{{- if .Values.worker.skipMigrations }} --skip-migrations{{- end }}
+          {{- end }}
+          ports:
+            - name: health
+              containerPort: {{ .Values.worker.healthPort }}
+              protocol: TCP
+          env:
+            # Role classification — oxygen-internal PR #2505 routing guardrail.
+            # Queue drainer; no inbound customer HTTP. /healthz still works
+            # under this role because FleetOk routes are accepted by Worker.
+            - name: OXY_ROLE
+              value: "worker"
+            # Shared AES-256 master key so workspace secrets encrypt/decrypt
+            # identically across the fleet (values.yaml encryptionKey). Without it
+            # each pod generates a divergent on-disk key → a worker draining an
+            # agentic run resolves secrets with the wrong key ("decryption failed").
+            {{- if .Values.encryptionKey.secretName }}
+            - name: OXY_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.encryptionKey.secretName | quote }}
+                  key: {{ .Values.encryptionKey.secretKey | default "OXY_ENCRYPTION_KEY" | quote }}
+            {{- end }}
+            # Compile-boundary S3 reads: a worker executing an agentic run can
+            # read semantic blobs from S3, so it needs the same bucket.
+            {{- if .Values.compileBoundary.blobS3Bucket }}
+            - name: OXY_COMPILE_BLOB_S3_BUCKET
+              value: {{ .Values.compileBoundary.blobS3Bucket | quote }}
+            {{- end }}
+            # Database URL Configuration — mirrors the HTTP StatefulSet
+            # precedence so both fleets agree on the same Postgres.
+            {{- if and .Values.env.OXY_DATABASE_URL (ne .Values.env.OXY_DATABASE_URL "") }}
+            - name: OXY_DATABASE_URL
+              value: {{ .Values.env.OXY_DATABASE_URL | quote }}
+            {{- end }}
+
+            # Worker-specific tunables (see worker.* in values.yaml).
+            - name: OXY_WORKER_HEALTH_PORT
+              value: {{ .Values.worker.healthPort | quote }}
+            {{- range $key, $value := .Values.worker.env }}
+            {{- if ne $value "" }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- end }}
+
+            # Pass through general env vars from the top-level `env` map
+            # (skipping the ones we've already handled above).
+            {{- range $key, $value := .Values.env }}
+            {{- if and (ne $key "OXY_STATE_DIR") (ne $key "OXY_DATABASE_URL") }}
+            {{- if ne $value "" }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- end }}
+            {{- end }}
+
+            {{- with .Values.worker.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+
+          {{- if or .Values.configMap.enabled (and .Values.worker.inheritExternalSecrets (gt (len .Values.externalSecrets.envSecretNames) 0)) (gt (len .Values.worker.extraEnvFrom) 0) }}
+          envFrom:
+            {{- if .Values.configMap.enabled }}
+            - configMapRef:
+                name: {{ include "oxy-app.fullname" . }}-config
+            {{- end }}
+            {{- if .Values.worker.inheritExternalSecrets }}
+            {{- range .Values.externalSecrets.envSecretNames }}
+            - secretRef:
+                name: {{ . | quote }}
+            {{- end }}
+            {{- end }}
+            {{- with .Values.worker.extraEnvFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- end }}
+
+          {{- with .Values.worker.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          {{- with .Values.worker.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.worker.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.worker.lifecycle }}
+          lifecycle:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          volumeMounts:
+            {{- /* Inherit env-secret file mounts so the worker sees the same secret surface. */}}
+            {{- if .Values.worker.inheritExternalSecrets }}
+            {{- range $idx, $secretName := .Values.externalSecrets.envSecretNames }}
+            - name: env-secret-{{ $idx }}
+              mountPath: /secrets/env/{{ $secretName }}
+              readOnly: true
+            {{- end }}
+            {{- range $idx, $fileSecret := .Values.externalSecrets.fileSecrets }}
+            - name: file-secret-{{ $idx }}
+              mountPath: /secrets/files/{{ $fileSecret.name }}
+              readOnly: true
+            {{- end }}
+            {{- end }}
+            {{- with .Values.worker.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+
+        {{- with .Values.worker.extraSidecars }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+
+      volumes:
+        {{- if .Values.worker.inheritExternalSecrets }}
+        {{- range $idx, $secretName := .Values.externalSecrets.envSecretNames }}
+        - name: env-secret-{{ $idx }}
+          secret:
+            secretName: {{ $secretName | quote }}
+            optional: true
+        {{- end }}
+        {{- range $idx, $fileSecret := .Values.externalSecrets.fileSecrets }}
+        - name: file-secret-{{ $idx }}
+          secret:
+            secretName: {{ $fileSecret.name | quote }}
+            optional: true
+        {{- end }}
+        {{- end }}
+        {{- with .Values.worker.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+{{- end }}

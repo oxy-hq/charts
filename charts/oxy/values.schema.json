@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "oxy chart values",
+  "description": "Input contract for the oxy application chart. Intentionally permissive at the root (additionalProperties allowed) so existing oxy-app value sets validate unchanged; the well-known structures below are type-checked. Tighten per-object over time.",
+  "type": "object",
+  "properties": {
+    "name": { "type": "string" },
+    "nameOverride": { "type": "string" },
+    "fullnameOverride": { "type": "string" },
+    "app": {
+      "type": "object",
+      "properties": {
+        "image": { "type": "string", "minLength": 1 },
+        "imageTag": { "type": "string" },
+        "imagePullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] },
+        "command": { "type": "array", "items": { "type": "string" } },
+        "port": { "type": "integer" },
+        "internalHost": { "type": "string" }
+      }
+    },
+    "appServer": {
+      "type": "object",
+      "properties": {
+        "inprocGlobalWorker": { "type": "boolean" }
+      }
+    },
+    "compileBoundary": {
+      "type": "object",
+      "properties": { "blobS3Bucket": { "type": "string" } }
+    },
+    "serviceAccount": {
+      "type": "object",
+      "properties": {
+        "create": { "type": "boolean" },
+        "name": { "type": "string" },
+        "annotations": { "type": "object" }
+      }
+    },
+    "serveFleet": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "replicaCount": { "type": "integer", "minimum": 0 },
+        "ideUpstream": { "type": "string" }
+      }
+    },
+    "worker": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "replicaCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "ingress": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "className": { "type": "string" },
+        "ingressClassName": { "type": "string" }
+      }
+    },
+    "persistence": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "size": { "type": "string" },
+        "accessMode": { "type": "string" },
+        "storageClass": { "type": "string" },
+        "mountPath": { "type": "string" }
+      }
+    },
+    "service": {
+      "type": "object",
+      "properties": { "port": { "type": "integer" } }
+    },
+    "env": {
+      "type": "object",
+      "description": "Flat map of environment variables passed to every workload. Values must be strings (quote numbers/bools)."
+    },
+    "externalSecrets": {
+      "type": "object",
+      "properties": {
+        "envSecretNames": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

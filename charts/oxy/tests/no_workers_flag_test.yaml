@@ -1,0 +1,28 @@
+suite: ide StatefulSet never runs --no-workers
+templates:
+  - statefulset.yaml
+
+tests:
+  - it: does NOT pass --no-workers (the ide always runs in-process workers)
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "--no-workers"
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_DISABLE_INPROCESS_WORKERS
+            value: "1"
+
+  - it: composes --internal-host without ever adding --no-workers
+    set:
+      app:
+        internalHost: "0.0.0.0"
+        internalPort: 3001
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "exec oxy serve --internal-host 0.0.0.0 --internal-port 3001"
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "--no-workers"

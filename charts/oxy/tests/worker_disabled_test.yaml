@@ -1,0 +1,38 @@
+suite: worker fleet disabled (worker.enabled=false)
+templates:
+  - worker-deployment.yaml
+  - worker-service.yaml
+  - worker-pdb.yaml
+  - worker-hpa.yaml
+
+# The default topology enables the worker fleet; this suite pins
+# worker.enabled=false to prove the single-instance opt-out renders NO
+# worker resources.
+set:
+  worker:
+    enabled: false
+
+tests:
+  - it: does not render the worker Deployment when disabled
+    template: worker-deployment.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: does not render the worker Service when disabled
+    template: worker-service.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: does not render the worker PDB when disabled
+    template: worker-pdb.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: does not render the worker HPA when disabled
+    template: worker-hpa.yaml
+    asserts:
+      - hasDocuments:
+          count: 0

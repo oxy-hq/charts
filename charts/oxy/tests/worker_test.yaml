@@ -1,0 +1,340 @@
+suite: worker fleet tests (worker.enabled=true)
+templates:
+  - worker-deployment.yaml
+  - worker-service.yaml
+  - worker-pdb.yaml
+  - worker-hpa.yaml
+
+set:
+  worker:
+    enabled: true
+
+tests:
+  # ---------- Deployment ----------
+  - it: renders the worker Deployment with the expected name
+    template: worker-deployment.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-oxy-app-worker
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: worker
+
+  - it: sets the default replica count to 2
+    template: worker-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 2
+
+  - it: honors a custom replicaCount
+    template: worker-deployment.yaml
+    set:
+      worker:
+        replicaCount: 5
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 5
+
+  - it: uses the same image as the HTTP app by default
+    template: worker-deployment.yaml
+    set:
+      app:
+        image: ghcr.io/oxy-hq/oxygen
+        imageTag: "1.2.3"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/oxy-hq/oxygen:1.2.3
+
+  - it: allows pinning a different image tag for the worker fleet
+    template: worker-deployment.yaml
+    set:
+      worker:
+        image:
+          tag: "9.9.9-canary"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/oxy-hq/oxygen:9.9.9-canary
+
+  - it: invokes `oxy worker` with --health-port and --skip-migrations by default
+    template: worker-deployment.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "exec oxy worker --health-port 8081 --skip-migrations"
+
+  - it: drops --skip-migrations when worker.skipMigrations is false
+    template: worker-deployment.yaml
+    set:
+      worker:
+        skipMigrations: false
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "exec oxy worker --health-port 8081\n"
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "--skip-migrations"
+
+  - it: exposes the health port on the container
+    template: worker-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].name
+          value: health
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].containerPort
+          value: 8081
+
+  - it: wires liveness probe to /healthz on the health port
+    template: worker-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /healthz
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.port
+          value: 8081
+
+  - it: wires readiness probe to /readyz on the health port
+    template: worker-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /readyz
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.port
+          value: 8081
+
+  - it: sets terminationGracePeriodSeconds to 40 (drain budget)
+    template: worker-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 40
+
+  - it: sets OXY_WORKER_MAX_INFLIGHT and OXY_WORKER_RECOVERY_INTERVAL_SECS
+    template: worker-deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_WORKER_MAX_INFLIGHT
+            value: "32"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_WORKER_RECOVERY_INTERVAL_SECS
+            value: "30"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_WORKER_HEALTH_PORT
+            value: "8081"
+
+  - it: propagates the top-level OXY_DATABASE_URL into the worker pod
+    template: worker-deployment.yaml
+    set:
+      env:
+        OXY_DATABASE_URL: "postgresql://oxy:pw@db.example:5432/oxy"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_DATABASE_URL
+            value: "postgresql://oxy:pw@db.example:5432/oxy"
+
+  - it: honors a custom health port end-to-end
+    template: worker-deployment.yaml
+    set:
+      worker:
+        healthPort: 9090
+        livenessProbe:
+          httpGet: { path: /healthz, port: 9090 }
+          initialDelaySeconds: 5
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet: { path: /readyz, port: 9090 }
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 3
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "--health-port 9090"
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].containerPort
+          value: 9090
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.port
+          value: 9090
+
+  - it: applies the default resource requests
+    template: worker-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 250m
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 512Mi
+
+  - it: inherits external env-secret references when enabled
+    template: worker-deployment.yaml
+    set:
+      externalSecrets:
+        envSecretNames:
+          - oxy-llm-keys
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].envFrom
+          content:
+            secretRef:
+              name: oxy-llm-keys
+
+  - it: skips external secret inheritance when toggled off
+    template: worker-deployment.yaml
+    set:
+      externalSecrets:
+        envSecretNames:
+          - oxy-llm-keys
+      worker:
+        inheritExternalSecrets: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].envFrom
+
+  # ---------- Service ----------
+  - it: renders a ClusterIP service for the worker health port
+    template: worker-service.yaml
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-oxy-app-worker
+      - equal:
+          path: spec.type
+          value: ClusterIP
+      - equal:
+          path: spec.ports[0].port
+          value: 8081
+      - equal:
+          path: spec.ports[0].targetPort
+          value: 8081
+      - equal:
+          path: spec.selector["app.kubernetes.io/component"]
+          value: worker
+
+  - it: omits the worker service when worker.service.enabled is false
+    template: worker-service.yaml
+    set:
+      worker:
+        service:
+          enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # ---------- PDB ----------
+  - it: "renders a PDB with minAvailable=1 by default"
+    template: worker-pdb.yaml
+    asserts:
+      - isKind:
+          of: PodDisruptionBudget
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-oxy-app-worker-pdb
+      - equal:
+          path: spec.minAvailable
+          value: 1
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/component"]
+          value: worker
+
+  - it: honors explicit maxUnavailable when minAvailable is empty
+    template: worker-pdb.yaml
+    set:
+      worker:
+        pdb:
+          minAvailable: ""
+          maxUnavailable: 1
+    asserts:
+      - equal:
+          path: spec.maxUnavailable
+          value: 1
+
+  - it: omits the PDB when worker.pdb.enabled is false
+    template: worker-pdb.yaml
+    set:
+      worker:
+        pdb:
+          enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # ---------- HPA ----------
+  - it: does NOT render the HPA by default (custom metric not wired)
+    template: worker-hpa.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders the HPA when worker.hpa.enabled is true
+    template: worker-hpa.yaml
+    set:
+      worker:
+        hpa:
+          enabled: true
+    asserts:
+      - isKind:
+          of: HorizontalPodAutoscaler
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-oxy-app-worker-hpa
+      - equal:
+          path: spec.scaleTargetRef.name
+          value: RELEASE-NAME-oxy-app-worker
+      - equal:
+          path: spec.minReplicas
+          value: 2
+      - equal:
+          path: spec.maxReplicas
+          value: 10
+      - equal:
+          path: spec.metrics[0].type
+          value: External
+      - equal:
+          path: spec.metrics[0].external.metric.name
+          value: oxy_agentic_task_queue_depth
+      - equal:
+          path: spec.metrics[0].external.target.averageValue
+          value: "100"
+
+  - it: appends a CPU resource metric when cpuUtilization is set
+    template: worker-hpa.yaml
+    set:
+      worker:
+        hpa:
+          enabled: true
+          cpuUtilization: 70
+    asserts:
+      - equal:
+          path: spec.metrics[1].type
+          value: Resource
+      - equal:
+          path: spec.metrics[1].resource.name
+          value: cpu
+      - equal:
+          path: spec.metrics[1].resource.target.averageUtilization
+          value: 70

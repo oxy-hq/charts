@@ -1,0 +1,39 @@
+# Integration test with ingress enabled
+nameOverride: "oxy-test-ingress"
+fullnameOverride: "oxy-test-ingress"
+
+app:
+  image: "ghcr.io/oxy-hq/oxygen"
+  imageTag: "0.5.49"
+  imagePullPolicy: "IfNotPresent"
+
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 80
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+  hosts:
+    - host: test-oxy-app.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# External Postgres connection (this chart bundles no database).
+env:
+  OXY_DATABASE_URL: "postgresql://oxy:oxy@external-postgres:5432/oxy"
+
+resources:
+  limits:
+    cpu: "500m"
+    memory: "512Mi"
+  requests:
+    cpu: "500m"
+    memory: "512Mi"

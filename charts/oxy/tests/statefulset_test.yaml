@@ -1,0 +1,579 @@
+suite: statefulset tests
+templates:
+  - statefulset.yaml
+
+tests:
+  # =======================
+  # Basic StatefulSet Tests
+  # =======================
+
+  - it: should create a StatefulSet with correct metadata
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-oxy-app
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: oxy-app
+      - equal:
+          path: metadata.labels["app.kubernetes.io/instance"]
+          value: RELEASE-NAME
+
+  - it: should configure StatefulSet with correct defaults
+    asserts:
+      - equal:
+          path: spec.serviceName
+          value: RELEASE-NAME-oxy-app-headless
+      - equal:
+          path: spec.replicas
+          value: 1
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: oxy-app
+
+  - it: should keep the ide StatefulSet a single replica
+    set:
+      app:
+        replicaCount: 3
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 1
+
+  # =======================
+  # Container Configuration
+  # =======================
+
+  - it: should configure main container correctly
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "ghcr.io/oxy-hq/oxygen:0.5.49"
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            containerPort: 3000
+            protocol: TCP
+            name: traffic-port
+
+  - it: should only expose main port by default
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers[0].ports
+          count: 1
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].name
+          value: traffic-port
+
+  - it: should run the default `oxy serve` command (no --local, no --no-workers)
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "exec oxy serve"
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "--local"
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "--no-workers"
+
+  - it: should support custom image configuration
+    set:
+      app:
+        image: "custom/oxy-app"
+        imageTag: "v2.0.0"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "custom/oxy-app:v2.0.0"
+
+  # =======================
+  # Environment Variables
+  # =======================
+
+  - it: should set default environment variables
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_STATE_DIR
+            value: "/workspace/oxy_data"
+
+  - it: should allow custom database URL
+    set:
+      env:
+        OXY_DATABASE_URL: "postgresql://user:pass@host:5432/db"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_DATABASE_URL
+            value: "postgresql://user:pass@host:5432/db"
+
+  - it: should support custom environment variables from values.env
+    set:
+      env:
+        OXY_STATE_DIR: /workspace/oxy_data
+        CUSTOM_VAR_1: "value1"
+        CUSTOM_VAR_2: "value2"
+        LOG_LEVEL: "debug"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CUSTOM_VAR_1
+            value: "value1"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CUSTOM_VAR_2
+            value: "value2"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: LOG_LEVEL
+            value: "debug"
+
+  - it: should not set empty environment variables
+    set:
+      env:
+        OXY_STATE_DIR: /workspace/oxy_data
+        EMPTY_VAR: ""
+        VALID_VAR: "value"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: VALID_VAR
+            value: "value"
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: EMPTY_VAR
+
+  - it: should not duplicate OXY_STATE_DIR or OXY_DATABASE_URL in custom env loop
+    set:
+      env:
+        OXY_STATE_DIR: /custom/state
+        OXY_DATABASE_URL: "postgresql://user:pass@host:5432/db"
+        CUSTOM_VAR: "value"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_STATE_DIR
+            value: "/custom/state"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_DATABASE_URL
+            value: "postgresql://user:pass@host:5432/db"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CUSTOM_VAR
+            value: "value"
+
+  - it: should support multiple custom environment variables with special characters
+    set:
+      env:
+        API_KEY: "sk-1234567890abcdef"
+        WEBHOOK_URL: "https://example.com/webhook"
+        MAX_WORKERS: "10"
+        ENABLE_FEATURE: "true"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: API_KEY
+            value: "sk-1234567890abcdef"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: WEBHOOK_URL
+            value: "https://example.com/webhook"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MAX_WORKERS
+            value: "10"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ENABLE_FEATURE
+            value: "true"
+
+  - it: should work with only custom environment variables and no special OXY vars
+    set:
+      env:
+        MY_VAR_1: "value1"
+        MY_VAR_2: "value2"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MY_VAR_1
+            value: "value1"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MY_VAR_2
+            value: "value2"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_STATE_DIR
+            value: "/workspace/oxy_data"
+
+  # =======================
+  # Init Containers
+  # =======================
+
+  - it: should not have init containers by default
+    asserts:
+      - notExists:
+          path: spec.template.spec.initContainers
+
+  - it: should add extra init containers
+    set:
+      extraInitContainers:
+        - name: custom-init
+          image: busybox:1.36
+          command: ["echo", "hello"]
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.initContainers
+          count: 1
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: custom-init
+
+  # =======================
+  # Internal Port Tests
+  # =======================
+
+  - it: should not include internal port flags by default
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--internal-host.*"
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--internal-port.*"
+
+  - it: should expose internal container port when internalHost is set
+    set:
+      app:
+        internalHost: "0.0.0.0"
+        internalPort: 3001
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers[0].ports
+          count: 2
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            containerPort: 3000
+            protocol: TCP
+            name: traffic-port
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            containerPort: 3001
+            protocol: TCP
+            name: internal-port
+
+  - it: should include internal port flags in command when enabled
+    set:
+      app:
+        internalHost: "0.0.0.0"
+        internalPort: 3001
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--internal-host 0\\.0\\.0\\.0.*"
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--internal-port 3001.*"
+
+  - it: should support custom internal host and port
+    set:
+      app:
+        internalHost: "127.0.0.1"
+        internalPort: 8001
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers[0].ports
+          count: 2
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            containerPort: 8001
+            protocol: TCP
+            name: internal-port
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--internal-host 127\\.0\\.0\\.1.*"
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: ".*--internal-port 8001.*"
+
+  # =======================
+  # Sidecar Containers
+  # =======================
+
+  - it: should add extra sidecar containers
+    set:
+      extraSidecars:
+        - name: monitoring
+          image: prom/node-exporter:v1.6.0
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 2
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: monitoring
+
+  # =======================
+  # Persistence & Volumes
+  # =======================
+
+  - it: should configure persistence correctly
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].metadata.name
+          value: workspace
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: 20Gi
+
+  - it: should allow custom persistence settings
+    set:
+      persistence:
+        size: 100Gi
+        storageClassName: fast-ssd
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: 100Gi
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.storageClassName
+          value: fast-ssd
+
+  - it: should omit workspace volumeClaimTemplate when persistence is disabled
+    set:
+      persistence:
+        enabled: false
+    asserts:
+      - notExists:
+          path: spec.volumeClaimTemplates
+
+  - it: should add emptyDir workspace volume when persistence is disabled
+    set:
+      persistence:
+        enabled: false
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: workspace
+            emptyDir: {}
+
+  - it: should mount extraVolumes into the pod
+    set:
+      extraVolumes:
+        - name: s3files
+          persistentVolumeClaim:
+            claimName: my-s3files-pvc
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: s3files
+            persistentVolumeClaim:
+              claimName: my-s3files-pvc
+
+  - it: should add extraVolumeMounts to the main container
+    set:
+      extraVolumeMounts:
+        - name: s3files
+          mountPath: /workspace/oxy_data
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: s3files
+            mountPath: /workspace/oxy_data
+
+  - it: should support extraVolumes and extraVolumeMounts together with persistence disabled
+    set:
+      persistence:
+        enabled: false
+      extraVolumes:
+        - name: oxy-state-s3files
+          persistentVolumeClaim:
+            claimName: oxy-app-s3files-pvc
+      extraVolumeMounts:
+        - name: oxy-state-s3files
+          mountPath: /workspace/oxy_data
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: workspace
+            emptyDir: {}
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: oxy-state-s3files
+            persistentVolumeClaim:
+              claimName: oxy-app-s3files-pvc
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: oxy-state-s3files
+            mountPath: /workspace/oxy_data
+      - notExists:
+          path: spec.volumeClaimTemplates
+
+  - it: should mount workspace volume in main container
+    set:
+      persistence:
+        enabled: true
+        mountPath: "/data"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: workspace
+            mountPath: "/data"
+
+  - it: should have no extra volumes by default
+    asserts:
+      - isNullOrEmpty:
+          path: spec.template.spec.volumes
+
+  # =======================
+  # External Secrets
+  # =======================
+
+  - it: should mount environment secrets when specified
+    set:
+      externalSecrets:
+        envSecretNames:
+          - "app-secrets"
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: env-secret-0
+            secret:
+              secretName: "app-secrets"
+              optional: true
+
+  # =======================
+  # Resource Configuration
+  # =======================
+
+  - it: should set default resource limits and requests
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 250m
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 512Mi
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 1000m
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 2Gi
+
+  - it: should allow custom resource configuration
+    set:
+      resources:
+        requests:
+          cpu: 500m
+          memory: 1Gi
+        limits:
+          cpu: 2000m
+          memory: 4Gi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 500m
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 4Gi
+
+  # =======================
+  # Health Probes
+  # =======================
+
+  - it: should configure default health probes
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: "/"
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.port
+          value: 3000
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: "/"
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.port
+          value: 3000
+
+  - it: should not render a startupProbe (readiness is the startup gate in cloud mode)
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].startupProbe
+
+  - it: should allow custom probe configuration
+    set:
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 3000
+        initialDelaySeconds: 10
+        periodSeconds: 30
+      readinessProbe:
+        httpGet:
+          path: /ready
+          port: 3000
+        initialDelaySeconds: 10
+        periodSeconds: 5
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: "/health"
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.initialDelaySeconds
+          value: 10
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: "/ready"
+
+  # =======================
+  # Security & Service Account
+  # =======================
+
+  - it: should apply security context
+    set:
+      securityContext:
+        fsGroup: 2000
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 2000
+
+  - it: should use correct service account
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: RELEASE-NAME-oxy-app

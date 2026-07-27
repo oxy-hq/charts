@@ -1,0 +1,42 @@
+suite: no bundled databases
+# Guards the whole point of the `oxy` chart vs its `oxy-app` predecessor: it
+# carries NO database subchart dependencies (see Chart.yaml — no `dependencies:`)
+# and the app-DB bundling machinery is gone. External Postgres/ClickHouse are
+# reached purely via env (OXY_DATABASE_* / OXY_CLICKHOUSE_*).
+templates:
+  - statefulset.yaml
+tests:
+  - it: renders no wait-for-postgres / wait-for-clickhouse init container (default)
+    asserts:
+      - notContains:
+          path: spec.template.spec.initContainers
+          content: { name: wait-for-postgres }
+      - notContains:
+          path: spec.template.spec.initContainers
+          content: { name: wait-for-clickhouse }
+
+  - it: cannot be coerced into a DB init container even with the legacy flags set
+    # The wait-for-DB machinery was removed, so flipping the old subchart flags
+    # is inert — proves the chart can't bundle/wait-on an in-cluster database.
+    set:
+      database:
+        postgres: { enabled: true }
+        clickhouse: { enabled: true }
+    asserts:
+      - notContains:
+          path: spec.template.spec.initContainers
+          content: { name: wait-for-postgres }
+      - notContains:
+          path: spec.template.spec.initContainers
+          content: { name: wait-for-clickhouse }
+
+  - it: passes an external OXY_DATABASE_URL straight through from env
+    set:
+      env:
+        OXY_DATABASE_URL: "postgresql://oxy:pw@ext-postgres.example:5432/oxydb"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_DATABASE_URL
+            value: "postgresql://oxy:pw@ext-postgres.example:5432/oxydb"

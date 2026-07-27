@@ -1,0 +1,48 @@
+================================================================================
+{{ .Chart.Name }} {{ .Chart.AppVersion }} — release {{ .Release.Name }}
+================================================================================
+
+Cloud topology (external Postgres; no local/git-sync mode):
+
+ide fleet:
+  StatefulSet:        {{ include "oxy-app.fullname" . }}
+  Replicas:           1 (single-writer ide; owns the /workspace RWO volume)
+  Role:               IDE / files / compile. Runs in-process workers and, when
+                      `appServer.inprocGlobalWorker: true`, drives the global
+                      task queue (the compile boundary).
+
+Serve fleet:
+{{- if .Values.serveFleet.enabled }}
+  Deployment:         {{ include "oxy-app.fullname" . }}-serve
+  Replicas:           {{ .Values.serveFleet.replicaCount }}
+  Role:               stateless `oxy serve --no-workers` replicas serving the
+                      compiled read paths (customer-apps, external API, chat,
+                      runtime serving). No PVC — safe to scale / roll freely.
+{{- else }}
+  Status:             disabled (single-instance install — the ide StatefulSet
+                      serves every request). Set `serveFleet.enabled=true` for
+                      the HA topology.
+{{- end }}
+
+Worker fleet:
+{{- if .Values.worker.enabled }}
+  Deployment:         {{ include "oxy-app.fullname" . }}-worker
+  Replicas:           {{ .Values.worker.replicaCount }} (or HPA bounds when enabled)
+  Health port:        {{ .Values.worker.healthPort | default 8081 }}
+  Liveness contract:  /healthz on the worker pod returns 200 while the durable
+                      transport + router + reaper are all alive.
+{{- else }}
+  Status:             disabled (no worker resources rendered). The ide
+                      StatefulSet drains `agentic_task_queue` in-process. Set
+                      `worker.enabled=true` to scale workers independently.
+{{- end }}
+
+Coordination surface:
+  All fleets must point at the SAME external Postgres. `OXY_DATABASE_URL` flows
+  through `env.OXY_DATABASE_URL` / the external-secret pipeline for the ide
+  StatefulSet, the serve fleet and the worker Deployment.
+
+References:
+  - worker fleet guide: charts/oxy/docs/worker-fleet.md
+  - upstream design:    oxygen-internal#2409
+  - operator runbook:   oxygen-internal `internal-docs/worker-fleet.md`

@@ -1,0 +1,39 @@
+# Integration test with default minimal configuration
+#
+# Smallest helm-install shape that the chart will actually start. Modern
+# oxy serve requires OXY_DATABASE_URL — there is no sqlite fallback
+# (intentional, see statefulset.yaml comment on the OXY_DATABASE_URL
+# branch). This chart bundles no database, so point OXY_DATABASE_URL at an
+# EXTERNAL Postgres (deploy it as its own release; see README "Quick start").
+nameOverride: "oxy-test-default"
+fullnameOverride: "oxy-test-default"
+
+app:
+  image: "ghcr.io/oxy-hq/oxygen"
+  # Match Chart.appVersion so we exercise the binary that ships with the
+  # chart, not a half-year-old tag.
+  imageTag: "0.5.49"
+  imagePullPolicy: "IfNotPresent"
+
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3000
+
+# External Postgres connection (this chart bundles no database).
+env:
+  OXY_DATABASE_URL: "postgresql://testuser:testpass@test-default-db:5432/testdb"
+
+# Bumped from 128Mi → 512Mi. The Rust binary plus startup migrations
+# need headroom; 128Mi was tight enough that pods spent the full 3min
+# install timeout in OOMKilled / CrashLoop without ever passing
+# readiness. CPU stays modest because kind nodes are constrained.
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
