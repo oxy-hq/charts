@@ -54,4 +54,6 @@ jobs:
       - name: Run chart-testing (lint)
         if: github.event_name != 'pull_request' || steps.list-changed.outputs.changed == 'true'
         run: |
-          ct lint --target-branch ${{ github.event.repository.default_branch }} --config ct.yaml --charts charts/oxy-start
+          # Lint whatever lightweight chart changed (oxy-start or oxy) rather than
+          # a hardcoded chart — ct lint uses the target-branch diff to pick them.
+          ct lint --target-branch ${{ github.event.repository.default_branch }} --config ct.yaml
