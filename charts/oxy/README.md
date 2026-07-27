@@ -90,11 +90,10 @@ envs — proven byte-identical to `oxy-app`, modulo removed comments):
   `oxy serve --no-workers`; that is intrinsic to its role, not a toggle.)
 - **Bundled databases** — the top-level `database:` / `clickhouse:` /
   `clickhouseSubchart:` values. Postgres and ClickHouse are external.
-
-**Remaining:** the `otel-collector` sidecar is the only ClickHouse consumer in
-the chart, and it is now fully self-contained under `otelCollector.clickhouse.*`
-(external endpoint + credentials). It is **disabled in every environment**
-(`otelCollector.enabled: false`).
+- **The otel-collector sidecar** — observability is handled in-house: the app
+  writes directly to ClickHouse (`OXY_OBSERVABILITY_BACKEND` / `OXY_CLICKHOUSE_*`
+  env), so the OTel collector, its ConfigMap, and the `otelCollector:` values
+  are all gone. There is no ClickHouse dependency left in the chart at all.
 
 **Follow-ups to the 2026 bar:** DRY the `OXY_DATABASE_URL` pass-through into a
 `_helpers.tpl` partial (or an in-house `oxy-common` library chart shared with

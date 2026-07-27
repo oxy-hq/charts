@@ -36,10 +36,6 @@ spec:
         {{- if .Values.serveFleet.enabled }}
         app.kubernetes.io/component: ide
         {{- end }}
-      {{- if .Values.otelCollector.enabled }}
-      annotations:
-        checksum/otel-config: {{ include (print $.Template.BasePath "/otel-configmap.yaml") . | sha256sum }}
-      {{- end }}
     spec:
       {{- $sa := include "oxy-app.serviceAccountName" . }}
       {{- if ne $sa "" }}
@@ -208,60 +204,6 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
 
-        {{- if .Values.otelCollector.enabled }}
-        - name: otel-collector
-          image: "{{ .Values.otelCollector.image }}:{{ .Values.otelCollector.imageTag }}"
-          imagePullPolicy: {{ .Values.otelCollector.imagePullPolicy }}
-          command:
-            - "/otelcol-contrib"
-            - "--config=/etc/otelcol/config.yaml"
-          ports:
-            - containerPort: {{ .Values.otelCollector.ports.otlpGrpc }}
-              protocol: TCP
-              name: otlp-grpc
-            - containerPort: {{ .Values.otelCollector.ports.otlpHttp }}
-              protocol: TCP
-              name: otlp-http
-            - containerPort: {{ .Values.otelCollector.ports.metrics }}
-              protocol: TCP
-              name: metrics
-          {{- if .Values.otelCollector.clickhouse.passwordExistingSecret }}
-          env:
-            - name: OXY_CLICKHOUSE_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.otelCollector.clickhouse.passwordExistingSecret }}
-                  key: {{ default "password" .Values.otelCollector.clickhouse.passwordSecretKey }}
-          {{- end }}
-          volumeMounts:
-            - name: otel-collector-config
-              mountPath: /etc/otelcol
-              readOnly: true
-          {{- with .Values.otelCollector.resources }}
-          resources:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-          startupProbe:
-            httpGet:
-              path: /
-              port: 13133
-            initialDelaySeconds: 5
-            periodSeconds: 5
-            failureThreshold: 12
-          livenessProbe:
-            httpGet:
-              path: /
-              port: 13133
-            periodSeconds: 30
-            failureThreshold: 3
-          readinessProbe:
-            httpGet:
-              path: /
-              port: 13133
-            periodSeconds: 10
-            failureThreshold: 3
-        {{- end }}
-
         {{- /* Render user-supplied sidecars after built-in sidecars */}}
         {{- with .Values.extraSidecars }}
         {{- toYaml . | nindent 8 }}
@@ -282,12 +224,6 @@ spec:
           secret:
             secretName: {{ $fileSecret.name | quote }}
             optional: true
-        {{- end }}
-        {{- /* OpenTelemetry Collector config volume */}}
-        {{- if .Values.otelCollector.enabled }}
-        - name: otel-collector-config
-          configMap:
-            name: {{ include "oxy-app.fullname" . }}-otel-collector
         {{- end }}
         {{- if not .Values.persistence.enabled }}
         - name: workspace
