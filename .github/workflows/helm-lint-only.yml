@@ -1,7 +1,7 @@
 name: Helm lint-only (lightweight charts)
 
 # Lightweight workflow for charts that only need linting validation
-# Currently used for: oxy-start
+# Currently used for: oxy-start, oxy
 # These charts don't require extensive integration testing
 
 on:
@@ -10,11 +10,13 @@ on:
       - main
     paths:
       - "charts/oxy-start/**"
+      - "charts/oxy/**"
   pull_request:
     branches:
       - main
     paths:
       - "charts/oxy-start/**"
+      - "charts/oxy/**"
 
 jobs:
   lint:
