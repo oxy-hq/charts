@@ -65,7 +65,7 @@
         "enabled": { "type": "boolean" },
         "size": { "type": "string" },
         "accessMode": { "type": "string" },
-        "storageClass": { "type": "string" },
+        "storageClassName": { "type": "string" },
         "mountPath": { "type": "string" }
       }
     },
