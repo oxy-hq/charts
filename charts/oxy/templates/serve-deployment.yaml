@@ -34,6 +34,7 @@ metadata:
     app.kubernetes.io/component: serve
 spec:
   replicas: {{ .Values.serveFleet.replicaCount }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
   selector:
     matchLabels:
       {{- include "oxy-app.selectorLabels" . | nindent 6 }}

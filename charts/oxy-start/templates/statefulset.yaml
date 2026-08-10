@@ -18,6 +18,7 @@ metadata:
 spec:
   serviceName: {{ include "oxy-start.fullname" . }}-headless
   replicas: 1
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
   {{- if gt (int (.Values.minReadySeconds | default 0)) 0 }}
   minReadySeconds: {{ .Values.minReadySeconds }}
   {{- end }}
