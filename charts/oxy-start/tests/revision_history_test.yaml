@@ -1,0 +1,28 @@
+suite: revisionHistoryLimit on the StatefulSet
+templates:
+  - statefulset.yaml
+
+tests:
+  - it: bounds ControllerRevision history at the chart default
+    asserts:
+      - equal:
+          path: spec.revisionHistoryLimit
+          value: 3
+
+  - it: honors an override
+    set:
+      revisionHistoryLimit: 1
+    asserts:
+      - equal:
+          path: spec.revisionHistoryLimit
+          value: 1
+
+  # 0 is a legal Kubernetes value meaning "keep no history"; it must render as 0
+  # rather than being swallowed by a falsy-check and falling back to the default.
+  - it: renders an explicit 0 rather than falling back to the default
+    set:
+      revisionHistoryLimit: 0
+    asserts:
+      - equal:
+          path: spec.revisionHistoryLimit
+          value: 0

@@ -1,0 +1,63 @@
+suite: revisionHistoryLimit on all workloads
+templates:
+  - statefulset.yaml
+  - serve-deployment.yaml
+  - worker-deployment.yaml
+
+set:
+  serveFleet:
+    enabled: true
+  worker:
+    enabled: true
+  appServer:
+    disableInprocessWorkers: true
+
+tests:
+  - it: bounds StatefulSet ControllerRevision history at the chart default
+    template: statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.revisionHistoryLimit
+          value: 3
+
+  - it: bounds serve-fleet ReplicaSet history at the chart default
+    template: serve-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.revisionHistoryLimit
+          value: 3
+
+  - it: bounds worker-fleet ReplicaSet history at the chart default
+    template: worker-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.revisionHistoryLimit
+          value: 3
+
+  - it: honors an override across every workload
+    set:
+      revisionHistoryLimit: 1
+    asserts:
+      - equal:
+          path: spec.revisionHistoryLimit
+          value: 1
+          template: statefulset.yaml
+      - equal:
+          path: spec.revisionHistoryLimit
+          value: 1
+          template: serve-deployment.yaml
+      - equal:
+          path: spec.revisionHistoryLimit
+          value: 1
+          template: worker-deployment.yaml
+
+  # 0 is a legal Kubernetes value meaning "keep no history"; it must render as 0
+  # rather than being swallowed by a falsy-check and falling back to the default.
+  - it: renders an explicit 0 rather than falling back to the default
+    template: statefulset.yaml
+    set:
+      revisionHistoryLimit: 0
+    asserts:
+      - equal:
+          path: spec.revisionHistoryLimit
+          value: 0

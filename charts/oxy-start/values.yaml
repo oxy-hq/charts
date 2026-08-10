@@ -166,6 +166,18 @@ terminationGracePeriodSeconds: 30
 # increasing the preStop sleep and terminationGracePeriodSeconds above.
 minReadySeconds: 0
 
+# revisionHistoryLimit: how many old ControllerRevisions Kubernetes retains for
+# `kubectl rollout undo`. Kubernetes defaults to 10, which is far more history
+# than we ever roll back through — we roll forward by bumping app.imageTag
+# through git, and argocd-image-updater bumps this chart's tag frequently, so
+# the revisions pile up fast. 3 keeps a real rollback window without the
+# pile-up.
+#
+# Changing this does NOT restart pods — it is not part of the pod-template hash.
+# Kubernetes prunes down to the new limit on the next controller sync.
+# Set to 0 to keep no history at all (disables `kubectl rollout undo`).
+revisionHistoryLimit: 3
+
 # Security context
 securityContext:
   fsGroup: 1000
