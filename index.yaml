@@ -3,6 +3,28 @@ entries:
   oxy:
   - apiVersion: v2
     appVersion: 0.5.49
+    created: "2026-08-10T10:32:35.518381118Z"
+    description: Deploys only the Oxy application workloads — the ide StatefulSet,
+      the stateless serve and worker fleets, and the pre-upgrade migrate Job. Postgres,
+      ClickHouse and Airhouse are external — managed outside this chart (RDS/CNPG,
+      the ClickHouse operator, the airhouse chart) and wired in via connection env
+      vars (OXY_DATABASE_*, OXY_CLICKHOUSE_*, AIRHOUSE_*). No bundled databases, no
+      subchart dependencies.
+    digest: cac96e8829a60aa1246e2caded14e61329428e0cd159d0edced2a5305d2a4a2e
+    keywords:
+    - oxy
+    maintainers:
+    - email: hello@oxy.tech
+      name: Oxy Team
+    - email: luong@oxy.tech
+      name: Luong Vo
+    name: oxy
+    type: application
+    urls:
+    - https://github.com/oxy-hq/charts/releases/download/oxy-1.0.2/oxy-1.0.2.tgz
+    version: 1.0.2
+  - apiVersion: v2
+    appVersion: 0.5.49
     created: "2026-07-27T15:33:37.616212995Z"
     description: Deploys only the Oxy application workloads — the ide StatefulSet,
       the stateless serve and worker fleets, and the pre-upgrade migrate Job. Postgres,
@@ -46,6 +68,33 @@ entries:
     - https://github.com/oxy-hq/charts/releases/download/oxy-1.0.0/oxy-1.0.0.tgz
     version: 1.0.0
   oxy-app:
+  - apiVersion: v2
+    appVersion: 0.5.49
+    created: "2026-08-10T10:32:35.661072328Z"
+    dependencies:
+    - condition: database.postgres.enabled
+      name: postgres
+      repository: https://groundhog2k.github.io/helm-charts/
+      version: 1.6.1
+    - alias: clickhouseSubchart
+      condition: database.clickhouse.enabled
+      name: clickhouse
+      repository: oci://registry-1.docker.io/bitnamicharts
+      version: 9.4.4
+    description: A Helm chart for Oxy application deployment on kubernetes
+    digest: a44069b5b35b4e1e93521692879096bb8c4bb19a6e3deec2d567c03f6090882f
+    keywords:
+    - oxy
+    maintainers:
+    - email: hello@oxy.tech
+      name: Oxy Team
+    - email: luong@oxy.tech
+      name: Luong Vo
+    name: oxy-app
+    type: application
+    urls:
+    - https://github.com/oxy-hq/charts/releases/download/oxy-app-0.6.9/oxy-app-0.6.9.tgz
+    version: 0.6.9
   - apiVersion: v2
     appVersion: 0.5.49
     created: "2026-07-06T18:08:26.144625701Z"
@@ -1369,6 +1418,29 @@ entries:
   oxy-start:
   - apiVersion: v2
     appVersion: 0.5.49
+    created: "2026-08-10T10:32:35.777683096Z"
+    description: Oxy with Docker-in-Docker — self-contained deployment using `oxy
+      start` to manage all services internally
+    digest: 9e3a9ff72654df424eee89140df53e63c48048445fd4ace9c0ef97602634db09
+    home: https://oxy.tech
+    keywords:
+    - oxy
+    - docker-in-docker
+    - dind
+    maintainers:
+    - name: Oxy Team
+      url: https://oxy.tech
+    - name: Luong Vo
+      url: https://github.com/luong-komorebi
+    name: oxy-start
+    sources:
+    - https://github.com/oxy-hq/charts
+    type: application
+    urls:
+    - https://github.com/oxy-hq/charts/releases/download/oxy-start-0.2.10/oxy-start-0.2.10.tgz
+    version: 0.2.10
+  - apiVersion: v2
+    appVersion: 0.5.49
     created: "2026-05-04T06:43:14.947911064Z"
     description: Oxy with Docker-in-Docker — self-contained deployment using `oxy
       start` to manage all services internally
@@ -1712,4 +1784,4 @@ entries:
     urls:
     - https://github.com/oxy-hq/charts/releases/download/oxy-start-0.1.0/oxy-start-0.1.0.tgz
     version: 0.1.0
-generated: "2026-07-27T15:33:37.616386981Z"
+generated: "2026-08-10T10:32:35.777975263Z"
