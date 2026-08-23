@@ -16,7 +16,8 @@ Deploys only the Oxy application workloads — the ide StatefulSet, the stateles
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | affinity | object | `{}` |  |
-| app.command | list | `[]` |  |
+| app.args | list | `[]` | Override the container args. Overrides the image CMD only, so the image ENTRYPOINT (tini) stays PID 1 and reaps orphans. Setting both renders both, per normal Kubernetes semantics. |
+| app.command | list | `[]` | Override the container command. Replaces the image ENTRYPOINT — prefer `app.args`. |
 | app.image | string | `"ghcr.io/oxy-hq/oxygen"` |  |
 | app.imagePullPolicy | string | `"IfNotPresent"` |  |
 | app.imageTag | string | `""` |  |
@@ -101,7 +102,8 @@ Deploys only the Oxy application workloads — the ide StatefulSet, the stateles
 | serveFleet.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].podAffinityTerm.labelSelector.matchLabels."app.kubernetes.io/component" | string | `"serve"` |  |
 | serveFleet.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].podAffinityTerm.topologyKey | string | `"kubernetes.io/hostname"` |  |
 | serveFleet.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].weight | int | `100` |  |
-| serveFleet.command | list | `[]` |  |
+| serveFleet.args | list | `[]` | Override the container args, keeping the image ENTRYPOINT. Setting both renders both, per normal Kubernetes semantics. |
+| serveFleet.command | list | `[]` | Override the container command. Replaces the image ENTRYPOINT — prefer `serveFleet.args`. |
 | serveFleet.containerSecurityContext | object | `{}` |  |
 | serveFleet.enabled | bool | `true` |  |
 | serveFleet.env | object | `{}` |  |
@@ -154,7 +156,8 @@ Deploys only the Oxy application workloads — the ide StatefulSet, the stateles
 | terminationGracePeriodSeconds | int | `30` |  |
 | tolerations | string | `nil` |  |
 | worker.affinity | object | `{}` |  |
-| worker.command | list | `[]` |  |
+| worker.args | list | `[]` | Override the container args, keeping the image ENTRYPOINT. Setting both renders both, per normal Kubernetes semantics. |
+| worker.command | list | `[]` | Override the container command. Replaces the image ENTRYPOINT — prefer `worker.args`. |
 | worker.containerSecurityContext | object | `{}` |  |
 | worker.enabled | bool | `true` |  |
 | worker.env.OXY_WORKER_MAX_INFLIGHT | string | `"32"` |  |

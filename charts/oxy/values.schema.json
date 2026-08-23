@@ -14,6 +14,7 @@
         "imageTag": { "type": "string" },
         "imagePullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] },
         "command": { "type": "array", "items": { "type": "string" } },
+        "args": { "type": "array", "items": { "type": "string" } },
         "port": { "type": "integer" },
         "internalHost": { "type": "string" }
       }
