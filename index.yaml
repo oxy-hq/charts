@@ -3,6 +3,28 @@ entries:
   oxy:
   - apiVersion: v2
     appVersion: 0.5.49
+    created: "2026-08-23T13:51:57.737413039Z"
+    description: Deploys only the Oxy application workloads — the ide StatefulSet,
+      the stateless serve and worker fleets, and the pre-upgrade migrate Job. Postgres,
+      ClickHouse and Airhouse are external — managed outside this chart (RDS/CNPG,
+      the ClickHouse operator, the airhouse chart) and wired in via connection env
+      vars (OXY_DATABASE_*, OXY_CLICKHOUSE_*, AIRHOUSE_*). No bundled databases, no
+      subchart dependencies.
+    digest: c0263e862ba02866fc42c63a96d63cc420867bcf0afd08bc24af3236d090a9cf
+    keywords:
+    - oxy
+    maintainers:
+    - email: hello@oxy.tech
+      name: Oxy Team
+    - email: luong@oxy.tech
+      name: Luong Vo
+    name: oxy
+    type: application
+    urls:
+    - https://github.com/oxy-hq/charts/releases/download/oxy-1.0.3/oxy-1.0.3.tgz
+    version: 1.0.3
+  - apiVersion: v2
+    appVersion: 0.5.49
     created: "2026-08-10T10:32:35.518381118Z"
     description: Deploys only the Oxy application workloads — the ide StatefulSet,
       the stateless serve and worker fleets, and the pre-upgrade migrate Job. Postgres,
@@ -1784,4 +1806,4 @@ entries:
     urls:
     - https://github.com/oxy-hq/charts/releases/download/oxy-start-0.1.0/oxy-start-0.1.0.tgz
     version: 0.1.0
-generated: "2026-08-10T10:32:35.777975263Z"
+generated: "2026-08-23T13:51:57.737575079Z"
