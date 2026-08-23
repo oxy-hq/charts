@@ -20,7 +20,22 @@ app:
   # Optional override for the container command. When empty, the chart will
   # use the default shell wrapper that runs `oxy serve` (readonly if git disabled).
   # Example: ["/app/bin/oxy", "serve"]
+  #
+  # NOTE: a Kubernetes `command` REPLACES the image's ENTRYPOINT. The oxy image
+  # entrypoints on `/usr/bin/tini --`, so overriding `command` drops tini and
+  # leaves the oxy binary as PID 1 — which does not reap orphaned grandchildren
+  # (e.g. the `git remote-https` helper `git fetch` leaves behind), so they pile
+  # up as zombies until the cgroup's pids.max is exhausted. Prefer `args` below,
+  # which overrides only the image CMD and keeps the entrypoint in front.
   command: []
+  # Optional override for the container args. Overrides the image CMD while
+  # leaving the ENTRYPOINT (tini) in place, so PID 1 stays an init that reaps
+  # orphans. This is the preferred override; use `command` only when the
+  # entrypoint itself must be replaced. Setting both renders both, with the
+  # usual Kubernetes semantics (command replaces the entrypoint, args replace
+  # the CMD passed to it).
+  # Example: ["oxy", "serve", "--enterprise"]
+  args: []
   # Internal API port configuration (optional)
   # The internal API serves the same routes with authentication bypassed (auto-authenticated as internal user)
   # Leave internalHost empty to disable the internal API
@@ -480,7 +495,13 @@ serveFleet:
     pullPolicy: ""
   # Override the container command. When empty, the chart uses
   #   exec oxy serve --no-workers
+  # Replaces the image ENTRYPOINT (tini) — prefer `args` below. See app.command.
   command: []
+  # Override the container args. Overrides the image CMD only, keeping the
+  # entrypoint (tini) as PID 1. Setting both `command` and `args` renders both,
+  # with the usual Kubernetes semantics.
+  # Example: ["oxy", "serve", "--no-workers"]
+  args: []
   # Service surface. ClusterIP only — exposure happens via the chart's
   # main Ingress when `ingress.enabled` is on.
   service:
@@ -595,7 +616,13 @@ worker:
     pullPolicy: ""
   # Override the container command. When empty, the chart uses
   #   exec oxy worker --health-port <healthPort> [--skip-migrations]
+  # Replaces the image ENTRYPOINT (tini) — prefer `args` below. See app.command.
   command: []
+  # Override the container args. Overrides the image CMD only, keeping the
+  # entrypoint (tini) as PID 1. Setting both `command` and `args` renders both,
+  # with the usual Kubernetes semantics.
+  # Example: ["oxy", "worker", "--health-port", "3001"]
+  args: []
   # Worker process tunables. These mirror the `oxy worker` env vars / flags
   # documented in oxygen-internal `internal-docs/worker-fleet.md`.
   env:

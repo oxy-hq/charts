@@ -82,18 +82,26 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+          {{- $serveArgs := and .Values.serveFleet.args (gt (len .Values.serveFleet.args) 0) }}
           {{- if and .Values.serveFleet.command (gt (len .Values.serveFleet.command) 0) }}
           command:
             {{- range .Values.serveFleet.command }}
             - {{ . | quote }}
             {{- end }}
-          {{- else }}
+          {{- else if not $serveArgs }}
+          {{- /* Replaces the image ENTRYPOINT — use serveFleet.args to keep it. */}}
           # Default: HTTP-only, no in-process workers, no workspace FS.
           # Migrations are owned by the StatefulSet.
           command:
             - "sh"
             - "-c"
             - "exec oxy serve --no-workers"
+          {{- end }}
+          {{- if $serveArgs }}
+          args:
+            {{- range .Values.serveFleet.args }}
+            - {{ . | quote }}
+            {{- end }}
           {{- end }}
           ports:
             - name: http

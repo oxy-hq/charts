@@ -12,7 +12,7 @@ type: application
 # subcharts removed. Renders byte-identical workloads to oxy-app for external-DB
 # values (nameOverride keeps resource names), so adoption is a drop-in per-env
 # chart swap. See README.md.
-version: 1.0.2
+version: 1.0.3
 appVersion: "0.5.49"
 keywords:
   - oxy

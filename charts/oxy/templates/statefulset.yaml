@@ -58,17 +58,27 @@ spec:
         # Main Application Container
         - name: {{ include "oxy-app.name" . }}
           image: "{{ .Values.app.image }}:{{ default .Chart.AppVersion .Values.app.imageTag }}"
+          {{- $appArgs := and .Values.app.args (gt (len .Values.app.args) 0) }}
           {{- if and .Values.app.command (gt (len .Values.app.command) 0) }}
           command:
             {{- range .Values.app.command }}
             - {{ . | quote }}
             {{- end }}
-          {{- else }}
+          {{- else if not $appArgs }}
+          {{- /* No override: the chart's own shell wrapper. This REPLACES the
+                 image ENTRYPOINT — use app.args instead when the entrypoint
+                 must stay in front of the process (see values.yaml). */}}
           command:
             - sh
             - -c
             - |
               exec oxy serve{{- if .Values.app.internalHost }} --internal-host {{ .Values.app.internalHost }} --internal-port {{ .Values.app.internalPort }}{{- end }}
+          {{- end }}
+          {{- if $appArgs }}
+          args:
+            {{- range .Values.app.args }}
+            - {{ . | quote }}
+            {{- end }}
           {{- end }}
           ports:
             - containerPort: {{ .Values.app.port }}

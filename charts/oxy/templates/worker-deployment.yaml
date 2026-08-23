@@ -76,17 +76,25 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+          {{- $workerArgs := and .Values.worker.args (gt (len .Values.worker.args) 0) }}
           {{- if and .Values.worker.command (gt (len .Values.worker.command) 0) }}
           command:
             {{- range .Values.worker.command }}
             - {{ . | quote }}
             {{- end }}
-          {{- else }}
+          {{- else if not $workerArgs }}
+          {{- /* Replaces the image ENTRYPOINT — use worker.args to keep it. */}}
           command:
             - sh
             - -c
             - |
               exec oxy worker --health-port {{ .Values.worker.healthPort }}{{- if .Values.worker.skipMigrations }} --skip-migrations{{- end }}
+          {{- end }}
+          {{- if $workerArgs }}
+          args:
+            {{- range .Values.worker.args }}
+            - {{ . | quote }}
+            {{- end }}
           {{- end }}
           ports:
             - name: health
