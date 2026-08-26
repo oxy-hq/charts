@@ -17,6 +17,8 @@ on:
     paths:
       - "charts/oxy-start/**"
       - "charts/oxy/**"
+      # Self-test: a change to this workflow should exercise this workflow.
+      - ".github/workflows/helm-lint-only.yml"
 
 jobs:
   lint:
@@ -41,6 +43,10 @@ jobs:
       - name: Set up chart-testing
         uses: helm/chart-testing-action@v2.8.0
 
+      - name: Install helm-unittest plugin
+        run: |
+          helm plugin install https://github.com/helm-unittest/helm-unittest --version v1.0.3 --verify=false
+
       - name: Run chart-testing (list-changed)
         id: list-changed
         if: github.event_name == 'pull_request'
@@ -57,3 +63,19 @@ jobs:
           # Lint whatever lightweight chart changed (oxy-start or oxy) rather than
           # a hardcoded chart — ct lint uses the target-branch diff to pick them.
           ct lint --target-branch ${{ github.event.repository.default_branch }} --config ct.yaml
+
+      # `ct lint` only parses and renders — it asserts nothing about WHAT is
+      # rendered. Both lightweight charts ship helm-unittest suites that were
+      # never executed by any workflow (helm-ci.yml is path-filtered to
+      # charts/oxy-app/**), so a chart could render the wrong container spec and
+      # still go green. Run them here; the whole suite takes under a second.
+      # Not gated on list-changed: the paths filter above already limits this
+      # workflow to these two charts, and a shared-file change should run both.
+      - name: Run unit tests (oxy, oxy-start)
+        run: |
+          export CI=true
+          for chart in oxy oxy-start; do
+            echo "::group::helm unittest charts/$chart"
+            helm unittest "charts/$chart" -f "tests/**/*_test.yaml"
+            echo "::endgroup::"
+          done
