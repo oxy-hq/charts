@@ -1,0 +1,91 @@
+suite: serve fleet inherits --enterprise from the ide
+templates:
+  - serve-deployment.yaml
+  - statefulset.yaml
+  - worker-deployment.yaml
+
+set:
+  serveFleet:
+    enabled: true
+
+tests:
+  # The regression this suite exists for: prod ran the ide with
+  # `--enterprise` and the serve fleet without it. The catch-all `/` ingress
+  # path routes GET /api/auth/config to the serve fleet, so the browser saw
+  # enterprise: false and the whole observability section vanished from the UI
+  # while spans kept landing in ClickHouse.
+  - it: appends --enterprise to the serve default when the ide runs with it
+    template: serve-deployment.yaml
+    set:
+      app:
+        args: ["oxy", "serve", "--enterprise"]
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command[2]
+          value: "exec oxy serve --no-workers --enterprise"
+
+  - it: also picks it up from app.command (the entrypoint-replacing form)
+    template: serve-deployment.yaml
+    set:
+      app:
+        command: ["sh", "-c", "exec oxy serve --enterprise"]
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command[2]
+          value: "exec oxy serve --no-workers --enterprise"
+
+  - it: does NOT add --enterprise when the ide is not enterprise
+    template: serve-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command[2]
+          value: "exec oxy serve --no-workers"
+
+  - it: leaves an explicit serveFleet.command verbatim
+    template: serve-deployment.yaml
+    set:
+      app:
+        args: ["oxy", "serve", "--enterprise"]
+      serveFleet:
+        command: ["sh", "-c", "exec oxy serve --no-workers"]
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command[2]
+          value: "exec oxy serve --no-workers"
+
+  - it: leaves an explicit serveFleet.args verbatim (no default command at all)
+    template: serve-deployment.yaml
+    set:
+      app:
+        args: ["oxy", "serve", "--enterprise"]
+      serveFleet:
+        args: ["oxy", "serve", "--no-workers"]
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].command
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value: ["oxy", "serve", "--no-workers"]
+
+  # `--enterprise` lives on ServeArgs only; `oxy worker` fails to parse it.
+  - it: never leaks --enterprise into the worker command
+    template: worker-deployment.yaml
+    set:
+      app:
+        args: ["oxy", "serve", "--enterprise"]
+      worker:
+        enabled: true
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "--enterprise"
+
+  - it: does not alter the ide's own command when app.args is set
+    template: statefulset.yaml
+    set:
+      app:
+        args: ["oxy", "serve", "--enterprise"]
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value: ["oxy", "serve", "--enterprise"]

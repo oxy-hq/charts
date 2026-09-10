@@ -90,10 +90,13 @@ spec:
           {{- else }}
           # Default: HTTP-only, no in-process workers, no workspace FS.
           # Migrations are owned by the StatefulSet.
+          # --enterprise is inherited from the ide (app.args / app.command):
+          # the catch-all ingress path sends /api/auth/config here, and the UI
+          # hides observability whenever that reports enterprise: false.
           command:
             - "sh"
             - "-c"
-            - "exec oxy serve --no-workers"
+            - "exec oxy serve --no-workers{{ if (include "oxy-app.enterprise" .) }} --enterprise{{ end }}"
           {{- end }}
           ports:
             - name: http
