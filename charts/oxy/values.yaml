@@ -494,7 +494,13 @@ serveFleet:
     tag: ""
     pullPolicy: ""
   # Override the container command. When empty, the chart uses
-  #   exec oxy serve --no-workers
+  #   exec oxy serve --no-workers [--enterprise]
+  # `--enterprise` is appended whenever the ide asks for it (i.e. `app.args` or
+  # `app.command` contains it). That is not cosmetic: the catch-all `/` ingress
+  # path routes GET /api/auth/config to THIS fleet, not the ide, and the web UI
+  # drops the whole observability section when that response says
+  # enterprise: false. Setting `command` (or `args`) here takes your value
+  # verbatim — include `--enterprise` yourself if the ide runs with it.
   # Replaces the image ENTRYPOINT (tini) — prefer `args` below. See app.command.
   command: []
   # Override the container args. Overrides the image CMD only, keeping the
