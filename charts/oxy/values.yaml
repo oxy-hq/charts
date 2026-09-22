@@ -544,6 +544,25 @@ serveFleet:
   env: {}
   extraEnv: []
   extraEnvFrom: []
+  # Prometheus `/metrics` on the serve fleet. 0 / unset = off (the default; the
+  # app defaults it off too).
+  #
+  # ONE value on purpose: it renders BOTH the `OXY_METRICS_PORT` env and a
+  # DECLARED container port named `metrics`. Those have to move together —
+  # a scrape config builds its target list from declared container ports, so
+  # env-without-declaration binds a listener nothing can discover (zero
+  # targets, no error), and declaration-without-env advertises a port nothing
+  # is listening on. Setting `serveFleet.env.OXY_METRICS_PORT` by hand instead
+  # gets you the first of those, so the chart refuses it — see the `fail` in
+  # serve-deployment.yaml.
+  #
+  # Scrape it BY NAME (`port: metrics`), never `targetPort`.
+  #
+  # ⚠️ Unauthenticated, and nothing in the chart makes it otherwise. Keeping it
+  # in-cluster is a network-policy property: no ingress, no LoadBalancer
+  # Service, no ALB target group. The body carries per-route latency and, for
+  # custom apps, org and app ids.
+  metricsPort: 0
   # Probes hit the REAL endpoints, which live under the /api nest
   # (public.rs → nested at /api). /api/live is an unconditional 200 (process
   # up — won't crashloop on a transient DB blip); /api/ready returns 503 unless

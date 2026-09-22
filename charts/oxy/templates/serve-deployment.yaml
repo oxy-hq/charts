@@ -1,4 +1,12 @@
 {{- if .Values.serveFleet.enabled }}
+{{- /* Setting the env by hand binds a listener that no scrape config can
+   discover: a VMPodScrape / ServiceMonitor builds its target list from
+   DECLARED container ports, so the result is zero targets and no error —
+   a cache of metrics nobody reads. `serveFleet.metricsPort` renders both
+   halves from one value, so fail loudly rather than render the trap. */}}
+{{- if and (hasKey .Values.serveFleet.env "OXY_METRICS_PORT") (not .Values.serveFleet.metricsPort) }}
+{{- fail "serveFleet.env.OXY_METRICS_PORT is set but serveFleet.metricsPort is not: the env alone binds a metrics listener on an UNDECLARED container port, which scrape discovery cannot see (zero targets, no error). Set serveFleet.metricsPort instead — it renders the env AND the declared port — and scrape it by name (port: metrics)." }}
+{{- end }}
 {{- /*
 Stateless oxy-serve fleet — see oxygen-internal `internal-docs/2026-06-06-compile-boundary-design.md`
 and the simplification doc at `2026-06-10-compile-boundary-simplification.md`.
@@ -110,7 +118,26 @@ spec:
             - name: http
               containerPort: 3000
               protocol: TCP
+            {{- if .Values.serveFleet.metricsPort }}
+            # DECLARED, not merely bound. A VMPodScrape / ServiceMonitor builds
+            # its target list from DECLARED container ports, so a bare
+            # `targetPort: <n>` that no container declares yields ZERO targets —
+            # with no error anywhere. The symptom is an endpoint happily serving
+            # metrics and a scrape pool with nothing in it. Scrape by name:
+            # `port: metrics`.
+            - name: metrics
+              containerPort: {{ .Values.serveFleet.metricsPort }}
+              protocol: TCP
+            {{- end }}
           env:
+            {{- if .Values.serveFleet.metricsPort }}
+            # Rendered from the SAME value as the port declaration above, so the
+            # two cannot disagree. Setting the env alone binds a listener
+            # nothing can discover; declaring the port alone advertises one that
+            # is not listening. One knob, both halves.
+            - name: OXY_METRICS_PORT
+              value: {{ .Values.serveFleet.metricsPort | quote }}
+            {{- end }}
             # Role classification — oxygen-internal PR #2505 routing guardrail.
             # Stateless fleet replica with no workspace volume mounted.
             # FS-touching routes (IDE pages, file CRUD, git, compile,
