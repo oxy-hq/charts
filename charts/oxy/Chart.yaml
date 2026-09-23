@@ -12,7 +12,11 @@ type: application
 # subcharts removed. Renders byte-identical workloads to oxy-app for external-DB
 # values (nameOverride keeps resource names), so adoption is a drop-in per-env
 # chart swap. See README.md.
-version: 1.0.4
+#
+# 1.0.4 → 1.0.5: `serveFleet.metricsPort` renders the `OXY_METRICS_PORT` env
+# AND a declared container port named `metrics`, from one value. Off by default
+# (0), so the render is unchanged for every existing value set.
+version: 1.0.5
 appVersion: "0.5.49"
 keywords:
   - oxy
