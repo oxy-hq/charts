@@ -624,6 +624,113 @@ serveFleet:
     rollingUpdate:
       maxUnavailable: 1
       maxSurge: "50%"
+  # ── Progressive delivery (Argo Rollouts canary) ─────────────────────────────
+  # Off by default, and OFF RENDERS BYTE-IDENTICALLY TO A CHART WITHOUT IT.
+  #
+  # On: an argoproj.io Rollout takes over the serve fleet's rollouts. A new
+  # image lands on a slice of the pods first, the chart's AnalysisTemplate
+  # measures THOSE pods' 5xx ratio and p95 latency, and a bad image is aborted
+  # automatically (canary scaled away, stable untouched) instead of reaching
+  # every pod. The Rollout references the existing Deployment (`workloadRef`),
+  # which keeps its pod template and is scaled to 0 by the controller — see
+  # serve-rollout.yaml for why that beats replacing it.
+  #
+  # Prerequisites, all of which fail loudly or silently if skipped:
+  #   1. The Argo Rollouts controller + CRDs in the cluster. Without them the
+  #      Rollout is an unknown kind and the whole sync fails.
+  #   2. `serveFleet.metricsPort` set (the render fails otherwise).
+  #   3. A scrape of that port that copies the `rollouts-pod-template-hash` POD
+  #      LABEL onto the series (VMPodScrape `podTargetLabels`). Without it no
+  #      series matches the canary, every measurement is Inconclusive, and every
+  #      rollout pauses for a human. The chart cannot check this one.
+  #
+  # Turning it OFF again: flip `enabled` back. The Rollout carries ArgoCD's
+  # PruneLast, so the Deployment is scaled back up and Healthy before the
+  # Rollout is deleted. One exception — if the Rollout never ran a canary (its
+  # ReplicaSet is still revision 1), the controller is still migrating and will
+  # scale the Deployment straight back to 0; set `scaleDown: never` and sync
+  # first, then disable.
+  progressive:
+    enabled: false
+    # workloadRef.scaleDown — how the controller retires the Deployment's pods
+    # during the one-time migration. `progressively` scales them down as the
+    # Rollout's pods turn Ready (never below the Rollout's shortfall), so the
+    # flip has no gap. `never` leaves them alone (see "Turning it OFF" above).
+    scaleDown: progressively
+    # Canary surge budget. null = inherit `serveFleet.strategy.rollingUpdate`,
+    # so an env tuned for zero-downtime rollouts (maxUnavailable: 0) keeps that
+    # under the canary. Set either to override it for the Rollout only.
+    maxSurge: null
+    maxUnavailable: null
+    # A canary whose pods never become Ready (crashloop, can't reach Postgres)
+    # never reaches an analysis step. Abort it after this long instead of
+    # leaving the fleet half-rolled.
+    progressDeadlineSeconds: 600
+    progressDeadlineAbort: true
+    # Canary steps, rendered verbatim into the Rollout, with one shorthand:
+    # `- analysis: {}` expands to the chart's AnalysisTemplate bound to the
+    # canary ReplicaSet's pod-template hash. A non-empty `analysis:` is taken
+    # as-is. After the last step the Rollout promotes to 100%.
+    #
+    # Weights are REPLICA-weighted (no traffic router): 20% of 2 replicas is 1
+    # canary pod. Load-balancer stickiness further skews it toward new sessions.
+    steps:
+      - setWeight: 20
+      - analysis: {}
+      - pause: {duration: 2m}
+      - setWeight: 50
+      - analysis: {}
+    analysis:
+      # Prometheus-compatible query API (VictoriaMetrics vmsingle/vmselect
+      # serve the same one). REQUIRED when enabled — the render fails without it.
+      address: ""
+      # `job` label of the scrape that collects the serve fleet's /metrics
+      # (a VMPodScrape's job is `<namespace>/<name>`).
+      job: vm/oxy-serve
+      # Series label carrying the pod's `rollouts-pod-template-hash`, as the
+      # scrape writes it (label names are sanitised: `-` → `_`).
+      canaryHashLabel: rollouts_pod_template_hash
+      # rate() window. At least 4 scrape intervals, or a fresh canary pod has
+      # too few samples to produce a rate.
+      rateWindow: 2m
+      # Each analysis step takes `count` measurements, `interval` apart, after
+      # `initialDelay` (lets the canary pods accumulate a rate window first).
+      initialDelay: 1m
+      interval: 1m
+      count: 5
+      # Failed measurements tolerated before the analysis fails and the
+      # Rollout aborts (Failed when failures > failureLimit).
+      failureLimit: 1
+      # No-data measurements tolerated. More than this and the analysis is
+      # Inconclusive: the Rollout PAUSES for a human (promote or abort) rather
+      # than pass a canary nothing was measured on. Set it >= `count` to let a
+      # quiet canary through instead.
+      inconclusiveLimit: 2
+      # Consecutive query errors (metrics backend unreachable, bad PromQL)
+      # before the analysis errors out — which ABORTS the rollout. A metrics
+      # outage therefore blocks serve deploys; that is the fail-safe direction.
+      consecutiveErrorLimit: 4
+      # Record every measurement but never fail the rollout. Use it to calibrate
+      # the thresholds below against real canaries before trusting them.
+      dryRun: false
+      errorRate:
+        # Max 5xx share of the canary's requests (0.05 = 5%).
+        max: 0.05
+        # PromQL regex (fully anchored) of `http_route` values left out of the
+        # ratio. Health probes hit every pod several times a second and would
+        # dilute a real failure rate. Unrouted requests (no `http_route`) count.
+        # `(/api)?` covers the probes both under the /api nest and at the root.
+        # Must be non-empty (schema-enforced): `!~""` would silently drop
+        # every unrouted request instead of excluding nothing.
+        excludeRoutes: "(/api)?/(live|ready|health)"
+      latencyP95:
+        # Max p95 request duration of the canary, in seconds. The histogram's
+        # top finite bucket is 10s (oxy_telemetry HTTP_DURATION_BUCKETS) and
+        # histogram_quantile caps at it, so a value >= 10 can never fail.
+        maxSeconds: 5
+        # Streaming routes (…/events, …/live) hold a span open for the life of
+        # the stream and would own the quantile. Probes are excluded too.
+        excludeRoutes: "(/api)?/(ready|health)|.*/(events|live)"
 
 worker:
   # On by default as part of the prod-style HA topology (ide + serve fleet +

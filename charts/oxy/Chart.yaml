@@ -16,7 +16,12 @@ type: application
 # 1.0.4 → 1.0.5: `serveFleet.metricsPort` renders the `OXY_METRICS_PORT` env
 # AND a declared container port named `metrics`, from one value. Off by default
 # (0), so the render is unchanged for every existing value set.
-version: 1.0.5
+#
+# 1.0.5 → 1.0.6: `serveFleet.progressive` — opt-in Argo Rollouts canary for the
+# serve fleet (a `workloadRef` Rollout + an AnalysisTemplate on the canary's
+# 5xx ratio and p95). Off by default; off renders byte-identically to 1.0.5 for
+# the default, test and dev/staging/prod value sets, apart from this label.
+version: 1.0.6
 appVersion: "0.5.49"
 keywords:
   - oxy
