@@ -1,0 +1,97 @@
+{{- if include "oxy-app.serveProgressive" . }}
+{{- /*
+Argo Rollouts canary for the stateless serve fleet. Opt-in
+(`serveFleet.progressive.enabled`); requires the Argo Rollouts controller and
+its CRDs in the cluster BEFORE this renders, or the whole sync fails on an
+unknown kind.
+
+WHY `workloadRef` AND NOT A REPLACEMENT ROLLOUT
+The Rollout does not carry a pod template. It points at the existing serve
+Deployment (serve-deployment.yaml), which stays the single place the pod spec is
+written, and the controller scales that Deployment down as its own pods turn
+Ready (`scaleDown: progressively`). The alternative, a Rollout with its own
+template that replaces the Deployment, deletes the Deployment in the same sync
+that creates the Rollout: ArgoCD prunes the old pods while the new ones are
+still starting (the serve pods also wait on an ALB readiness gate), and the
+fleet has no Ready endpoint for that gap. `workloadRef` is Argo's documented
+zero-downtime migration and keeps the ~250-line pod spec from being duplicated.
+
+The controller only drives the Deployment during the Rollout's FIRST revision
+(the migration itself). From the first canary onward it leaves the Deployment's
+replicas alone and just reads its template: an image bump edits the Deployment
+template, the Deployment (at 0 replicas) makes an empty ReplicaSet, and the
+Rollout starts a canary from the changed template.
+*/}}
+{{- $name := printf "%s-serve" (include "oxy-app.fullname" .) -}}
+{{- $p := .Values.serveFleet.progressive -}}
+{{- /* Canary surge budget: unset (null) inherits the Deployment's rolling-update
+budget, so an env that tuned serveFleet.strategy for zero-downtime rollouts
+(maxUnavailable: 0) keeps that property under the canary too. `kindIs "invalid"`
+rather than `default`, because `default` treats a deliberate 0 as unset. */ -}}
+{{- $ru := dig "rollingUpdate" dict (.Values.serveFleet.strategy | default dict) -}}
+{{- $maxSurge := dig "maxSurge" nil $ru -}}
+{{- if not (kindIs "invalid" (dig "maxSurge" nil $p)) }}{{ $maxSurge = $p.maxSurge }}{{ end -}}
+{{- $maxUnavailable := dig "maxUnavailable" nil $ru -}}
+{{- if not (kindIs "invalid" (dig "maxUnavailable" nil $p)) }}{{ $maxUnavailable = $p.maxUnavailable }}{{ end }}
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "oxy-app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: serve
+  annotations:
+    # Read by ArgoCD from the LIVE object when this Rollout is pruned, i.e. when
+    # progressive delivery is switched back off. The Deployment then gets its
+    # `replicas` back in the sync wave, ArgoCD waits for it to be Healthy, and
+    # only then deletes the Rollout and its pods. Without it both happen in one
+    # wave and the fleet serves from nothing while the Deployment's pods start.
+    argocd.argoproj.io/sync-options: PruneLast=true
+spec:
+  replicas: {{ .Values.serveFleet.replicaCount }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  # A canary whose pods never become Ready (crashloop, a config the new image
+  # rejects, a Postgres it cannot reach) never gets as far as an analysis step,
+  # so without this it would sit half-rolled forever. Abort instead.
+  progressDeadlineSeconds: {{ $p.progressDeadlineSeconds }}
+  progressDeadlineAbort: {{ $p.progressDeadlineAbort }}
+  selector:
+    matchLabels:
+      {{- include "oxy-app.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: serve
+  workloadRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ $name }}
+    scaleDown: {{ $p.scaleDown }}
+  strategy:
+    # Replica-weighted canary: no traffic router. The serve Service selects
+    # canary and stable pods alike, so a canary's share of traffic is its share
+    # of Ready pods — quantised by `replicaCount` (20% of 2 replicas is 1 pod,
+    # i.e. up to half the NEW traffic) and skewed by any load-balancer
+    # stickiness, which keeps existing sessions on the pods they already have.
+    canary:
+      {{- if not (kindIs "invalid" $maxSurge) }}
+      maxSurge: {{ $maxSurge | toJson }}
+      {{- end }}
+      {{- if not (kindIs "invalid" $maxUnavailable) }}
+      maxUnavailable: {{ $maxUnavailable | toJson }}
+      {{- end }}
+      steps:
+        {{- range $p.steps }}
+        {{- if and (kindIs "map" .) (hasKey . "analysis") (empty .analysis) }}
+        # `analysis: {}` in values → the chart's AnalysisTemplate, measured
+        # against the pods of the canary ReplicaSet only.
+        - analysis:
+            templates:
+              - templateName: {{ $name }}
+            args:
+              - name: canary-hash
+                valueFrom:
+                  podTemplateHashValue: Latest
+        {{- else }}
+        - {{ toYaml . | indent 10 | trim }}
+        {{- end }}
+        {{- end }}
+{{- end }}

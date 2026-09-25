@@ -65,12 +65,12 @@ jobs:
           ct lint --target-branch ${{ github.event.repository.default_branch }} --config ct.yaml
 
       # `ct lint` only parses and renders — it asserts nothing about WHAT is
-      # rendered. Both lightweight charts ship helm-unittest suites that were
-      # never executed by any workflow (helm-ci.yml is path-filtered to
-      # charts/oxy-app/**), so a chart could render the wrong container spec and
-      # still go green. Run them here; the whole suite takes under a second.
-      # Not gated on list-changed: the paths filter above already limits this
-      # workflow to these two charts, and a shared-file change should run both.
+      # rendered (e.g. the serve-fleet `--enterprise` regression). Run both
+      # lightweight charts' helm-unittest suites; the whole run is a few seconds.
+      # Not gated on list-changed: ct.yaml sets `use-helmignore`, so a change
+      # that only touches `tests/` (helmignored in every chart) or this workflow
+      # lists no changed chart — and exactly those changes must still run the
+      # suites. The glob picks up every `*_test.yaml`, so new suites need no edit.
       - name: Run unit tests (oxy, oxy-start)
         run: |
           export CI=true

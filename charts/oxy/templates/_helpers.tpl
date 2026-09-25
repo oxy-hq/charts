@@ -64,3 +64,51 @@ Behavior:
 {{- "" }}
 {{- end }}
 {{- end }}
+
+{{/*
+Enterprise flag, inherited by the serve fleet from the ide.
+
+`--enterprise` is an `oxy serve` flag (ServeArgs only — `oxy worker` rejects
+it). The operator sets it on the ide through `app.args` / `app.command`.
+
+It gates the observability UI: the frontend reads `enterprise` from
+GET /api/auth/config and, when it is false, drops the entire observability
+route tree and its sidebar entry. With `serveFleet.enabled`, that endpoint is
+answered by a SERVE replica — the catch-all `/` ingress path lands there and
+`/api/auth/config` is not one of the ide routes — so a serve fleet started
+without the flag reports `enterprise: false` and observability disappears from
+the UI even though the ide has it and spans are still being recorded.
+(Recording is a separate axis: `observability_enabled`, driven by
+OXY_OBSERVABILITY_BACKEND, stays true throughout.)
+
+Returns "true" when the ide is configured for enterprise, "" otherwise, so the
+serve fleet's DEFAULT command inherits it. An explicit `serveFleet.command`
+(or `serveFleet.args`) is taken verbatim and is unaffected.
+*/}}
+{{- define "oxy-app.enterprise" -}}
+{{- $enterprise := "" -}}
+{{- range concat (.Values.app.args | default list) (.Values.app.command | default list) -}}
+{{- if contains "--enterprise" (toString .) -}}
+{{- $enterprise = "true" -}}
+{{- end -}}
+{{- end -}}
+{{- $enterprise -}}
+{{- end }}
+
+{{/*
+Progressive delivery for the serve fleet (Argo Rollouts canary).
+
+Returns "true" only when BOTH the serve fleet and `serveFleet.progressive` are
+enabled, "" otherwise. Every progressive-only branch keys off this one helper,
+so the off state cannot half-render: with it "", the Deployment renders exactly
+as it did before the feature existed and no Rollout / AnalysisTemplate exists.
+
+`dig` rather than `.Values.serveFleet.progressive.enabled` so a values file
+that nulls the whole block (`progressive: null`) reads as off instead of
+failing the render with a nil-pointer error.
+*/}}
+{{- define "oxy-app.serveProgressive" -}}
+{{- if and .Values.serveFleet.enabled (dig "progressive" "enabled" false .Values.serveFleet) -}}
+true
+{{- end -}}
+{{- end }}

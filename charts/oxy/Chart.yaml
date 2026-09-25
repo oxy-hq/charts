@@ -12,7 +12,24 @@ type: application
 # subcharts removed. Renders byte-identical workloads to oxy-app for external-DB
 # values (nameOverride keeps resource names), so adoption is a drop-in per-env
 # chart swap. See README.md.
-version: 1.0.4
+#
+# 1.0.4 → 1.0.5: `serveFleet.metricsPort` renders the `OXY_METRICS_PORT` env
+# AND a declared container port named `metrics`, from one value. Off by default
+# (0), so the render is unchanged for every existing value set.
+#
+# 1.0.5 → 1.0.6: the same `serveFleet.metricsPort` now also renders the env and
+# the declared `metrics` port on the ide StatefulSet. Still off by default, so
+# a value set without it renders unchanged; with it set, the StatefulSet's pod
+# template changes and the ide pod restarts. `env.OXY_METRICS_PORT` is now
+# refused, since the shared env reaches the ide with no declared port.
+#
+# 1.0.6 → 1.0.7: `serveFleet.progressive` — opt-in Argo Rollouts canary for the
+# serve fleet (a `workloadRef` Rollout + an AnalysisTemplate on the canary's
+# 5xx ratio and p95). Off by default; off renders byte-identically to 1.0.6 for
+# the default, test and dev/staging/prod value sets, apart from this label.
+# (First written as 1.0.6; renumbered when 1.0.6 was published first with the
+# ide metrics port above, so this release is 1.0.7.)
+version: 1.0.7
 appVersion: "0.5.49"
 keywords:
   - oxy

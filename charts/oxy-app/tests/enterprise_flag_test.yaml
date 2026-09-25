@@ -1,0 +1,67 @@
+suite: serve fleet inherits --enterprise from the ide
+templates:
+  - serve-deployment.yaml
+  - statefulset.yaml
+  - worker-deployment.yaml
+
+set:
+  serveFleet:
+    enabled: true
+
+tests:
+  # The regression this suite exists for: an ide started with `--enterprise`
+  # and a serve fleet started without it. The catch-all `/` ingress path routes
+  # GET /api/auth/config to the serve fleet, so the browser sees
+  # enterprise: false and the whole observability section vanishes from the UI
+  # while spans keep being recorded.
+  - it: appends --enterprise to the serve default when the ide runs with it
+    template: serve-deployment.yaml
+    set:
+      app:
+        command: ["sh", "-c", "exec oxy serve --enterprise"]
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command[2]
+          value: "exec oxy serve --no-workers --enterprise"
+
+  - it: does NOT add --enterprise when the ide is not enterprise
+    template: serve-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command[2]
+          value: "exec oxy serve --no-workers"
+
+  - it: leaves an explicit serveFleet.command verbatim
+    template: serve-deployment.yaml
+    set:
+      app:
+        command: ["sh", "-c", "exec oxy serve --enterprise"]
+      serveFleet:
+        command: ["sh", "-c", "exec oxy serve --no-workers"]
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command[2]
+          value: "exec oxy serve --no-workers"
+
+  # `--enterprise` lives on ServeArgs only; `oxy worker` fails to parse it.
+  - it: never leaks --enterprise into the worker command
+    template: worker-deployment.yaml
+    set:
+      app:
+        command: ["sh", "-c", "exec oxy serve --enterprise"]
+      worker:
+        enabled: true
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "--enterprise"
+
+  - it: does not alter the ide's own command
+    template: statefulset.yaml
+    set:
+      app:
+        command: ["sh", "-c", "exec oxy serve --enterprise"]
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command[2]
+          value: "exec oxy serve --enterprise"

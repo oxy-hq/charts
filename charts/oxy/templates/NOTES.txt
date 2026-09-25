@@ -18,6 +18,12 @@ Serve fleet:
   Role:               stateless `oxy serve --no-workers` replicas serving the
                       compiled read paths (customer-apps, external API, chat,
                       runtime serving). No PVC — safe to scale / roll freely.
+{{- if include "oxy-app.serveProgressive" . }}
+  Rollouts:           Argo Rollouts canary ({{ include "oxy-app.fullname" . }}-serve,
+                      workloadRef → the Deployment above, which the controller
+                      scales to 0). Watch a rollout with:
+                        kubectl argo rollouts get rollout {{ include "oxy-app.fullname" . }}-serve -n {{ .Release.Namespace }} --watch
+{{- end }}
 {{- else }}
   Status:             disabled (single-instance install — the ide StatefulSet
                       serves every request). Set `serveFleet.enabled=true` for
