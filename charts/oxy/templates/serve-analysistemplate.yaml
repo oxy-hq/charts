@@ -1,0 +1,94 @@
+{{- if include "oxy-app.serveProgressive" . }}
+{{- $a := .Values.serveFleet.progressive.analysis -}}
+{{- /*
+Fail the render rather than ship an analysis that cannot decide anything.
+Both mistakes are silent at runtime, in opposite directions: no address makes
+every measurement an Error, so every canary aborts; no metrics port means the
+series never exist, so every measurement is Inconclusive and every canary
+pauses waiting for a human. Neither reads as "misconfigured" from the Rollout.
+*/ -}}
+{{- if not $a.address }}
+{{- fail "serveFleet.progressive.enabled is true but serveFleet.progressive.analysis.address is empty: the canary analysis needs a Prometheus-compatible query endpoint (VictoriaMetrics' vmsingle/vmselect serve the same API), e.g. http://vmsingle-<name>.<ns>.svc.cluster.local:8428." }}
+{{- end }}
+{{- if not .Values.serveFleet.metricsPort }}
+{{- fail "serveFleet.progressive.enabled is true but serveFleet.metricsPort is 0: the canary analysis reads the serve fleet's own http_server_request_duration_seconds, which only exists when /metrics is on. Set serveFleet.metricsPort (and scrape it, with the rollouts-pod-template-hash pod label carried onto the series — see README.md)." }}
+{{- end }}
+{{- /*
+The canary discriminator. `{{args.canary-hash}}` is an Argo Rollouts
+placeholder, not Helm: it is resolved per AnalysisRun to the pod-template hash
+of the canary ReplicaSet (podTemplateHashValue: Latest in serve-rollout.yaml).
+Every pod the Rollout creates carries it as the `rollouts-pod-template-hash`
+label, and the scrape must copy that label onto the series (VMPodScrape
+`podTargetLabels: [rollouts-pod-template-hash]` → `rollouts_pod_template_hash`).
+Stable pods carry a DIFFERENT hash, so this selects the canary and nothing else.
+The namespace pin keeps two releases in one cluster (dev + staging) apart.
+*/ -}}
+{{- $sel := printf "job=%q, namespace=%q, %s=\"{{args.canary-hash}}\"" $a.job .Release.Namespace $a.canaryHashLabel -}}
+{{- $w := $a.rateWindow -}}
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: {{ include "oxy-app.fullname" . }}-serve
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "oxy-app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: serve
+spec:
+  args:
+    - name: canary-hash
+  {{- if $a.dryRun }}
+  # Measure and record, never fail the rollout — for calibrating thresholds
+  # against real canaries before letting them abort anything.
+  dryRun:
+    - metricName: .*
+  {{- end }}
+  # Conditions are written so that NO DATA is neither success nor failure. An
+  # empty vector (no series yet) or NaN (a 0/0 window with no requests) matches
+  # neither condition, so the measurement is Inconclusive, not a silent pass:
+  # a canary nobody sent traffic to has not been shown to work. A bare
+  # `result[0]` would instead Error on an empty vector and, after
+  # consecutiveErrorLimit, abort a perfectly good canary.
+  metrics:
+    - name: error-rate
+      initialDelay: {{ $a.initialDelay }}
+      interval: {{ $a.interval }}
+      count: {{ $a.count }}
+      failureLimit: {{ $a.failureLimit }}
+      inconclusiveLimit: {{ $a.inconclusiveLimit }}
+      consecutiveErrorLimit: {{ $a.consecutiveErrorLimit }}
+      successCondition: len(result) > 0 && !isNaN(result[0]) && result[0] <= {{ $a.errorRate.max }}
+      failureCondition: len(result) > 0 && !isNaN(result[0]) && result[0] > {{ $a.errorRate.max }}
+      provider:
+        prometheus:
+          address: {{ $a.address | quote }}
+          # 5xx share of the canary's own requests. `or vector(0)` on the
+          # numerator: with no 5xx the numerator has no series at all, and
+          # without it a healthy canary would read as "no data".
+          # Probe routes are excluded: kubelet and ALB health checks hit every
+          # pod several times a second and would dilute a real failure rate.
+          query: |
+            (
+              sum(rate(http_server_request_duration_seconds_count{ {{- $sel }}, http_response_status_code=~"5..", http_route!~{{ $a.errorRate.excludeRoutes | quote }}}[{{ $w }}]))
+              or vector(0)
+            )
+            /
+            sum(rate(http_server_request_duration_seconds_count{ {{- $sel }}, http_route!~{{ $a.errorRate.excludeRoutes | quote }}}[{{ $w }}]))
+    - name: latency-p95
+      initialDelay: {{ $a.initialDelay }}
+      interval: {{ $a.interval }}
+      count: {{ $a.count }}
+      failureLimit: {{ $a.failureLimit }}
+      inconclusiveLimit: {{ $a.inconclusiveLimit }}
+      consecutiveErrorLimit: {{ $a.consecutiveErrorLimit }}
+      successCondition: len(result) > 0 && !isNaN(result[0]) && result[0] <= {{ $a.latencyP95.maxSeconds }}
+      failureCondition: len(result) > 0 && !isNaN(result[0]) && result[0] > {{ $a.latencyP95.maxSeconds }}
+      provider:
+        prometheus:
+          address: {{ $a.address | quote }}
+          # Streaming routes (…/events, …/live) are excluded: a server span
+          # lasts the life of the stream, so they would own the quantile while
+          # saying nothing about slowness. Same exclusion as the oxy Grafana
+          # dashboards.
+          query: |
+            histogram_quantile(0.95, sum by (le) (rate(http_server_request_duration_seconds_bucket{ {{- $sel }}, http_route!~{{ $a.latencyP95.excludeRoutes | quote }}}[{{ $w }}])))
+{{- end }}

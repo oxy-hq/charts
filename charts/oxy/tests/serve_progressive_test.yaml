@@ -1,0 +1,304 @@
+suite: serve fleet progressive delivery (Argo Rollouts canary)
+templates:
+  - serve-deployment.yaml
+  - serve-rollout.yaml
+  - serve-analysistemplate.yaml
+
+# The minimum an enabled render needs: the metrics port the analysis reads and
+# a query endpoint. Tests that exercise the OFF state override `enabled` back.
+set:
+  serveFleet:
+    enabled: true
+    metricsPort: 9464
+    progressive:
+      enabled: true
+      analysis:
+        address: http://vmsingle.vm.svc:8428
+
+tests:
+  # ── off: nothing changes ───────────────────────────────────────────────────
+  - it: renders no Rollout and no AnalysisTemplate by default
+    set:
+      serveFleet:
+        progressive:
+          enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: serve-rollout.yaml
+      - hasDocuments:
+          count: 0
+        template: serve-analysistemplate.yaml
+
+  - it: keeps the Deployment's replica count when off
+    set:
+      serveFleet:
+        replicaCount: 3
+        progressive:
+          enabled: false
+    template: serve-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 3
+
+  - it: renders nothing progressive when the serve fleet itself is off
+    set:
+      serveFleet:
+        enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: serve-rollout.yaml
+      - hasDocuments:
+          count: 0
+        template: serve-analysistemplate.yaml
+
+  - it: treats a nulled progressive block as off
+    set:
+      serveFleet:
+        progressive: null
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: serve-rollout.yaml
+      - exists:
+          path: spec.replicas
+        template: serve-deployment.yaml
+
+  # ── on: the Deployment becomes the template source ─────────────────────────
+  - it: stops declaring the Deployment's replicas so the controller owns them
+    template: serve-deployment.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - notExists:
+          path: spec.replicas
+      # the pod template is untouched — it is what the Rollout reads
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/component"]
+          value: serve
+
+  - it: renders a Rollout that references the serve Deployment
+    template: serve-rollout.yaml
+    set:
+      serveFleet:
+        replicaCount: 4
+    asserts:
+      - isKind:
+          of: Rollout
+      - equal:
+          path: apiVersion
+          value: argoproj.io/v1alpha1
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-oxy-app-serve
+      - equal:
+          path: spec.replicas
+          value: 4
+      - equal:
+          path: spec.workloadRef
+          value:
+            apiVersion: apps/v1
+            kind: Deployment
+            name: RELEASE-NAME-oxy-app-serve
+            scaleDown: progressively
+      - equal:
+          path: spec.selector.matchLabels
+          value:
+            app.kubernetes.io/name: oxy-app
+            app.kubernetes.io/instance: RELEASE-NAME
+            app.kubernetes.io/component: serve
+      - notExists:
+          path: spec.template
+      - equal:
+          path: spec.progressDeadlineAbort
+          value: true
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-options"]
+          value: PruneLast=true
+
+  - it: "expands `analysis: {}` to the chart template bound to the canary hash"
+    template: serve-rollout.yaml
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps[0]
+          value:
+            setWeight: 20
+      - equal:
+          path: spec.strategy.canary.steps[1]
+          value:
+            analysis:
+              templates:
+                - templateName: RELEASE-NAME-oxy-app-serve
+              args:
+                - name: canary-hash
+                  valueFrom:
+                    podTemplateHashValue: Latest
+      - equal:
+          path: spec.strategy.canary.steps[2]
+          value:
+            pause:
+              duration: 2m
+
+  - it: passes custom steps, including a full analysis block, through verbatim
+    template: serve-rollout.yaml
+    set:
+      serveFleet:
+        progressive:
+          steps:
+            - setWeight: 10
+            - pause: {}
+            - analysis:
+                templates:
+                  - templateName: my-own
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps
+          value:
+            - setWeight: 10
+            - pause: {}
+            - analysis:
+                templates:
+                  - templateName: my-own
+
+  # ── surge budget: inherited unless overridden, and 0 survives ──────────────
+  - it: inherits the Deployment's rolling-update budget, keeping a literal 0
+    template: serve-rollout.yaml
+    set:
+      serveFleet:
+        strategy:
+          rollingUpdate:
+            maxUnavailable: 0
+            maxSurge: 1
+    asserts:
+      - equal:
+          path: spec.strategy.canary.maxUnavailable
+          value: 0
+      - equal:
+          path: spec.strategy.canary.maxSurge
+          value: 1
+
+  - it: lets progressive.maxSurge / maxUnavailable override the inherited budget
+    template: serve-rollout.yaml
+    set:
+      serveFleet:
+        progressive:
+          maxSurge: "25%"
+          maxUnavailable: 0
+    asserts:
+      - equal:
+          path: spec.strategy.canary.maxSurge
+          value: 25%
+      - equal:
+          path: spec.strategy.canary.maxUnavailable
+          value: 0
+
+  # ── analysis ───────────────────────────────────────────────────────────────
+  - it: selects the canary by pod-template hash, pinned to the release namespace
+    template: serve-analysistemplate.yaml
+    release:
+      namespace: oxy-dev
+    asserts:
+      - isKind:
+          of: AnalysisTemplate
+      - equal:
+          path: spec.args
+          value:
+            - name: canary-hash
+      - matchRegex:
+          path: spec.metrics[0].provider.prometheus.query
+          pattern: 'job="vm/oxy-serve", namespace="oxy-dev", rollouts_pod_template_hash="\{\{args\.canary-hash\}\}"'
+      - matchRegex:
+          path: spec.metrics[1].provider.prometheus.query
+          pattern: 'rollouts_pod_template_hash="\{\{args\.canary-hash\}\}"'
+      - equal:
+          path: spec.metrics[0].provider.prometheus.address
+          value: http://vmsingle.vm.svc:8428
+
+  - it: treats no data as inconclusive, never as a pass or an error
+    template: serve-analysistemplate.yaml
+    asserts:
+      - equal:
+          path: spec.metrics[0].successCondition
+          value: len(result) > 0 && !isNaN(result[0]) && result[0] <= 0.05
+      - equal:
+          path: spec.metrics[0].failureCondition
+          value: len(result) > 0 && !isNaN(result[0]) && result[0] > 0.05
+      - equal:
+          path: spec.metrics[1].failureCondition
+          value: len(result) > 0 && !isNaN(result[0]) && result[0] > 5
+
+  - it: takes thresholds, limits and cadence from values
+    template: serve-analysistemplate.yaml
+    set:
+      serveFleet:
+        progressive:
+          analysis:
+            interval: 30s
+            count: 10
+            failureLimit: 2
+            inconclusiveLimit: 10
+            errorRate:
+              max: 0.01
+            latencyP95:
+              maxSeconds: 1.5
+    asserts:
+      - equal:
+          path: spec.metrics[0].interval
+          value: 30s
+      - equal:
+          path: spec.metrics[0].count
+          value: 10
+      - equal:
+          path: spec.metrics[1].failureLimit
+          value: 2
+      - equal:
+          path: spec.metrics[1].inconclusiveLimit
+          value: 10
+      - matchRegex:
+          path: spec.metrics[0].successCondition
+          pattern: '<= 0\.01$'
+      - matchRegex:
+          path: spec.metrics[1].successCondition
+          pattern: '<= 1\.5$'
+
+  - it: renders dryRun only when asked
+    template: serve-analysistemplate.yaml
+    set:
+      serveFleet:
+        progressive:
+          analysis:
+            dryRun: true
+    asserts:
+      - equal:
+          path: spec.dryRun
+          value:
+            - metricName: .*
+
+  - it: omits dryRun by default
+    template: serve-analysistemplate.yaml
+    asserts:
+      - notExists:
+          path: spec.dryRun
+
+  # ── refusals: misconfigurations that would otherwise fail silently ─────────
+  - it: refuses to render without a query endpoint
+    template: serve-analysistemplate.yaml
+    set:
+      serveFleet:
+        progressive:
+          analysis:
+            address: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "analysis.address is empty"
+
+  - it: refuses to render without the serve metrics port
+    template: serve-analysistemplate.yaml
+    set:
+      serveFleet:
+        metricsPort: 0
+    asserts:
+      - failedTemplate:
+          errorPattern: "serveFleet.metricsPort is 0"

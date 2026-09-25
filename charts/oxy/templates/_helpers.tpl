@@ -94,3 +94,21 @@ serve fleet's DEFAULT command inherits it. An explicit `serveFleet.command`
 {{- end -}}
 {{- $enterprise -}}
 {{- end }}
+
+{{/*
+Progressive delivery for the serve fleet (Argo Rollouts canary).
+
+Returns "true" only when BOTH the serve fleet and `serveFleet.progressive` are
+enabled, "" otherwise. Every progressive-only branch keys off this one helper,
+so the off state cannot half-render: with it "", the Deployment renders exactly
+as it did before the feature existed and no Rollout / AnalysisTemplate exists.
+
+`dig` rather than `.Values.serveFleet.progressive.enabled` so a values file
+that nulls the whole block (`progressive: null`) reads as off instead of
+failing the render with a nil-pointer error.
+*/}}
+{{- define "oxy-app.serveProgressive" -}}
+{{- if and .Values.serveFleet.enabled (dig "progressive" "enabled" false .Values.serveFleet) -}}
+true
+{{- end -}}
+{{- end }}

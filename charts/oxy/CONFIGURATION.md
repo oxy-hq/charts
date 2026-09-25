@@ -124,6 +124,28 @@ Deploys only the Oxy application workloads — the ide StatefulSet, the stateles
 | serveFleet.podDisruptionBudget.enabled | bool | `true` |  |
 | serveFleet.podDisruptionBudget.minAvailable | int | `1` |  |
 | serveFleet.podLabels | object | `{}` |  |
+| serveFleet.progressive.analysis.address | string | `""` | Prometheus-compatible query API (VictoriaMetrics vmsingle/vmselect). Required when enabled — the render fails without it. |
+| serveFleet.progressive.analysis.canaryHashLabel | string | `"rollouts_pod_template_hash"` | Series label carrying the pod's `rollouts-pod-template-hash`, as the scrape writes it. The scrape must copy that pod label (VMPodScrape `podTargetLabels`). |
+| serveFleet.progressive.analysis.consecutiveErrorLimit | int | `4` | Consecutive query errors before the analysis errors, which aborts the rollout. |
+| serveFleet.progressive.analysis.count | int | `5` | Measurements per analysis step. |
+| serveFleet.progressive.analysis.dryRun | bool | `false` | Record measurements but never fail a rollout (threshold calibration). |
+| serveFleet.progressive.analysis.errorRate.excludeRoutes | string | `"(/api)?/(live|ready|health)"` | Anchored PromQL regex of `http_route` values left out of the 5xx ratio (health probes). Must be non-empty. |
+| serveFleet.progressive.analysis.errorRate.max | float | `0.05` | Max 5xx share of the canary's requests. |
+| serveFleet.progressive.analysis.failureLimit | int | `1` | Failed measurements tolerated; more fails the analysis and aborts the rollout. |
+| serveFleet.progressive.analysis.inconclusiveLimit | int | `2` | No-data measurements tolerated; more pauses the rollout for a human. Set >= `count` to pass quiet canaries. |
+| serveFleet.progressive.analysis.initialDelay | string | `"1m"` | Delay before the first measurement of each analysis step. |
+| serveFleet.progressive.analysis.interval | string | `"1m"` | Time between measurements. |
+| serveFleet.progressive.analysis.job | string | `"vm/oxy-serve"` | `job` label of the scrape collecting the serve fleet's /metrics. |
+| serveFleet.progressive.analysis.latencyP95.excludeRoutes | string | `"(/api)?/(ready|health)|.*/(events|live)"` | Anchored PromQL regex of `http_route` values left out of the p95 (streaming routes, probes). Must be non-empty. |
+| serveFleet.progressive.analysis.latencyP95.maxSeconds | int | `5` | Max canary p95 in seconds. The histogram tops out at 10s, so >= 10 never fails. |
+| serveFleet.progressive.analysis.rateWindow | string | `"2m"` | `rate()` window; at least 4 scrape intervals. |
+| serveFleet.progressive.enabled | bool | `false` | Argo Rollouts canary for the serve fleet. Needs the controller + CRDs, `serveFleet.metricsPort`, and a scrape carrying the pod-template hash. See README.md. |
+| serveFleet.progressive.maxSurge | string | `nil` | Canary surge; null inherits `serveFleet.strategy.rollingUpdate.maxSurge`. |
+| serveFleet.progressive.maxUnavailable | string | `nil` | Canary unavailability; null inherits `serveFleet.strategy.rollingUpdate.maxUnavailable`. |
+| serveFleet.progressive.progressDeadlineAbort | bool | `true` | Abort a canary whose pods never become Ready. |
+| serveFleet.progressive.progressDeadlineSeconds | int | `600` |  |
+| serveFleet.progressive.scaleDown | string | `"progressively"` | `workloadRef.scaleDown` for the one-time Deployment → Rollout migration (`never` / `onsuccess` / `progressively`). |
+| serveFleet.progressive.steps | list | `[{"setWeight":20},{"analysis":{}},{"pause":{"duration":"2m"}},{"setWeight":50},{"analysis":{}}]` | Canary steps; `analysis: {}` expands to the chart's AnalysisTemplate on the canary's pods. |
 | serveFleet.readinessProbe.httpGet.path | string | `"/api/ready"` |  |
 | serveFleet.readinessProbe.httpGet.port | int | `3000` |  |
 | serveFleet.readinessProbe.initialDelaySeconds | int | `5` |  |

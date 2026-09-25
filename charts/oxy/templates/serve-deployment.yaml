@@ -41,7 +41,25 @@ metadata:
     {{- include "oxy-app.labels" . | nindent 4 }}
     app.kubernetes.io/component: serve
 spec:
+  {{- if not (include "oxy-app.serveProgressive" .) }}
   replicas: {{ .Values.serveFleet.replicaCount }}
+  {{- else }}
+  {{- /*
+  Progressive delivery: this Deployment becomes the Rollout's pod-template
+  SOURCE (serve-rollout.yaml, `workloadRef`), and the Argo Rollouts controller
+  owns its replica count — it scales it down as the Rollout's pods turn Ready
+  (`scaleDown: progressively`), ending at 0.
+
+  So `replicas` is deliberately NOT declared here. Declaring any value would
+  fight the controller: `replicaCount` would have ArgoCD selfHeal (or the next
+  `helm upgrade`) scale the old pods back up after every scale-down, and a
+  literal 0 would take them all away in the same sync that creates the Rollout,
+  before a single Rollout pod is Ready — the downtime the migration exists to
+  avoid. At the flip the API server defaults the now-undeclared field to 1, so
+  capacity dips to one serving pod until the Rollout's pods are Ready; it never
+  reaches zero. See README.md "Progressive delivery".
+  */}}
+  {{- end }}
   revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
   selector:
     matchLabels:
