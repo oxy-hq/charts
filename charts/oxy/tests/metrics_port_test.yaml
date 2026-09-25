@@ -1,0 +1,80 @@
+suite: metrics port — one knob, declared on every role that binds it
+templates:
+  - statefulset.yaml
+  - serve-deployment.yaml
+
+# `serveFleet.metricsPort` must render BOTH halves — the OXY_METRICS_PORT env
+# and a DECLARED container port named `metrics` — on the serve fleet and the
+# ide StatefulSet. A bound-but-undeclared port is the failure these guard: a
+# VMPodScrape builds its targets from declared ports, so it finds zero targets
+# and nothing errors anywhere.
+
+tests:
+  - it: renders no metrics port or env on the ide by default
+    template: statefulset.yaml
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: metrics
+          any: true
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_METRICS_PORT
+          any: true
+
+  - it: declares the metrics port on the ide when serveFleet.metricsPort is set
+    template: statefulset.yaml
+    set:
+      serveFleet:
+        enabled: true
+        metricsPort: 9464
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: metrics
+            containerPort: 9464
+            protocol: TCP
+
+  - it: sets OXY_METRICS_PORT on the ide from the same value
+    template: statefulset.yaml
+    set:
+      serveFleet:
+        enabled: true
+        metricsPort: 9464
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_METRICS_PORT
+            value: "9464"
+
+  - it: still declares the metrics port on the serve fleet from the same value
+    template: serve-deployment.yaml
+    set:
+      serveFleet:
+        enabled: true
+        metricsPort: 9464
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: metrics
+            containerPort: 9464
+            protocol: TCP
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_METRICS_PORT
+            value: "9464"
+
+  - it: refuses OXY_METRICS_PORT in the shared env
+    template: statefulset.yaml
+    set:
+      env:
+        OXY_METRICS_PORT: "9464"
+    asserts:
+      - failedTemplate:
+          errorPattern: "env.OXY_METRICS_PORT is set"

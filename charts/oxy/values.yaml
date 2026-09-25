@@ -544,8 +544,12 @@ serveFleet:
   env: {}
   extraEnv: []
   extraEnvFrom: []
-  # Prometheus `/metrics` on the serve fleet. 0 / unset = off (the default; the
-  # app defaults it off too).
+  # Prometheus `/metrics` for the release: the serve fleet AND the ide
+  # StatefulSet (since 1.0.6). 0 / unset = off (the default; the app defaults it
+  # off too). The name is historical — it is the one metrics knob, deliberately:
+  # the ide runs route-mode custom-app functions and claims queued task runs, so
+  # a per-role knob left unset there hid most of the isolate metrics. The worker
+  # already serves /metrics on `worker.healthPort` and is unaffected.
   #
   # ONE value on purpose: it renders BOTH the `OXY_METRICS_PORT` env and a
   # DECLARED container port named `metrics`. Those have to move together —

@@ -1,3 +1,11 @@
+{{- /* The shared env renders into the ide StatefulSet and the serve fleet
+   alike, so `env.OXY_METRICS_PORT` would bind a metrics listener on a port
+   neither pod DECLARES — zero scrape targets, no error — and would duplicate
+   the variable `serveFleet.metricsPort` already renders. Refuse it, the same way
+   serve-deployment.yaml refuses `serveFleet.env.OXY_METRICS_PORT`. */}}
+{{- if hasKey .Values.env "OXY_METRICS_PORT" }}
+{{- fail "env.OXY_METRICS_PORT is set: that binds /metrics on a container port nothing declares, so scrape discovery finds zero targets and nothing errors. Set serveFleet.metricsPort instead — it renders the env AND a declared port named `metrics` on the serve fleet and the ide StatefulSet — and scrape it by name (port: metrics)." }}
+{{- end }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -89,6 +97,18 @@ spec:
               protocol: TCP
               name: internal-port
             {{- end }}
+            {{- if .Values.serveFleet.metricsPort }}
+            # The ide's own /metrics, from the SAME value as the serve fleet's —
+            # one knob turns on the release's metrics, not one per role. The ide
+            # runs every route-mode custom-app function (the /fn/ route is
+            # IdeOnly) and in-process task drivers that claim queued runs, so
+            # without this most isolate and function metrics exist only in a
+            # process nothing scrapes. DECLARED, not merely bound: scrape
+            # discovery builds targets from declared ports. Scrape by name.
+            - name: metrics
+              containerPort: {{ .Values.serveFleet.metricsPort }}
+              protocol: TCP
+            {{- end }}
 
           # Environment Variables
           env:
@@ -99,6 +119,12 @@ spec:
             # write-heavy IDE surface here while stateless reads go to oxy-serve.
             - name: OXY_ROLE
               value: "ide"
+            {{- if .Values.serveFleet.metricsPort }}
+            # Rendered from the same value as the `metrics` port above, so the
+            # listener and its declaration cannot disagree.
+            - name: OXY_METRICS_PORT
+              value: {{ .Values.serveFleet.metricsPort | quote }}
+            {{- end }}
             # Shared AES-256 master key so workspace secrets encrypt/decrypt
             # identically across the fleet (values.yaml encryptionKey). Without it
             # each pod generates a divergent on-disk key → cross-pod
