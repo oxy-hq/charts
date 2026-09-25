@@ -1,0 +1,73 @@
+suite: serve fleet readiness probe — a slow Postgres must not empty the Service
+templates:
+  - serve-deployment.yaml
+  - statefulset.yaml
+
+# /api/ready does a real Postgres round trip. At Kubernetes' default 1s
+# timeout, a database that is slow rather than down fails every serve
+# replica's probe together and the whole fleet leaves the load balancer (dev,
+# 2026-09-24). These pin the 4s default, and that it survives the partial
+# overrides an environment's values file makes (Helm deep-merges the map).
+
+set:
+  serveFleet:
+    enabled: true
+
+tests:
+  - it: gives the serve readiness probe a 4s timeout by default
+    template: serve-deployment.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.timeoutSeconds
+          value: 4
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /api/ready
+
+  - it: keeps the timeout strictly below the period, so probes cannot overlap
+    template: serve-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.periodSeconds
+          value: 5
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.timeoutSeconds
+          value: 4
+      # Unset on purpose: Kubernetes' default of 3 is the threshold the
+      # detection arithmetic in values.yaml assumes.
+      - notExists:
+          path: spec.template.spec.containers[0].readinessProbe.failureThreshold
+
+  - it: keeps the 4s timeout when an environment overrides another probe field
+    template: serve-deployment.yaml
+    set:
+      serveFleet:
+        readinessProbe:
+          initialDelaySeconds: 0
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.initialDelaySeconds
+          value: 0
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.timeoutSeconds
+          value: 4
+
+  - it: honors an explicit timeout override
+    template: serve-deployment.yaml
+    set:
+      serveFleet:
+        readinessProbe:
+          timeoutSeconds: 2
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.timeoutSeconds
+          value: 2
+
+  - it: leaves the ide StatefulSet's probe on its own top-level value
+    template: statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.timeoutSeconds
+          value: 5

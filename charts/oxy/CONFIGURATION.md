@@ -150,6 +150,7 @@ Deploys only the Oxy application workloads — the ide StatefulSet, the stateles
 | serveFleet.readinessProbe.httpGet.port | int | `3000` |  |
 | serveFleet.readinessProbe.initialDelaySeconds | int | `5` |  |
 | serveFleet.readinessProbe.periodSeconds | int | `5` |  |
+| serveFleet.readinessProbe.timeoutSeconds | int | `4` |  |
 | serveFleet.replicaCount | int | `2` |  |
 | serveFleet.resources.limits.cpu | int | `1` |  |
 | serveFleet.resources.limits.memory | string | `"1Gi"` |  |

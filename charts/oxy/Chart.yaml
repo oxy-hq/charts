@@ -29,7 +29,13 @@ type: application
 # the default, test and dev/staging/prod value sets, apart from this label.
 # (First written as 1.0.6; renumbered when 1.0.6 was published first with the
 # ide metrics port above, so this release is 1.0.7.)
-version: 1.0.7
+#
+# 1.0.7 → 1.0.8: `serveFleet.readinessProbe.timeoutSeconds` defaults to 4. It
+# was unset, so Kubernetes' 1s applied, and a slow (not dead) Postgres took
+# every serve replica out of readiness at once. 4 matches the ide's probe.
+# Changes the serve Deployment's pod template, so the serve fleet rolls on
+# upgrade; the ide, worker and migrate Job render unchanged.
+version: 1.0.8
 appVersion: "0.5.49"
 keywords:
   - oxy
