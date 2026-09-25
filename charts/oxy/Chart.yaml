@@ -16,7 +16,13 @@ type: application
 # 1.0.4 → 1.0.5: `serveFleet.metricsPort` renders the `OXY_METRICS_PORT` env
 # AND a declared container port named `metrics`, from one value. Off by default
 # (0), so the render is unchanged for every existing value set.
-version: 1.0.5
+#
+# 1.0.5 → 1.0.6: the same `serveFleet.metricsPort` now also renders the env and
+# the declared `metrics` port on the ide StatefulSet. Still off by default, so
+# a value set without it renders unchanged; with it set, the StatefulSet's pod
+# template changes and the ide pod restarts. `env.OXY_METRICS_PORT` is now
+# refused, since the shared env reaches the ide with no declared port.
+version: 1.0.6
 appVersion: "0.5.49"
 keywords:
   - oxy
