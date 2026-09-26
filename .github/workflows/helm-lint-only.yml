@@ -47,11 +47,18 @@ jobs:
         run: |
           helm plugin install https://github.com/helm-unittest/helm-unittest --version v1.0.3 --verify=false
 
+      # `--use-helmignore` (here and on ct lint, so the two agree): a file the
+      # chart's .helmignore drops — `tests/` in both charts — is not shipped, so
+      # changing it is not a chart change and must not demand a version bump.
+      # Without it a tests-only PR fails "Needs a version bump!", and the only
+      # way through is to burn a chart version on a byte-identical package.
+      # Scoped to this workflow: helm-ci.yml gates oxy-app's unit tests on
+      # list-changed, so a global ct.yaml setting would skip them there.
       - name: Run chart-testing (list-changed)
         id: list-changed
         if: github.event_name == 'pull_request'
         run: |
-          changed=$(ct list-changed --target-branch ${{ github.event.repository.default_branch }} --chart-dirs charts)
+          changed=$(ct list-changed --target-branch ${{ github.event.repository.default_branch }} --chart-dirs charts --use-helmignore)
           if [[ -n "$changed" ]]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
             echo "Changed charts: $changed"
@@ -62,14 +69,13 @@ jobs:
         run: |
           # Lint whatever lightweight chart changed (oxy-start or oxy) rather than
           # a hardcoded chart — ct lint uses the target-branch diff to pick them.
-          ct lint --target-branch ${{ github.event.repository.default_branch }} --config ct.yaml
+          ct lint --target-branch ${{ github.event.repository.default_branch }} --config ct.yaml --use-helmignore
 
       # `ct lint` only parses and renders — it asserts nothing about WHAT is
       # rendered (e.g. the serve-fleet `--enterprise` regression). Run both
       # lightweight charts' helm-unittest suites; the whole run is a few seconds.
-      # Not gated on list-changed: ct.yaml sets `use-helmignore`, so a change
-      # that only touches `tests/` (helmignored in every chart) or this workflow
-      # lists no changed chart — and exactly those changes must still run the
+      # Not gated on list-changed: a tests-only or workflow-only change lists no
+      # changed chart (see above), and exactly those changes must still run the
       # suites. The glob picks up every `*_test.yaml`, so new suites need no edit.
       - name: Run unit tests (oxy, oxy-start)
         run: |
