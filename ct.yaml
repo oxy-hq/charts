@@ -1,7 +1,10 @@
 chart-dirs:
   - charts
-exclude:
-  - charts/**/tests/**
+# No path exclusions here: ct has no `exclude` key (its `excluded-charts` drops
+# whole charts), so a `charts/**/tests/**` glob in this file did nothing. What
+# keeps a tests-only change from counting as a chart change is `--use-helmignore`
+# on ct list-changed / ct lint in helm-lint-only.yml: each chart's .helmignore
+# drops tests/, so ct ignores the files the package never ships.
 # Chart repositories for dependencies
 # groundhog2k: Used by oxy-app for postgres and clickhouse subcharts
 chart-repos:
