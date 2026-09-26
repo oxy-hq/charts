@@ -586,6 +586,14 @@ serveFleet:
       port: 3000
     initialDelaySeconds: 5
     periodSeconds: 5
+    # 4, not Kubernetes' default of 1. /api/ready does a real Postgres round
+    # trip, so at 1s a database that is merely SLOW (pool pressure, a
+    # checkpoint stall) fails every replica's probe at once and empties the
+    # Service: dev lost both serve replicas for ~30s that way on 2026-09-24,
+    # while the ide, already at 4s, stayed Ready. Kept strictly below
+    # periodSeconds so probes cannot overlap. In a real outage it costs at most
+    # ~3s of detection (failureThreshold stays at the default 3).
+    timeoutSeconds: 4
   podDisruptionBudget:
     enabled: true
     minAvailable: 1
