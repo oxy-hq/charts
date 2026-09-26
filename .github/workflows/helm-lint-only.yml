@@ -22,7 +22,7 @@ on:
 
 jobs:
   lint:
-    name: Lint charts (oxy-start)
+    name: Lint and test charts (oxy, oxy-start)
     runs-on: ubuntu-latest
     permissions:
       contents: read

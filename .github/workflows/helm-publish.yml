@@ -13,6 +13,16 @@ on:
     branches:
       - main
 
+# One publish at a time. Two merges close together, or one PR touching both
+# upstream workflows' paths, fire two publish runs on the same main commit (two
+# overlapped on dfd4303, 2026-09-26). Unserialized, both could record the tag
+# list before either creates the release, and both would push that version.
+# A queued run that gets replaced loses nothing: each run releases every chart
+# changed since the last tag, at the newest main.
+concurrency:
+  group: helm-publish
+  cancel-in-progress: false
+
 jobs:
   publish:
     name: Package & Publish Helm charts
@@ -56,6 +66,13 @@ jobs:
           helm repo add groundhog2k https://groundhog2k.github.io/helm-charts/
           # Add additional repos here as needed for other charts
 
+      # chart-releaser repackages a chart whose files changed even when its
+      # version did not, and --skip-existing skips only the GitHub release. The
+      # GHCR push therefore decides for itself, from the release tags on either
+      # side of chart-releaser: see .github/scripts/chart-packages-to-push.sh.
+      - name: Record release tags before chart-releaser
+        run: .github/scripts/chart-packages-to-push.sh snapshot > "$RUNNER_TEMP/tags-before"
+
       - name: Run chart-releaser
         uses: helm/chart-releaser-action@v1.7.0
         env:
@@ -65,6 +82,9 @@ jobs:
           charts_dir: charts
           config: cr.yaml
 
+      - name: Select the packages released in this run
+        run: .github/scripts/chart-packages-to-push.sh select .cr-release-packages "$RUNNER_TEMP/tags-before" > "$RUNNER_TEMP/to-push"
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -72,12 +92,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Push charts to GHCR
+      # Only the versions released in this run. A re-run after this step failed
+      # finds those releases already present and pushes nothing: push the
+      # missing version by hand (it is absent from GHCR, so nothing is overwritten).
+      - name: Push newly released charts to GHCR
         run: |
-          shopt -s nullglob
-          for pkg in .cr-release-packages/*.tgz; do
-            if [ -z "${pkg:-}" ]; then
-              break
-            fi
+          while IFS= read -r pkg; do
             helm push "${pkg}" "oci://ghcr.io/${{ github.repository_owner }}/helm-charts"
-          done
+          done < "$RUNNER_TEMP/to-push"
