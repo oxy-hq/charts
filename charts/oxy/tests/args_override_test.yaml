@@ -1,0 +1,150 @@
+# The failure mode this suite exists for: a k8s `command` REPLACES the image
+# ENTRYPOINT (`/usr/bin/tini --`), so overriding it drops the init and leaves the
+# app as PID 1 with nothing reaping adopted orphans. Overriding `args` instead
+# keeps the entrypoint. The dangerous half is that if the chart ever rendered its
+# default `command` alongside a caller's `args`, those args would become
+# positional params to `sh -c` and be silently swallowed — on a pod that looks
+# perfectly healthy. Every "has no command" assertion below is guarding that.
+suite: args overrides preserve the image ENTRYPOINT
+templates:
+  - statefulset.yaml
+  - serve-deployment.yaml
+  - worker-deployment.yaml
+
+tests:
+  # ---------------------------------------------------------------- ide
+  - it: renders args and NO command when only app.args is set
+    template: statefulset.yaml
+    set:
+      app:
+        args: ["oxy", "serve", "--enterprise"]
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].command
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value: ["oxy", "serve", "--enterprise"]
+
+  - it: keeps the shell-wrapper command when neither app.command nor app.args is set
+    template: statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command[0]
+          value: sh
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "exec oxy serve"
+      - isNull:
+          path: spec.template.spec.containers[0].args
+
+  - it: keeps rendering command (and no args) when only app.command is set
+    template: statefulset.yaml
+    set:
+      app:
+        command: ["oxy", "serve", "--enterprise"]
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value: ["oxy", "serve", "--enterprise"]
+      - isNull:
+          path: spec.template.spec.containers[0].args
+
+  - it: renders both when both are set, and never the shell wrapper
+    template: statefulset.yaml
+    set:
+      app:
+        command: ["/usr/bin/tini", "--"]
+        args: ["oxy", "serve", "--enterprise"]
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value: ["/usr/bin/tini", "--"]
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value: ["oxy", "serve", "--enterprise"]
+      - notContains:
+          path: spec.template.spec.containers[0].command
+          content: sh
+
+  - it: does not let an empty app.args suppress the default command
+    template: statefulset.yaml
+    set:
+      app:
+        args: []
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command[0]
+          value: sh
+      - isNull:
+          path: spec.template.spec.containers[0].args
+
+  - it: drops the internal-host flags along with the wrapper when args is used
+    # The flags live in the chart's shell wrapper, not in the container spec, so
+    # overriding args means the caller owns them — same as overriding command.
+    template: statefulset.yaml
+    set:
+      app:
+        internalHost: "0.0.0.0"
+        internalPort: 3001
+        args: ["oxy", "serve", "--enterprise"]
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].command
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: "--internal-host"
+
+  # --------------------------------------------------------- serve fleet
+  - it: renders args and NO command when only serveFleet.args is set
+    template: serve-deployment.yaml
+    set:
+      serveFleet:
+        enabled: true
+        args: ["oxy", "serve", "--no-workers"]
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].command
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value: ["oxy", "serve", "--no-workers"]
+
+  - it: keeps the serve fleet's default command when args is unset
+    template: serve-deployment.yaml
+    set:
+      serveFleet:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value: ["sh", "-c", "exec oxy serve --no-workers"]
+      - isNull:
+          path: spec.template.spec.containers[0].args
+
+  # -------------------------------------------------------- worker fleet
+  - it: renders args and NO command when only worker.args is set
+    template: worker-deployment.yaml
+    set:
+      worker:
+        enabled: true
+        args: ["oxy", "worker", "--health-port", "3001"]
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].command
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value: ["oxy", "worker", "--health-port", "3001"]
+
+  - it: keeps the worker fleet's default command when args is unset
+    template: worker-deployment.yaml
+    set:
+      worker:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command[0]
+          value: sh
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "exec oxy worker --health-port"
+      - isNull:
+          path: spec.template.spec.containers[0].args
