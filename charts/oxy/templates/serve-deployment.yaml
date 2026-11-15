@@ -229,7 +229,7 @@ spec:
             # the StatefulSet, satisfying ide_proxy's loop guard (a serve-
             # targeted upstream would ping-pong). Empty = legacy 421. Inert on
             # images without PR #2526.
-            {{- if .Values.serveFleet.ideUpstream }}
+            {{- if and .Values.serveFleet.ideUpstream (gt (int .Values.replicaCount) 0) }}
             - name: OXY_IDE_UPSTREAM
               value: {{ tpl .Values.serveFleet.ideUpstream . | quote }}
             {{- end }}

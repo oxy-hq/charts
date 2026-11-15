@@ -15,7 +15,13 @@
   Default ideRoutes ships pre-populated in values.yaml so the workload
   does not need to track the role-manifest list.
 */}}
-{{- $inverseMode := and $serveEnabled (gt (len $ideRoutes) 0) -}}
+{{- /*
+  With the ide StatefulSet scaled to 0 (`replicaCount: 0`) nothing may route
+  to it: the catch-all goes to the serve fleet and no ideRoutes are rendered,
+  whatever `ideRoutes` holds.
+*/}}
+{{- $ideScaledDown := eq (int .Values.replicaCount) 0 -}}
+{{- $inverseMode := and $serveEnabled (or $ideScaledDown (gt (len $ideRoutes) 0)) -}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -51,7 +57,7 @@ spec:
             ALB as a native path pattern. Override per-entry with
             pathType Prefix for left-anchored paths.
           */}}
-          {{- if $inverseMode }}
+          {{- if and $inverseMode (not $ideScaledDown) }}
           {{- range $r := $ideRoutes }}
           - path: {{ $r.path | quote }}
             pathType: {{ default "ImplementationSpecific" $r.pathType }}
