@@ -266,6 +266,17 @@ minReadySeconds: 0
 # Set to 0 to keep no history at all (disables `kubectl rollout undo`).
 revisionHistoryLimit: 3
 
+# Replicas of the ide StatefulSet (the single `oxy-0` pod). 1 is the only value
+# that serves anything: the StatefulSet is single-writer on a ReadWriteOnce
+# volume. 0 stops the pod and KEEPS its PVC (a scale-down, not a delete), as the
+# reversible step before the ide is removed entirely; set it back to 1 to bring
+# the same pod and volume back. At 0 the chart stops sending anything to the
+# StatefulSet: the Ingress catch-all goes to the serve fleet and no `ideRoutes`
+# are rendered, serve pods get no OXY_IDE_UPSTREAM (so the app answers its own
+# retryable 503s instead of relaying to a pod that is not there), and the
+# StatefulSet PDB is not rendered. Requires `serveFleet.enabled: true`.
+replicaCount: 1
+
 # Security context
 securityContext:
   fsGroup: 1000

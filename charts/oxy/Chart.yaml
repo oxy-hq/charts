@@ -35,7 +35,13 @@ type: application
 # every serve replica out of readiness at once. 4 matches the ide's probe.
 # Changes the serve Deployment's pod template, so the serve fleet rolls on
 # upgrade; the ide, worker and migrate Job render unchanged.
-version: 1.0.8
+#
+# 1.0.8 → 1.0.9: `replicaCount` (default 1) for the ide StatefulSet, so the ide
+# can be scaled to 0 (PVC kept) before it is removed. At 0 the Ingress catch-all
+# goes to the serve fleet with no ideRoutes, serve pods get no
+# OXY_IDE_UPSTREAM, and the StatefulSet PDB is not rendered. At the default 1
+# every template renders byte-identical to 1.0.8.
+version: 1.0.9
 appVersion: "0.5.49"
 keywords:
   - oxy

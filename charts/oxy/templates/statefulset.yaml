@@ -6,6 +6,12 @@
 {{- if hasKey .Values.env "OXY_METRICS_PORT" }}
 {{- fail "env.OXY_METRICS_PORT is set: that binds /metrics on a container port nothing declares, so scrape discovery finds zero targets and nothing errors. Set serveFleet.metricsPort instead — it renders the env AND a declared port named `metrics` on the serve fleet and the ide StatefulSet — and scrape it by name (port: metrics)." }}
 {{- end }}
+{{- if not (has (int .Values.replicaCount) (list 0 1)) }}
+{{- fail (printf "replicaCount is %v: the ide StatefulSet is single-writer on a ReadWriteOnce volume, so only 1 (running) or 0 (scaled down, PVC kept) is valid." .Values.replicaCount) }}
+{{- end }}
+{{- if and (eq (int .Values.replicaCount) 0) (not .Values.serveFleet.enabled) }}
+{{- fail "replicaCount is 0 with serveFleet.enabled false: nothing would serve requests. Enable the serve fleet before scaling the ide StatefulSet down." }}
+{{- end }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -16,7 +22,7 @@ metadata:
     version: v1
 spec:
   serviceName: {{ include "oxy-app.fullname" . }}-headless
-  replicas: 1
+  replicas: {{ int .Values.replicaCount }}
   revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
   {{- if gt (int (.Values.minReadySeconds | default 0)) 0 }}
   minReadySeconds: {{ .Values.minReadySeconds }}

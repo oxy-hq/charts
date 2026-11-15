@@ -1,0 +1,118 @@
+suite: ide StatefulSet replicaCount
+templates:
+  - statefulset.yaml
+  - ingress.yaml
+  - serve-deployment.yaml
+  - pdb.yaml
+
+# `replicaCount: 0` scales the ide StatefulSet down (the PVC is kept) as the
+# step before the ide is removed. At 0 nothing may route to it: the Ingress
+# catch-all goes to the serve fleet with no ideRoutes, serve pods get no
+# OXY_IDE_UPSTREAM, and the StatefulSet PDB is not rendered. At the default 1
+# nothing changes.
+
+tests:
+  - it: runs one ide pod by default
+    template: statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 1
+
+  - it: scales the ide StatefulSet to 0
+    template: statefulset.yaml
+    set:
+      replicaCount: 0
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 0
+
+  - it: refuses more than one ide pod
+    template: statefulset.yaml
+    set:
+      replicaCount: 2
+    asserts:
+      - failedTemplate:
+          errorPattern: "only 1 \\(running\\) or 0 \\(scaled down, PVC kept\\) is valid"
+
+  - it: refuses scaling the ide down with no serve fleet to take its traffic
+    template: statefulset.yaml
+    set:
+      replicaCount: 0
+      serveFleet:
+        enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "nothing would serve requests"
+
+  - it: sends every path to the serve fleet when the ide is scaled down
+    template: ingress.yaml
+    set:
+      replicaCount: 0
+      ingress:
+        enabled: true
+        hosts:
+          - host: oxy.example.com
+            paths: []
+    asserts:
+      - lengthEqual:
+          path: spec.rules[0].http.paths
+          count: 1
+      - equal:
+          path: spec.rules[0].http.paths[0].path
+          value: /
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: RELEASE-NAME-oxy-app-serve
+
+  - it: still peels the ideRoutes to the ide at the default replica count
+    template: ingress.yaml
+    set:
+      ingress:
+        enabled: true
+        hosts:
+          - host: oxy.example.com
+            paths: []
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[0].path
+          value: /ide
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: RELEASE-NAME-oxy-app
+
+  - it: drops OXY_IDE_UPSTREAM from serve pods when the ide is scaled down
+    template: serve-deployment.yaml
+    set:
+      replicaCount: 0
+      serveFleet:
+        ideUpstream: "http://ide.example:3000"
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_IDE_UPSTREAM
+          any: true
+
+  - it: keeps OXY_IDE_UPSTREAM on serve pods while the ide runs
+    template: serve-deployment.yaml
+    set:
+      serveFleet:
+        ideUpstream: "http://ide.example:3000"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OXY_IDE_UPSTREAM
+            value: "http://ide.example:3000"
+
+  - it: renders no ide PDB when the ide is scaled down
+    template: pdb.yaml
+    set:
+      replicaCount: 0
+      pdb:
+        enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
